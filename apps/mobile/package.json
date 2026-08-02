@@ -40,7 +40,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test:slots": "npx tsx lib/slots.test.ts"
+    "test:slots": "npx tsx lib/slots.test.ts",
+    "test:simulate": "npx tsx lib/simulate-e2e.ts"
   },
   "private": true
 }
