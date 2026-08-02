@@ -307,5 +307,4 @@ programari online/
 - [x] Email/WhatsApp la approve/reject (client)  
 - [x] Timezone pe business  
 - [ ] Review final utilizator pe acest fișier înainte de planul de implementare  
-```
 
