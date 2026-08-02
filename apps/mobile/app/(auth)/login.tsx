@@ -10,7 +10,15 @@ import {
   View,
 } from 'react-native';
 
-import { sendEmailOtp, sendPhoneOtp, verifyOtp } from '@/lib/auth';
+import {
+  mapAuthError,
+  sendEmailOtp,
+  sendPhoneOtp,
+  verifyOtp,
+} from '@/lib/auth';
+
+/** Phone login disabled until Supabase Phone provider (Twilio etc.) is configured. */
+const PHONE_AUTH_ENABLED = false;
 
 type Method = 'email' | 'phone';
 
@@ -30,30 +38,37 @@ export default function LoginScreen() {
 
     if (method === 'email') {
       if (!email.trim()) {
-        setError('Introdu email sau telefon pentru a continua.');
+        setError('Introdu adresa de email pentru a continua.');
         return;
       }
       setLoading(true);
       const { error: err } = await sendEmailOtp(email);
       setLoading(false);
       if (err) {
-        setError(err.message);
+        setError(mapAuthError(err) ?? err.message);
         return;
       }
       setOtpSent(true);
-      setMessage('Am trimis un cod pe email. Introdu-l mai jos.');
+      setMessage('Am trimis un cod pe email. Verifică și inbox, și spam.');
+      return;
+    }
+
+    if (!PHONE_AUTH_ENABLED) {
+      setError(
+        'Login cu telefon nu e activ încă. Folosește email. (SMS necesită Twilio în Supabase.)'
+      );
       return;
     }
 
     if (!phone.trim()) {
-      setError('Introdu email sau telefon pentru a continua.');
+      setError('Introdu telefonul în format +40722123456.');
       return;
     }
     setLoading(true);
     const { error: err } = await sendPhoneOtp(phone);
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(mapAuthError(err) ?? err.message);
       return;
     }
     setOtpSent(true);
@@ -64,7 +79,7 @@ export default function LoginScreen() {
     setError(null);
     setMessage(null);
     if (!otp.trim()) {
-      setError('Introdu codul primit.');
+      setError('Introdu codul primit pe email.');
       return;
     }
     setLoading(true);
@@ -74,13 +89,19 @@ export default function LoginScreen() {
         : await verifyOtp({ phone, token: otp, type: 'sms' });
     setLoading(false);
     if (err) {
-      setError(err.message);
+      setError(mapAuthError(err) ?? err.message);
       return;
     }
     setMessage('Autentificare reușită.');
   }
 
   function switchMethod(next: Method) {
+    if (next === 'phone' && !PHONE_AUTH_ENABLED) {
+      setError(
+        'Login cu telefon nu e activ pe server. Folosește tab-ul Email.'
+      );
+      return;
+    }
     setMethod(next);
     setOtpSent(false);
     setOtp('');
@@ -94,7 +115,9 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Text style={styles.title}>Programari</Text>
-      <Text style={styles.subtitle}>Autentificare cu email sau telefon</Text>
+      <Text style={styles.subtitle}>
+        Autentificare cu email (cod OTP pe mail)
+      </Text>
 
       <View style={styles.tabs}>
         <Pressable
@@ -106,11 +129,11 @@ export default function LoginScreen() {
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, method === 'phone' && styles.tabActive]}
+          style={[styles.tab, styles.tabDisabled, method === 'phone' && styles.tabActive]}
           onPress={() => switchMethod('phone')}
         >
           <Text style={[styles.tabText, method === 'phone' && styles.tabTextActive]}>
-            Telefon
+            Telefon (în curând)
           </Text>
         </Pressable>
       </View>
@@ -134,7 +157,7 @@ export default function LoginScreen() {
           placeholder="+40722123456"
           value={phone}
           onChangeText={setPhone}
-          editable={!loading}
+          editable={!loading && PHONE_AUTH_ENABLED}
         />
       )}
 
@@ -142,7 +165,7 @@ export default function LoginScreen() {
         <TextInput
           style={styles.input}
           keyboardType="number-pad"
-          placeholder="Cod OTP"
+          placeholder="Cod din email"
           value={otp}
           onChangeText={setOtp}
           editable={!loading}
@@ -161,16 +184,21 @@ export default function LoginScreen() {
           onPress={otpSent ? handleVerify : handleSendOtp}
         >
           <Text style={styles.buttonText}>
-            {otpSent ? 'Verifică codul' : 'Trimite cod'}
+            {otpSent ? 'Verifică codul' : 'Trimite cod pe email'}
           </Text>
         </Pressable>
       )}
 
       {otpSent ? (
         <Pressable onPress={() => setOtpSent(false)} style={styles.link}>
-          <Text style={styles.linkText}>Schimbă datele / retrimite</Text>
+          <Text style={styles.linkText}>Schimbă emailul / retrimite</Text>
         </Pressable>
       ) : null}
+
+      <Text style={styles.hint}>
+        Nu ai SMS activ pe Supabase. Contul se face cu email; poți adăuga telefonul
+        mai târziu la programări / setări.
+      </Text>
     </KeyboardAvoidingView>
   );
 }
@@ -207,12 +235,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
   },
+  tabDisabled: {
+    opacity: 0.7,
+  },
   tabActive: {
     backgroundColor: '#fff',
   },
   tabText: {
     color: '#666',
     fontWeight: '500',
+    fontSize: 13,
   },
   tabTextActive: {
     color: '#111',
@@ -254,5 +286,12 @@ const styles = StyleSheet.create({
   },
   linkText: {
     color: '#2563eb',
+  },
+  hint: {
+    marginTop: 24,
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
