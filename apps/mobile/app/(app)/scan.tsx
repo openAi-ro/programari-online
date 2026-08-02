@@ -1,26 +1,46 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-function extractPublicCode(raw: string): string | null {
-  const value = raw.trim();
-  // programari://b/CODE
-  const scheme = value.match(/^programari:\/\/b\/([a-z0-9]+)/i);
-  if (scheme?.[1]) return scheme[1];
-  // https://.../b/CODE or any path with /b/CODE
-  const path = value.match(/\/b\/([a-z0-9]+)/i);
-  if (path?.[1]) return path[1];
-  // bare code
-  if (/^[a-z0-9]{6,20}$/i.test(value)) return value.toLowerCase();
-  return null;
-}
+import { extractPublicCode } from '@/lib/bookingLink';
 
 export default function ScanScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [manual, setManual] = useState('');
+
+  function goToBook(code: string) {
+    setLocked(true);
+    router.replace(`/(app)/book/${code}` as any);
+  }
+
+  function onBarcode({ data }: { data: string }) {
+    if (locked) return;
+    const code = extractPublicCode(data);
+    if (!code) {
+      setHint('QR invalid. Aștept link book/… sau programari://b/…');
+      return;
+    }
+    goToBook(code);
+  }
+
+  function onManual() {
+    const code = extractPublicCode(manual.trim());
+    if (!code) {
+      setHint('Introdu codul business (ex. din ecranul QR).');
+      return;
+    }
+    goToBook(code);
+  }
 
   if (!permission) {
     return (
@@ -30,44 +50,45 @@ export default function ScanScreen() {
     );
   }
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.text}>
-          Avem nevoie de acces la cameră pentru a scana codul QR.
-        </Text>
-        <Pressable style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Permite camera</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  function onBarcode({ data }: { data: string }) {
-    if (locked) return;
-    const code = extractPublicCode(data);
-    if (!code) {
-      setHint('QR invalid. Aștept programari://b/…');
-      return;
-    }
-    setLocked(true);
-    router.replace(`/(app)/book/${code}`);
-  }
-
   return (
     <View style={styles.container}>
-      <CameraView
-        style={styles.camera}
-        facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        onBarcodeScanned={locked ? undefined : onBarcode}
-      />
+      {permission.granted ? (
+        <CameraView
+          style={styles.camera}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          onBarcodeScanned={locked ? undefined : onBarcode}
+        />
+      ) : (
+        <View style={styles.center}>
+          <Text style={styles.text}>
+            Pentru scanare cu camera, permite accesul. Poți și introduce codul manual.
+          </Text>
+          <Pressable style={styles.button} onPress={requestPermission}>
+            <Text style={styles.buttonText}>Permite camera</Text>
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.overlay}>
-        <Text style={styles.overlayText}>Îndreaptă camera spre QR-ul business-ului</Text>
+        <Text style={styles.overlayText}>
+          Scanează QR-ul SAU introdu codul business mai jos
+        </Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Cod business"
+          placeholderTextColor="#94a3b8"
+          autoCapitalize="none"
+          value={manual}
+          onChangeText={setManual}
+        />
+        <Pressable style={styles.button} onPress={onManual}>
+          <Text style={styles.buttonText}>Deschide programarea</Text>
+        </Pressable>
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
         {locked ? (
-          <Pressable style={styles.button} onPress={() => setLocked(false)}>
-            <Text style={styles.buttonText}>Scanează din nou</Text>
+          <Pressable style={styles.buttonOutline} onPress={() => setLocked(false)}>
+            <Text style={styles.buttonOutlineText}>Scanează din nou</Text>
           </Pressable>
         ) : null}
       </View>
@@ -83,31 +104,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#fff',
+    backgroundColor: '#0f172a',
   },
-  text: { textAlign: 'center', marginBottom: 16, color: '#334155' },
+  text: { textAlign: 'center', marginBottom: 16, color: '#e2e8f0' },
   overlay: {
     position: 'absolute',
-    bottom: 40,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingBottom: 36,
+    backgroundColor: 'rgba(15,23,42,0.92)',
   },
   overlayText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 10,
-    borderRadius: 8,
+    marginBottom: 12,
   },
-  hint: { color: '#fbbf24', marginTop: 8 },
+  input: {
+    backgroundColor: '#1e293b',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#fff',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  hint: { color: '#fbbf24', marginTop: 8, textAlign: 'center' },
   button: {
-    marginTop: 12,
     backgroundColor: '#2563eb',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
+    alignItems: 'center',
   },
   buttonText: { color: '#fff', fontWeight: '600' },
+  buttonOutline: {
+    marginTop: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  buttonOutlineText: { color: '#93c5fd' },
 });
