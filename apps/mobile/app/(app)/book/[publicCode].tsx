@@ -6,10 +6,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
+import { DatePickerField } from '@/components/DatePickerField';
 import { SlotPicker } from '@/components/SlotPicker';
 import { generateFreeSlots } from '@/lib/slots';
 import { localDayBoundsUtc } from '@/lib/timezone';
@@ -180,6 +180,18 @@ export default function BookScreen() {
     );
   }
 
+  const minDate = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const maxDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return d;
+  }, []);
+
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>{business.name}</Text>
@@ -187,14 +199,29 @@ export default function BookScreen() {
         Durată: {durationLabel} · {business.timezone}
       </Text>
 
-      <Text style={styles.label}>Data (YYYY-MM-DD)</Text>
-      <TextInput
-        style={styles.input}
+      <DatePickerField
+        label="Data programării"
         value={dateLocal}
-        onChangeText={setDateLocal}
-        autoCapitalize="none"
-        placeholder="2026-08-03"
+        onChange={(ymd) => {
+          setDateLocal(ymd);
+          setSelected(null);
+        }}
+        minimumDate={minDate}
+        maximumDate={maxDate}
       />
+
+      <Text style={styles.label}>Ora (doar din sloturile libere)</Text>
+      <Text style={styles.timeHint}>
+        Ora nu se editează manual — alege un slot liber de mai jos.
+      </Text>
+
+      {/* Ora selectată — doar afișare, blocată la editare */}
+      <View style={styles.timeLocked}>
+        <Text style={styles.timeLockedLabel}>Ora aleasă</Text>
+        <Text style={styles.timeLockedValue}>
+          {selected ? selected.labelLocal : '— alege un slot —'}
+        </Text>
+      </View>
 
       <Text style={styles.label}>Sloturi libere</Text>
       {slotsLoading ? (
@@ -227,16 +254,22 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 40, backgroundColor: '#fff' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#64748b', marginTop: 4, marginBottom: 16 },
-  label: { fontSize: 13, color: '#475569', marginTop: 12, marginBottom: 6 },
-  input: {
+  meta: { color: '#64748b', marginTop: 4, marginBottom: 8 },
+  label: { fontSize: 13, color: '#475569', marginTop: 16, marginBottom: 6 },
+  timeHint: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },
+  timeLocked: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e2e8f0',
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#f1f5f9',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
+  timeLockedLabel: { fontSize: 13, color: '#64748b' },
+  timeLockedValue: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
   button: {
     backgroundColor: '#2563eb',
     paddingVertical: 14,
