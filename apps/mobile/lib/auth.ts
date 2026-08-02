@@ -4,13 +4,10 @@ import * as Linking from 'expo-linking';
 import { supabase } from './supabase';
 
 /**
- * Where Supabase email magic-links redirect after click.
+ * Where Supabase magic-links redirect after click.
  * Must be listed under Dashboard → Auth → URL Configuration → Redirect URLs.
- * Prefer OTP code in the app — do not rely on the link if Site URL is wrong.
  */
 export function getEmailRedirectTo(): string {
-  // Web: current origin (e.g. http://localhost:8084)
-  // Native: programari:// scheme from app.json
   if (typeof window !== 'undefined' && window.location?.origin) {
     return `${window.location.origin}/auth/callback`;
   }
@@ -26,34 +23,67 @@ export function mapAuthError(error: AuthError | Error | null | undefined): strin
     raw.includes('phone provider') ||
     (raw.includes('sms') && raw.includes('not'))
   ) {
-    return 'Login cu telefon nu e activ pe server. Folosește email (OTP pe mail). Pentru SMS trebuie configurat un provider (ex. Twilio) în Supabase → Auth → Providers → Phone.';
+    return 'Login cu telefon nu e activ pe server. Folosește email + parolă.';
   }
   if (raw.includes('email rate limit') || raw.includes('rate limit')) {
-    return 'Prea multe încercări. Așteaptă câteva minute și încearcă din nou.';
+    return 'Prea multe încercări. Așteaptă câteva minute.';
   }
-  if (raw.includes('invalid login') || raw.includes('invalid otp') || raw.includes('token')) {
-    return 'Cod invalid sau expirat. Cere un cod nou.';
+  if (
+    raw.includes('invalid login') ||
+    raw.includes('invalid credentials') ||
+    raw.includes('invalid password')
+  ) {
+    return 'Email sau parolă greșită.';
+  }
+  if (raw.includes('user already registered') || raw.includes('already been registered')) {
+    return 'Contul există deja. Folosește „Intră în cont” cu parola ta.';
+  }
+  if (raw.includes('password') && raw.includes('at least')) {
+    return 'Parola trebuie să aibă cel puțin 6 caractere.';
   }
   if (raw.includes('email not confirmed') || raw.includes('confirm')) {
-    return 'Email neconfirmat. Folosește codul din mesaj (nu linkul) sau confirmă din mail după ce ai setat URL-urile în Supabase.';
+    return 'Email neconfirmat. În Supabase: Auth → Providers → Email → dezactivează „Confirm email” (pentru dezvoltare), sau confirmă din mail după ce Site URL e http://localhost:8084.';
+  }
+  if (raw.includes('invalid otp') || raw.includes('token')) {
+    return 'Cod invalid. Supabase îți trimite acum doar link „Sign in”, nu cod — folosește email + parolă.';
   }
   return error.message;
 }
 
+/** Cont nou cu email + parolă (recomandat pe telefon). */
+export async function signUpWithPassword(email: string, password: string) {
+  return supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      emailRedirectTo: getEmailRedirectTo(),
+    },
+  });
+}
+
+/** Login cu email + parolă. */
+export async function signInWithPassword(email: string, password: string) {
+  return supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+}
+
+/**
+ * Magic link / OTP email.
+ * Implicit Supabase trimite DOAR link „Sign in” (nu cod), dacă template-ul nu are {{ .Token }}.
+ */
 export async function sendEmailOtp(email: string) {
   return supabase.auth.signInWithOtp({
     email: email.trim(),
     options: {
       shouldCreateUser: true,
-      // Avoid default Site URL (often localhost:3000) which refuses connection
       emailRedirectTo: getEmailRedirectTo(),
     },
   });
 }
 
 export async function sendPhoneOtp(phone: string) {
-  // Phone OTP requires an SMS provider in Supabase (Twilio, MessageBird, etc.).
-  // Without it, API returns "Unsupported phone provider".
   return supabase.auth.signInWithOtp({
     phone: phone.trim(),
     options: { shouldCreateUser: true },

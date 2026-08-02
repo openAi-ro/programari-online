@@ -12,83 +12,55 @@ import {
 
 import {
   mapAuthError,
-  sendEmailOtp,
-  sendPhoneOtp,
-  verifyOtp,
+  signInWithPassword,
+  signUpWithPassword,
 } from '@/lib/auth';
 
-/** Phone login disabled until Supabase Phone provider (Twilio etc.) is configured. */
-const PHONE_AUTH_ENABLED = false;
-
-type Method = 'email' | 'phone';
+type Mode = 'login' | 'register';
 
 export default function LoginScreen() {
-  const [method, setMethod] = useState<Method>('email');
+  const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSendOtp() {
+  async function handleSubmit() {
     setError(null);
     setMessage(null);
 
-    if (method === 'email') {
-      if (!email.trim()) {
-        setError('Introdu adresa de email pentru a continua.');
-        return;
-      }
-      setLoading(true);
-      const { error: err } = await sendEmailOtp(email);
+    const e = email.trim();
+    if (!e) {
+      setError('Introdu adresa de email.');
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError('Parola trebuie să aibă cel puțin 6 caractere.');
+      return;
+    }
+
+    setLoading(true);
+    if (mode === 'register') {
+      const { data, error: err } = await signUpWithPassword(e, password);
       setLoading(false);
       if (err) {
         setError(mapAuthError(err) ?? err.message);
         return;
       }
-      setOtpSent(true);
+      // Dacă confirm email e dezactivat, avem sesiune imediat
+      if (data.session) {
+        setMessage('Cont creat. Ești autentificat.');
+        return;
+      }
       setMessage(
-        'Am trimis un email. IMPORTANT: introdu codul de 6–8 cifre aici — NU deschide linkul „Confirm” (poate duce greșit la localhost:3000).'
+        'Cont creat. Dacă ți se cere confirmare pe email: fie apeși linkul DOAR după ce ai setat Site URL la app, fie în Supabase dezactivezi „Confirm email” (Auth → Providers → Email). Apoi folosește „Intră în cont”.'
       );
+      setMode('login');
       return;
     }
 
-    if (!PHONE_AUTH_ENABLED) {
-      setError(
-        'Login cu telefon nu e activ încă. Folosește email. (SMS necesită Twilio în Supabase.)'
-      );
-      return;
-    }
-
-    if (!phone.trim()) {
-      setError('Introdu telefonul în format +40722123456.');
-      return;
-    }
-    setLoading(true);
-    const { error: err } = await sendPhoneOtp(phone);
-    setLoading(false);
-    if (err) {
-      setError(mapAuthError(err) ?? err.message);
-      return;
-    }
-    setOtpSent(true);
-    setMessage('Am trimis un cod SMS. Introdu-l mai jos.');
-  }
-
-  async function handleVerify() {
-    setError(null);
-    setMessage(null);
-    if (!otp.trim()) {
-      setError('Introdu codul primit pe email.');
-      return;
-    }
-    setLoading(true);
-    const { error: err } =
-      method === 'email'
-        ? await verifyOtp({ email, token: otp, type: 'email' })
-        : await verifyOtp({ phone, token: otp, type: 'sms' });
+    const { error: err } = await signInWithPassword(e, password);
     setLoading(false);
     if (err) {
       setError(mapAuthError(err) ?? err.message);
@@ -97,16 +69,8 @@ export default function LoginScreen() {
     setMessage('Autentificare reușită.');
   }
 
-  function switchMethod(next: Method) {
-    if (next === 'phone' && !PHONE_AUTH_ENABLED) {
-      setError(
-        'Login cu telefon nu e activ pe server. Folosește tab-ul Email.'
-      );
-      return;
-    }
-    setMethod(next);
-    setOtpSent(false);
-    setOtp('');
+  function switchMode(next: Mode) {
+    setMode(next);
     setError(null);
     setMessage(null);
   }
@@ -118,62 +82,47 @@ export default function LoginScreen() {
     >
       <Text style={styles.title}>Programari</Text>
       <Text style={styles.subtitle}>
-        Autentificare cu email (cod OTP pe mail)
+        Email + parolă (funcționează pe telefon, fără link localhost)
       </Text>
 
       <View style={styles.tabs}>
         <Pressable
-          style={[styles.tab, method === 'email' && styles.tabActive]}
-          onPress={() => switchMethod('email')}
+          style={[styles.tab, mode === 'login' && styles.tabActive]}
+          onPress={() => switchMode('login')}
         >
-          <Text style={[styles.tabText, method === 'email' && styles.tabTextActive]}>
-            Email
+          <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>
+            Intră în cont
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, styles.tabDisabled, method === 'phone' && styles.tabActive]}
-          onPress={() => switchMethod('phone')}
+          style={[styles.tab, mode === 'register' && styles.tabActive]}
+          onPress={() => switchMode('register')}
         >
-          <Text style={[styles.tabText, method === 'phone' && styles.tabTextActive]}>
-            Telefon (în curând)
+          <Text style={[styles.tabText, mode === 'register' && styles.tabTextActive]}>
+            Cont nou
           </Text>
         </Pressable>
       </View>
 
-      {method === 'email' ? (
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          placeholder="email@exemplu.ro"
-          value={email}
-          onChangeText={setEmail}
-          editable={!loading}
-        />
-      ) : (
-        <TextInput
-          style={styles.input}
-          keyboardType="phone-pad"
-          autoComplete="tel"
-          placeholder="+40722123456"
-          value={phone}
-          onChangeText={setPhone}
-          editable={!loading && PHONE_AUTH_ENABLED}
-        />
-      )}
-
-      {otpSent && (
-        <TextInput
-          style={styles.input}
-          keyboardType="number-pad"
-          placeholder="Cod din email"
-          value={otp}
-          onChangeText={setOtp}
-          editable={!loading}
-          maxLength={8}
-        />
-      )}
+      <TextInput
+        style={styles.input}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+        placeholder="email@exemplu.ro"
+        value={email}
+        onChangeText={setEmail}
+        editable={!loading}
+      />
+      <TextInput
+        style={styles.input}
+        secureTextEntry
+        autoComplete={mode === 'register' ? 'new-password' : 'password'}
+        placeholder="Parolă (min. 6 caractere)"
+        value={password}
+        onChangeText={setPassword}
+        editable={!loading}
+      />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -181,25 +130,19 @@ export default function LoginScreen() {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 16 }} />
       ) : (
-        <Pressable
-          style={styles.button}
-          onPress={otpSent ? handleVerify : handleSendOtp}
-        >
+        <Pressable style={styles.button} onPress={handleSubmit}>
           <Text style={styles.buttonText}>
-            {otpSent ? 'Verifică codul' : 'Trimite cod pe email'}
+            {mode === 'login' ? 'Intră în cont' : 'Creează cont'}
           </Text>
         </Pressable>
       )}
 
-      {otpSent ? (
-        <Pressable onPress={() => setOtpSent(false)} style={styles.link}>
-          <Text style={styles.linkText}>Schimbă emailul / retrimite</Text>
-        </Pressable>
-      ) : null}
-
       <Text style={styles.hint}>
-        Nu ai SMS activ pe Supabase. Contul se face cu email; poți adăuga telefonul
-        mai târziu la programări / setări.
+        Emailul pe care l-ai primit („Your sign-in link” / Sign in) e un magic link care
+        duce greșit la localhost:3000 pe telefon. Nu-l folosi. Folosește email + parolă
+        aici.{'\n\n'}
+        Recomandat în Supabase (dezvoltare):{'\n'}
+        Auth → Providers → Email → dezactivează „Confirm email”.
       </Text>
     </KeyboardAvoidingView>
   );
@@ -237,16 +180,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
   },
-  tabDisabled: {
-    opacity: 0.7,
-  },
   tabActive: {
     backgroundColor: '#fff',
   },
   tabText: {
     color: '#666',
     fontWeight: '500',
-    fontSize: 13,
+    fontSize: 14,
   },
   tabTextActive: {
     color: '#111',
@@ -281,13 +221,6 @@ const styles = StyleSheet.create({
   message: {
     color: '#166534',
     marginBottom: 8,
-  },
-  link: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: '#2563eb',
   },
   hint: {
     marginTop: 24,
