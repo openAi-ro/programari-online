@@ -8,6 +8,10 @@ import type { Session } from '@supabase/supabase-js';
 import { router, useSegments } from 'expo-router';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import {
+  attachNotificationResponseListener,
+  consumeLastNotificationResponse,
+} from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 export { ErrorBoundary } from 'expo-router';
@@ -69,9 +73,25 @@ function useSessionGuard() {
   return session;
 }
 
+function usePushNavigation(session: Session | null | undefined) {
+  useEffect(() => {
+    if (!session) return;
+    const detach = attachNotificationResponseListener();
+    // Cold start: delay slightly so navigation stack is ready
+    const t = setTimeout(() => {
+      consumeLastNotificationResponse().catch(() => {});
+    }, 400);
+    return () => {
+      clearTimeout(t);
+      detach();
+    };
+  }, [session]);
+}
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const session = useSessionGuard();
+  usePushNavigation(session);
 
   if (session === undefined) {
     return (

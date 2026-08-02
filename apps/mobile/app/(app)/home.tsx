@@ -1,5 +1,9 @@
 import { Link } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { registerForPushAsync } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
 
 const LINKS: { href: string; label: string; hint: string }[] = [
   {
@@ -30,11 +34,29 @@ const LINKS: { href: string; label: string; hint: string }[] = [
   {
     href: '/(app)/settings',
     label: 'Setări',
-    hint: 'Profil și deconectare',
+    hint: 'Profil, notificări push și deconectare',
   },
 ];
 
 export default function HomeScreen() {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      try {
+        await registerForPushAsync(user.id);
+      } catch (e) {
+        console.warn('Push register on home failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Programari</Text>
