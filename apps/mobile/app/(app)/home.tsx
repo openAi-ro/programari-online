@@ -1,6 +1,6 @@
 import { Link } from 'expo-router';
-import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { registerForPushAsync } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
@@ -39,6 +39,8 @@ const LINKS: { href: string; label: string; hint: string }[] = [
 ];
 
 export default function HomeScreen() {
+  const [hasBusiness, setHasBusiness] = useState<boolean | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -51,6 +53,12 @@ export default function HomeScreen() {
       } catch (e) {
         console.warn('Push register on home failed', e);
       }
+      const { data } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('owner_user_id', user.id)
+        .maybeSingle();
+      if (!cancelled) setHasBusiness(!!data);
     })();
     return () => {
       cancelled = true;
@@ -58,9 +66,21 @@ export default function HomeScreen() {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Programari</Text>
       <Text style={styles.subtitle}>Alege o acțiune</Text>
+
+      {hasBusiness === false ? (
+        <Link href="/(app)/business/setup" asChild>
+          <Pressable style={styles.cta}>
+            <Text style={styles.ctaTitle}>Configurează agenda</Text>
+            <Text style={styles.ctaHint}>
+              Nu ai încă un profil business. Setează timezone, program și generează QR-ul.
+            </Text>
+          </Pressable>
+        </Link>
+      ) : null}
+
       {LINKS.map((item) => (
         <Link key={item.href} href={item.href as any} asChild>
           <Pressable style={styles.card}>
@@ -69,15 +89,18 @@ export default function HomeScreen() {
           </Pressable>
         </Link>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     backgroundColor: '#f8fafc',
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 26,
@@ -87,6 +110,24 @@ const styles = StyleSheet.create({
   subtitle: {
     color: '#64748b',
     marginBottom: 16,
+  },
+  cta: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+  },
+  ctaTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  ctaHint: {
+    fontSize: 13,
+    color: '#1e40af',
+    marginTop: 4,
   },
   card: {
     backgroundColor: '#fff',

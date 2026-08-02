@@ -10,7 +10,7 @@
  * URL: https://<ref>.supabase.co/functions/v1/notify-decision
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { corsHeaders, handleCors, jsonResponse } from '../_shared/cors.ts';
+import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import {
   messageApproved,
   messageRejected,
