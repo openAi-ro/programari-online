@@ -16,12 +16,22 @@ import { localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, FreeSlot } from '@/lib/types';
 
-function todayLocalYmd(): string {
-  const d = new Date();
+function toYmd(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/** Default to next Mon–Fri (agenda e închisă sâmbătă/duminică în config). */
+function defaultBookingDateYmd(): string {
+  const d = new Date();
+  for (let i = 0; i < 7; i++) {
+    const day = d.getDay(); // 0=Sun … 6=Sat
+    if (day !== 0 && day !== 6) return toYmd(d);
+    d.setDate(d.getDate() + 1);
+  }
+  return toYmd(new Date());
 }
 
 function mapRpcError(message: string): string {
@@ -41,7 +51,7 @@ export default function BookScreen() {
   const { publicCode } = useLocalSearchParams<{ publicCode: string }>();
   const router = useRouter();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
-  const [dateLocal, setDateLocal] = useState(todayLocalYmd());
+  const [dateLocal, setDateLocal] = useState(defaultBookingDateYmd());
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
   const [loading, setLoading] = useState(true);
