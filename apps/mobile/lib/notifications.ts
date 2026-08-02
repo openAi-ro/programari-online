@@ -5,15 +5,18 @@ import { router } from 'expo-router';
 
 import { supabase } from './supabase';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Avoid calling native notification APIs during web SSR / Node.
+if (Platform.OS !== 'web' && typeof window !== 'undefined') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export type PushRegisterResult = {
   token: string | null;
@@ -24,6 +27,9 @@ export type PushRegisterResult = {
  * Request permission, get Expo push token, upsert into device_push_tokens.
  */
 export async function registerForPushAsync(userId: string): Promise<PushRegisterResult> {
+  if (Platform.OS === 'web') {
+    return { token: null, reason: 'web_unsupported' };
+  }
   if (!Device.isDevice) {
     return { token: null, reason: 'simulator' };
   }
@@ -81,6 +87,9 @@ export function handleNotificationNavigation(data: Record<string, unknown> | und
  * Returns cleanup function.
  */
 export function attachNotificationResponseListener() {
+  if (Platform.OS === 'web') {
+    return () => {};
+  }
   const sub = Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data as
       | Record<string, unknown>
@@ -92,6 +101,7 @@ export function attachNotificationResponseListener() {
 
 /** If app was opened from a cold-start notification tap. */
 export async function consumeLastNotificationResponse() {
+  if (Platform.OS === 'web') return;
   const last = await Notifications.getLastNotificationResponseAsync();
   if (!last) return;
   const data = last.notification.request.content.data as Record<string, unknown> | undefined;
