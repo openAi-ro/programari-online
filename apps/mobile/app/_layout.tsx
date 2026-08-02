@@ -62,8 +62,11 @@ function useSessionGuard() {
     if (session === undefined) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    // Allow Supabase email redirect page without forcing login
+    const inAuthCallback =
+      segments[0] === 'auth' && segments[1] === 'callback';
 
-    if (!session && !inAuthGroup) {
+    if (!session && !inAuthGroup && !inAuthCallback) {
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {
       router.replace('/(app)/home');
@@ -107,6 +110,7 @@ function RootLayoutNav() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/callback" options={{ headerShown: false, title: 'Confirmare' }} />
         <Stack.Screen name="b/[publicCode]" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>

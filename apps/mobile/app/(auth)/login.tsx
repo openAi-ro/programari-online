@@ -49,7 +49,9 @@ export default function LoginScreen() {
         return;
       }
       setOtpSent(true);
-      setMessage('Am trimis un cod pe email. Verifică și inbox, și spam.');
+      setMessage(
+        'Am trimis un email. IMPORTANT: introdu codul de 6–8 cifre aici — NU deschide linkul „Confirm” (poate duce greșit la localhost:3000).'
+      );
       return;
     }
 

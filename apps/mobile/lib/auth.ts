@@ -1,6 +1,21 @@
 import type { AuthError, Session } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
 import { supabase } from './supabase';
+
+/**
+ * Where Supabase email magic-links redirect after click.
+ * Must be listed under Dashboard → Auth → URL Configuration → Redirect URLs.
+ * Prefer OTP code in the app — do not rely on the link if Site URL is wrong.
+ */
+export function getEmailRedirectTo(): string {
+  // Web: current origin (e.g. http://localhost:8084)
+  // Native: programari:// scheme from app.json
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return Linking.createURL('auth/callback');
+}
 
 /** Map Supabase auth errors to Romanian UI messages. */
 export function mapAuthError(error: AuthError | Error | null | undefined): string | null {
@@ -19,13 +34,20 @@ export function mapAuthError(error: AuthError | Error | null | undefined): strin
   if (raw.includes('invalid login') || raw.includes('invalid otp') || raw.includes('token')) {
     return 'Cod invalid sau expirat. Cere un cod nou.';
   }
+  if (raw.includes('email not confirmed') || raw.includes('confirm')) {
+    return 'Email neconfirmat. Folosește codul din mesaj (nu linkul) sau confirmă din mail după ce ai setat URL-urile în Supabase.';
+  }
   return error.message;
 }
 
 export async function sendEmailOtp(email: string) {
   return supabase.auth.signInWithOtp({
     email: email.trim(),
-    options: { shouldCreateUser: true },
+    options: {
+      shouldCreateUser: true,
+      // Avoid default Site URL (often localhost:3000) which refuses connection
+      emailRedirectTo: getEmailRedirectTo(),
+    },
   });
 }
 
