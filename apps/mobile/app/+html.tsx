@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 // do not have access to the DOM or browser APIs.
 export default function Root({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="ro">
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -19,21 +19,27 @@ export default function Root({ children }: { children: ReactNode }) {
         */}
         <ScrollViewStyleReset />
 
-        {/* Using raw CSS styles as an escape-hatch to ensure the background color never flickers in dark-mode. */}
+        {/* Fundalul nu trebuie să clipească între scheme, înainte ca React să monteze tema. */}
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
-        {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
       <body>{children}</body>
     </html>
   );
 }
 
+// Keep in sync with palette.ink50 / palette.ink950 in constants/theme.ts
 const responsiveBackground = `
 body {
-  background-color: #fff;
+  background-color: #f6f8fc; /* palette.ink50 */
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #000;
+    background-color: #0b1120; /* palette.ink950 */
   }
-}`;
+}
+/* Campurile isi deseneaza singure inelul de focus (accent), deci renuntam la conturul UA. */
+input:focus,
+textarea:focus {
+  outline: none;
+}
+`;

@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
+import { Button, Callout, Field, Screen, Segmented, useTheme } from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   mapAuthError,
   signInWithPassword,
@@ -18,7 +18,13 @@ import {
 
 type Mode = 'login' | 'register';
 
+const MODES: { value: Mode; label: string }[] = [
+  { value: 'login', label: 'Intră în cont' },
+  { value: 'register', label: 'Cont nou' },
+];
+
 export default function LoginScreen() {
+  const t = useTheme();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -77,156 +83,108 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>Programari</Text>
-      <Text style={styles.subtitle}>
-        Email + parolă (funcționează pe telefon, fără link localhost)
-      </Text>
-
-      <View style={styles.tabs}>
-        <Pressable
-          style={[styles.tab, mode === 'login' && styles.tabActive]}
-          onPress={() => switchMode('login')}
-        >
-          <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>
-            Intră în cont
+      <Screen scroll bottomInset={spacing['3xl']}>
+        <View style={styles.hero}>
+          <View style={[styles.logo, { backgroundColor: t.colors.accent }, t.shadows.accent]}>
+            <Ionicons name="calendar" size={30} color={t.colors.onAccent} />
+          </View>
+          <Text style={[styles.title, { color: t.colors.text }]}>Programări</Text>
+          <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>
+            Agenda ta, într-un singur loc
           </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, mode === 'register' && styles.tabActive]}
-          onPress={() => switchMode('register')}
-        >
-          <Text style={[styles.tabText, mode === 'register' && styles.tabTextActive]}>
-            Cont nou
+        </View>
+
+        <Segmented value={mode} onChange={switchMode} options={MODES} />
+
+        <Field
+          label="Email"
+          icon="mail-outline"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoComplete="email"
+          autoCorrect={false}
+          placeholder="email@exemplu.ro"
+          value={email}
+          onChangeText={setEmail}
+          editable={!loading}
+        />
+        <Field
+          label="Parolă"
+          icon="lock-closed-outline"
+          secureTextEntry
+          autoComplete={mode === 'register' ? 'new-password' : 'password'}
+          placeholder="Minim 6 caractere"
+          value={password}
+          onChangeText={setPassword}
+          editable={!loading}
+          onSubmitEditing={handleSubmit}
+          returnKeyType="go"
+        />
+
+        {error ? <Callout tone="danger">{error}</Callout> : null}
+        {message ? <Callout tone="success">{message}</Callout> : null}
+
+        <Button
+          label={mode === 'login' ? 'Intră în cont' : 'Creează cont'}
+          icon={mode === 'login' ? 'log-in-outline' : 'person-add-outline'}
+          onPress={handleSubmit}
+          loading={loading}
+          style={styles.submit}
+        />
+
+        <View style={[styles.hintBox, { backgroundColor: t.colors.surfaceMuted }]}>
+          <Ionicons
+            name="information-circle-outline"
+            size={16}
+            color={t.colors.textMuted}
+            style={styles.hintIcon}
+          />
+          <Text style={[styles.hint, { color: t.colors.textMuted }]}>
+            Emailul de la Supabase („Your sign-in link”) duce la localhost:3000 pe telefon —
+            nu-l folosi. Introdu emailul și parola aici.{'\n\n'}
+            La dezvoltare, în Supabase: Auth → Providers → Email → dezactivează „Confirm
+            email”.
           </Text>
-        </Pressable>
-      </View>
-
-      <TextInput
-        style={styles.input}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
-        placeholder="email@exemplu.ro"
-        value={email}
-        onChangeText={setEmail}
-        editable={!loading}
-      />
-      <TextInput
-        style={styles.input}
-        secureTextEntry
-        autoComplete={mode === 'register' ? 'new-password' : 'password'}
-        placeholder="Parolă (min. 6 caractere)"
-        value={password}
-        onChangeText={setPassword}
-        editable={!loading}
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 16 }} />
-      ) : (
-        <Pressable style={styles.button} onPress={handleSubmit}>
-          <Text style={styles.buttonText}>
-            {mode === 'login' ? 'Intră în cont' : 'Creează cont'}
-          </Text>
-        </Pressable>
-      )}
-
-      <Text style={styles.hint}>
-        Emailul pe care l-ai primit („Your sign-in link” / Sign in) e un magic link care
-        duce greșit la localhost:3000 pe telefon. Nu-l folosi. Folosește email + parolă
-        aici.{'\n\n'}
-        Recomandat în Supabase (dezvoltare):{'\n'}
-        Auth → Providers → Email → dezactivează „Confirm email”.
-      </Text>
+        </View>
+      </Screen>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  flex: { flex: 1 },
+  hero: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  logo: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.lg,
+    alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    backgroundColor: '#fff',
+    marginBottom: spacing.sm,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 8,
+    fontSize: fontSize['2xl'],
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#555',
-    marginBottom: 24,
+    fontSize: fontSize.md,
     textAlign: 'center',
+    marginBottom: spacing.md,
   },
-  tabs: {
+  submit: { marginTop: spacing.sm },
+  hintBox: {
     flexDirection: 'row',
-    marginBottom: 16,
-    borderRadius: 10,
-    backgroundColor: '#f0f0f0',
-    padding: 4,
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginTop: spacing.lg,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  tabActive: {
-    backgroundColor: '#fff',
-  },
-  tabText: {
-    color: '#666',
-    fontWeight: '500',
-    fontSize: 14,
-  },
-  tabTextActive: {
-    color: '#111',
-    fontWeight: '700',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    marginBottom: 12,
-    backgroundColor: '#fafafa',
-  },
-  button: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  error: {
-    color: '#b91c1c',
-    marginBottom: 8,
-  },
-  message: {
-    color: '#166534',
-    marginBottom: 8,
-  },
-  hint: {
-    marginTop: 24,
-    fontSize: 12,
-    color: '#888',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  hintIcon: { marginTop: 1 },
+  hint: { flex: 1, fontSize: fontSize.xs, lineHeight: 18 },
 });

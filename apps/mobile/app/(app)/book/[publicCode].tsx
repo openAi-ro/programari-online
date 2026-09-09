@@ -1,16 +1,22 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
 import { SlotPicker } from '@/components/SlotPicker';
+import {
+  Badge,
+  Button,
+  Callout,
+  ErrorState,
+  LoadingScreen,
+  Screen,
+  SectionTitle,
+  useTheme,
+} from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { useBack } from '@/lib/nav';
 import { generateFreeSlots } from '@/lib/slots';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
@@ -48,8 +54,9 @@ function mapRpcError(message: string): string {
 }
 
 export default function BookScreen() {
+  const t = useTheme();
   const { publicCode } = useLocalSearchParams<{ publicCode: string }>();
-  const router = useRouter();
+  const goBack = useBack();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [dateLocal, setDateLocal] = useState(defaultBookingDateYmd());
   const [slots, setSlots] = useState<FreeSlot[]>([]);
@@ -59,6 +66,18 @@ export default function BookScreen() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const minDate = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const maxDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return d;
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -130,11 +149,6 @@ export default function BookScreen() {
     loadSlots();
   }, [loadSlots]);
 
-  const durationLabel = useMemo(
-    () => (business ? `${business.session_duration_minutes} min` : ''),
-    [business]
-  );
-
   async function handleBook() {
     if (!business || !selected) {
       setError('Alege un slot.');
@@ -156,48 +170,61 @@ export default function BookScreen() {
       await loadSlots();
       return;
     }
-    setMessage('Cererea a fost trimisă. Așteaptă confirmarea.');
+    // Mesajul se setează după reîncărcare: `loadSlots` golește starea de mesaj.
     setSelected(null);
     await loadSlots();
+    setMessage('Cererea a fost trimisă. Așteaptă confirmarea.');
   }
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <LoadingScreen label="Căutăm agenda…" />;
   }
 
   if (!business) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Eroare'}</Text>
-        <Pressable onPress={() => router.back()} style={styles.button}>
-          <Text style={styles.buttonText}>Înapoi</Text>
-        </Pressable>
-      </View>
+      <Screen title="Rezervare" onBack={goBack}>
+        <ErrorState
+          title="Nu am putut încărca business-ul"
+          description={error ?? 'Eroare necunoscută.'}
+          action={<Button label="Înapoi" variant="secondary" onPress={goBack} />}
+        />
+      </Screen>
     );
   }
 
-  const minDate = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-
-  const maxDate = useMemo(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 3);
-    return d;
-  }, []);
-
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>{business.name}</Text>
-      <Text style={styles.meta}>
-        Durată: {durationLabel} · {business.timezone}
-      </Text>
+    <Screen
+      title={business.name}
+      subtitle={`${business.session_duration_minutes} min · ${business.timezone}`}
+      onBack={goBack}
+      footer={
+        <>
+          {error ? <Callout tone="danger">{error}</Callout> : null}
+          {message ? <Callout tone="success">{message}</Callout> : null}
+          <Button
+            label={booking ? 'Se trimite…' : 'Trimite cererea'}
+            icon="paper-plane-outline"
+            onPress={handleBook}
+            loading={booking}
+            disabled={!selected}
+          />
+        </>
+      }
+    >
+      <View style={[styles.summary, { backgroundColor: t.colors.accentSoft }]}>
+        <View style={[styles.summaryIcon, { backgroundColor: t.colors.accent }]}>
+          <Ionicons name="storefront" size={20} color={t.colors.onAccent} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={[styles.summaryName, { color: t.colors.accentSoftText }]}>
+            {business.name}
+          </Text>
+          <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
+            Ședință de {business.session_duration_minutes} min · {business.timezone}
+          </Text>
+        </View>
+        <Badge tone="accent">{slots.length} libere</Badge>
+      </View>
 
       <DatePickerField
         label="Data programării"
@@ -210,22 +237,36 @@ export default function BookScreen() {
         maximumDate={maxDate}
       />
 
-      <Text style={styles.label}>Ora (doar din sloturile libere)</Text>
-      <Text style={styles.timeHint}>
-        Ora nu se editează manual — alege un slot liber de mai jos.
-      </Text>
+      <SectionTitle>
+        Ora — doar din sloturile libere
+      </SectionTitle>
 
-      {/* Ora selectată — doar afișare, blocată la editare */}
-      <View style={styles.timeLocked}>
-        <Text style={styles.timeLockedLabel}>Ora aleasă</Text>
-        <Text style={styles.timeLockedValue}>
-          {selected ? selected.labelLocal : '— alege un slot —'}
+      <View
+        style={[
+          styles.timeLocked,
+          { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong },
+        ]}
+      >
+        <View style={styles.timeLockedLeft}>
+          <Ionicons name="time-outline" size={16} color={t.colors.textMuted} />
+          <Text style={[styles.timeLockedLabel, { color: t.colors.textMuted }]}>
+            Ora aleasă
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.timeLockedValue,
+            { color: selected ? t.colors.text : t.colors.textFaint },
+          ]}
+        >
+          {selected ? selected.labelLocal : '—'}
         </Text>
       </View>
 
-      <Text style={styles.label}>Sloturi libere</Text>
       {slotsLoading ? (
-        <ActivityIndicator style={{ marginVertical: 12 }} />
+        <View style={styles.slotsLoading}>
+          <ActivityIndicator color={t.colors.accent} />
+        </View>
       ) : (
         <SlotPicker
           slots={slots}
@@ -234,51 +275,45 @@ export default function BookScreen() {
         />
       )}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-
-      <Pressable
-        style={[styles.button, (!selected || booking) && styles.buttonDisabled]}
-        onPress={handleBook}
-        disabled={!selected || booking}
-      >
-        <Text style={styles.buttonText}>
-          {booking ? 'Se trimite…' : 'Trimite cererea'}
-        </Text>
-      </Pressable>
-    </ScrollView>
+      <Text style={[styles.note, { color: t.colors.textFaint }]}>
+        Ora nu se poate modifica manual — alege un slot liber de mai sus. După trimitere,
+        cererea apare ca „în așteptare” până la confirmare.
+      </Text>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 40, backgroundColor: '#fff' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#64748b', marginTop: 4, marginBottom: 8 },
-  label: { fontSize: 13, color: '#475569', marginTop: 16, marginBottom: 6 },
-  timeHint: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },
-  timeLocked: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: '#f1f5f9',
+  flex: { flex: 1 },
+  summary: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+  },
+  summaryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryName: { fontSize: fontSize.md, fontWeight: '800' },
+  summaryMeta: { fontSize: fontSize.sm, marginTop: 1 },
+  timeLocked: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md + 2,
   },
-  timeLockedLabel: { fontSize: 13, color: '#64748b' },
-  timeLockedValue: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
-  button: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  error: { color: '#b91c1c', marginTop: 12 },
-  message: { color: '#166534', marginTop: 12 },
+  timeLockedLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  timeLockedLabel: { fontSize: fontSize.sm, fontWeight: '600' },
+  timeLockedValue: { fontSize: fontSize.xl, fontWeight: '800' },
+  slotsLoading: { paddingVertical: spacing['2xl'], alignItems: 'center' },
+  note: { fontSize: fontSize.xs, lineHeight: 17 },
 });

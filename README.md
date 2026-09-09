@@ -73,21 +73,32 @@ supabase functions deploy notify-pending-push
 supabase functions deploy notify-decision
 supabase functions deploy send-reminders
 supabase functions deploy expire-pending
+supabase functions deploy test-whatsapp
 ```
 
-### Secrets (edge)
+### Secrets
 
 ```bash
+# Email
 supabase secrets set RESEND_API_KEY=re_xxx
 supabase secrets set EMAIL_FROM="Programari <onboarding@resend.dev>"
-supabase secrets set TWILIO_ACCOUNT_SID=ACxxx
-supabase secrets set TWILIO_AUTH_TOKEN=xxx
-supabase secrets set TWILIO_WHATSAPP_FROM="whatsapp:+14155238886"
-supabase secrets set WEBHOOK_SECRET=<random>
-supabase secrets set CRON_SECRET=<random>
+
+# WhatsApp — Meta Cloud API (recomandat)
+supabase secrets set WHATSAPP_PROVIDER=meta
+supabase secrets set WHATSAPP_ACCESS_TOKEN=EAAxxxx
+supabase secrets set WHATSAPP_PHONE_NUMBER_ID=123456789
+
+# WhatsApp — Twilio (alternativ)
+# supabase secrets set WHATSAPP_PROVIDER=twilio
+# supabase secrets set TWILIO_ACCOUNT_SID=ACxxx
+# supabase secrets set TWILIO_AUTH_TOKEN=xxx
+# supabase secrets set TWILIO_WHATSAPP_FROM="whatsapp:+14155238886"
+
+supabase secrets set WEBHOOK_SECRET=random-long-string
+supabase secrets set CRON_SECRET=random-long-string
 ```
 
-Fără chei email/WhatsApp, funcțiile **stub-uiesc** (`console.log EMAIL_STUB` / `WHATSAPP_STUB`) — fluxul rămâne testabil.
+Fără chei WhatsApp/email: funcțiile loghează `WHATSAPP_STUB` / `EMAIL_STUB` (flux testabil din app → Setări → „Trimite mesaj test WhatsApp”).
 
 `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` sunt injectate automat pe hosted.
 

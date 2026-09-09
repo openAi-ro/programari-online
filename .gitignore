@@ -1,0 +1,7 @@
+﻿# env
+.env
+**/.env
+apps/mobile/.env
+scripts/twilio.env
+node_modules/
+.superpowers/

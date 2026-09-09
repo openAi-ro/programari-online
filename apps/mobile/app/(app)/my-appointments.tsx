@@ -1,15 +1,18 @@
-import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
+import {
+  Callout,
+  EmptyState,
+  LoadingScreen,
+  Screen,
+  Segmented,
+  useTheme,
+} from '@/components/ui';
+import { spacing } from '@/constants/theme';
+import { useBack } from '@/lib/nav';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile } from '@/lib/types';
@@ -18,10 +21,15 @@ type Row = Appointment & {
   business_profiles?: Pick<BusinessProfile, 'name' | 'timezone'> | null;
 };
 
+type Filter = 'all' | 'upcoming' | 'past';
+
 export default function MyAppointmentsScreen() {
+  const t = useTheme();
+  const back = useBack();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const load = useCallback(async () => {
     setError(null);
@@ -72,39 +80,107 @@ export default function MyAppointmentsScreen() {
     return `${start} – ${end}`;
   }
 
+  async function cancelAppointment(id: string) {
+    setError(null);
+    const { error: err } = await supabase.rpc('cancel_appointment', {
+      p_appointment_id: id,
+    });
+    if (err) {
+      setError(
+        err.message.includes('cannot_cancel')
+          ? 'Această programare nu mai poate fi anulată.'
+          : err.message
+      );
+      return;
+    }
+    await load();
+  }
+
+  const shown = useMemo(() => {
+    const now = Date.now();
+    if (filter === 'upcoming') {
+      return rows.filter((r) => new Date(r.end_at).getTime() >= now);
+    }
+    if (filter === 'past') {
+      return rows.filter((r) => new Date(r.end_at).getTime() < now);
+    }
+    return rows;
+  }, [rows, filter]);
+
   if (loading && rows.length === 0) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <LoadingScreen label="Se încarcă programările…" />;
   }
 
   return (
-    <View style={styles.container}>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+    <Screen title="Programările mele" subtitle="Ce ai rezervat și ce urmează" onBack={back} scroll={false}>
       <FlatList
-        data={rows}
+        data={shown}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={load}
+            tintColor={t.colors.accent}
+            colors={[t.colors.accent]}
+          />
+        }
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <Segmented
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: 'Toate' },
+                { value: 'upcoming', label: 'Viitoare' },
+                { value: 'past', label: 'Trecute' },
+              ]}
+            />
+            {error ? (
+              <Callout tone="danger" title="A apărut o eroare">
+                {error}
+              </Callout>
+            ) : null}
+          </View>
+        }
         ListEmptyComponent={
-          <Text style={styles.empty}>Nu ai programări încă.</Text>
+          <EmptyState
+            title={
+              rows.length === 0
+                ? 'Nu ai programări încă'
+                : filter === 'upcoming'
+                  ? 'Nicio programare viitoare'
+                  : 'Nicio programare trecută'
+            }
+            description={
+              rows.length === 0
+                ? 'Scanează codul QR al unui business sau deschide un link de programare.'
+                : 'Schimbă filtrul ca să vezi celelalte programări.'
+            }
+          />
         }
         renderItem={({ item }) => (
           <AppointmentCard
             appointment={item}
             businessName={item.business_profiles?.name}
             localLabel={localLabel(item)}
+            onCancel={() => cancelAppointment(item.id)}
           />
         )}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f8fafc' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  empty: { textAlign: 'center', color: '#64748b', marginTop: 32 },
-  error: { color: '#b91c1c', marginBottom: 8 },
+  listContent: {
+    padding: spacing.lg,
+    gap: spacing.md,
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  headerBlock: { gap: spacing.md, marginBottom: spacing.xs },
 });

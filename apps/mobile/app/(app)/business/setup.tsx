@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { WorkingHoursForm } from '@/components/WorkingHoursForm';
+import {
+  Button,
+  Callout,
+  Field,
+  LoadingScreen,
+  Screen,
+  Toggle,
+  useTheme,
+} from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   DEFAULT_BREAK_HOURS,
   DEFAULT_TIMEZONE,
   DEFAULT_WORKING_HOURS,
 } from '@/lib/defaults';
+import { useBack } from '@/lib/nav';
 import { generatePublicCode } from '@/lib/publicCode';
 import { supabase } from '@/lib/supabase';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
 
 export default function BusinessSetupScreen() {
+  const t = useTheme();
+  const back = useBack();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
@@ -136,121 +142,142 @@ export default function BusinessSetupScreen() {
   }
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <LoadingScreen label="Se încarcă configurarea…" />;
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.heading}>Configurare business</Text>
-
-      <Text style={styles.label}>Timezone (IANA)</Text>
-      <TextInput
-        style={styles.input}
-        value={timezone}
-        onChangeText={setTimezone}
-        autoCapitalize="none"
-        placeholder="Europe/Bucharest"
-      />
-
-      <Text style={styles.label}>Nume business</Text>
-      <TextInput
-        style={styles.input}
+    <Screen
+      title="Configurare business"
+      subtitle={existingId ? 'Editează programul și durata' : 'Creează primul tău business'}
+      onBack={back}
+      footer={
+        <View style={styles.footer}>
+          {error ? (
+            <Callout tone="danger" title="Verifică datele">
+              {error}
+            </Callout>
+          ) : null}
+          {message ? (
+            <Callout tone="success" title="Gata">
+              {message}
+            </Callout>
+          ) : null}
+          <Button
+            label={saving ? 'Se salvează…' : existingId ? 'Salvează modificările' : 'Creează business'}
+            icon="checkmark"
+            loading={saving}
+            onPress={handleSave}
+          />
+          {publicCode ? (
+            <Button
+              label="Vezi codul QR"
+              variant="secondary"
+              icon="qr-code-outline"
+              onPress={() => router.push('/(app)/business/qr' as never)}
+            />
+          ) : null}
+        </View>
+      }
+    >
+      <Field
+        label="Nume business"
         value={name}
         onChangeText={setName}
-        placeholder="Cabinet / Salon / etc."
+        placeholder="Cabinet / Salon / Barbershop"
+        icon="storefront-outline"
+        autoCapitalize="words"
       />
-
-      <Text style={styles.label}>Durată ședință (minute)</Text>
-      <TextInput
-        style={styles.input}
+      <Field
+        label="Durată ședință (minute)"
         value={duration}
         onChangeText={setDuration}
-        keyboardType="number-pad"
         placeholder="60"
+        keyboardType="number-pad"
+        icon="time-outline"
+        hint="Între 5 și 480 de minute. Cât durează o programare obișnuită."
+      />
+      <Field
+        label="Timezone (IANA)"
+        value={timezone}
+        onChangeText={setTimezone}
+        placeholder="Europe/Bucharest"
+        icon="globe-outline"
+        autoCapitalize="none"
+        hint="Programul de lucru se afișează clienților în fusul orar ales."
       />
 
       <WorkingHoursForm value={workingHours} onChange={setWorkingHours} />
 
-      <View style={styles.breakRow}>
-        <Text style={styles.label}>Pauză opțională</Text>
-        <Switch
+      <View
+        style={[
+          styles.breakRow,
+          { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+        ]}
+      >
+        <View style={styles.breakTitles}>
+          <Text style={[styles.breakTitle, { color: t.colors.text }]}>Pauză opțională</Text>
+          <Text style={[styles.breakSub, { color: t.colors.textMuted }]}>
+            Nu se pot programa clienți în acest interval
+          </Text>
+        </View>
+        <Toggle
           value={breakHours.enabled}
           onValueChange={(enabled) => setBreakHours({ ...breakHours, enabled })}
+          accessibilityLabel="Pauză opțională"
         />
       </View>
       {breakHours.enabled ? (
         <View style={styles.breakTimes}>
-          <TextInput
-            style={[styles.input, styles.time]}
-            value={breakHours.start}
-            onChangeText={(start) => setBreakHours({ ...breakHours, start })}
-            placeholder="13:00"
-            maxLength={5}
-          />
-          <Text>–</Text>
-          <TextInput
-            style={[styles.input, styles.time]}
-            value={breakHours.end}
-            onChangeText={(end) => setBreakHours({ ...breakHours, end })}
-            placeholder="14:00"
-            maxLength={5}
-          />
+          <View style={styles.breakCol}>
+            <Field
+              label="Pauză de la"
+              value={breakHours.start}
+              onChangeText={(start) => setBreakHours({ ...breakHours, start })}
+              placeholder="13:00"
+              maxLength={5}
+              keyboardType="numbers-and-punctuation"
+              style={styles.breakInput}
+            />
+          </View>
+          <View style={styles.breakCol}>
+            <Field
+              label="Până la"
+              value={breakHours.end}
+              onChangeText={(end) => setBreakHours({ ...breakHours, end })}
+              placeholder="14:00"
+              maxLength={5}
+              keyboardType="numbers-and-punctuation"
+              style={styles.breakInput}
+            />
+          </View>
         </View>
       ) : null}
 
       {publicCode ? (
-        <Text style={styles.code}>Cod public: {publicCode}</Text>
+        <Callout tone="accent" title={`Cod public: ${publicCode}`}>
+          Codul acesta intră în linkul de programare și în codul QR.
+        </Callout>
       ) : null}
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-
-      <Pressable style={styles.button} onPress={handleSave} disabled={saving}>
-        <Text style={styles.buttonText}>{saving ? 'Se salvează…' : 'Salvează'}</Text>
-      </Pressable>
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 40, backgroundColor: '#fff' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  heading: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
-  label: { fontSize: 13, color: '#475569', marginTop: 10, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fafafa',
-  },
+  footer: { gap: spacing.md },
   breakRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
   },
-  breakTimes: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  time: { width: 90, textAlign: 'center' },
-  code: { marginTop: 12, color: '#334155', fontWeight: '500' },
-  button: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  error: { color: '#b91c1c', marginTop: 10 },
-  message: { color: '#166534', marginTop: 10 },
+  breakTitles: { flex: 1, gap: 2 },
+  breakTitle: { fontSize: fontSize.md, fontWeight: '600' },
+  breakSub: { fontSize: fontSize.sm, lineHeight: 18 },
+  breakTimes: { flexDirection: 'row', gap: spacing.md },
+  breakCol: { flex: 1 },
+  breakInput: { textAlign: 'center' },
 });

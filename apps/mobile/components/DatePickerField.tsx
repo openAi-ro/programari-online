@@ -7,9 +7,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
+
+import { useTheme } from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
 
 type Props = {
   /** YYYY-MM-DD */
@@ -49,7 +53,7 @@ function formatRo(ymd: string): string {
 
 /**
  * Câmp dată: la apăsare deschide calendarul nativ.
- * Nu permite tastare liberă.
+ * Nu permite tastare liberă. Shell vizual aliniat cu Field (label, border, focus).
  */
 export function DatePickerField({
   value,
@@ -58,6 +62,7 @@ export function DatePickerField({
   minimumDate,
   maximumDate,
 }: Props) {
+  const t = useTheme();
   const [open, setOpen] = useState(false);
   const dateValue = useMemo(() => parseYmd(value), [value]);
 
@@ -73,44 +78,76 @@ export function DatePickerField({
     if (selected) apply(selected);
   }
 
+  const field = (children: React.ReactNode, onPress?: () => void) => (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.field,
+        {
+          backgroundColor: t.colors.surface,
+          borderColor:
+            open || (pressed && onPress) ? t.colors.accent : t.colors.borderStrong,
+          opacity: pressed ? 0.85 : 1,
+        },
+        open || (pressed && onPress) ? t.shadows.sm : null,
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+
   // Web: input type=date (calendar browser)
   if (Platform.OS === 'web') {
     return (
-      <View>
-        {label ? <Text style={styles.label}>{label}</Text> : null}
-        <View style={styles.field}>
-          {/* @ts-expect-error web-only input */}
-          <input
-            type="date"
-            value={value}
-            min={minimumDate ? toYmd(minimumDate) : undefined}
-            max={maximumDate ? toYmd(maximumDate) : undefined}
-            onChange={(e: { target: { value: string } }) => {
-              if (e.target.value) onChange(e.target.value);
-            }}
-            style={{
-              width: '100%',
-              border: 'none',
-              outline: 'none',
-              fontSize: 16,
-              background: 'transparent',
-              fontFamily: 'inherit',
-            }}
-          />
-        </View>
-        <Text style={styles.hint}>{formatRo(value)}</Text>
+      <View style={styles.wrap}>
+        {label ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{label}</Text> : null}
+        {field(
+          <>
+            <Ionicons name="calendar-outline" size={17} color={t.colors.accent} />
+            <input
+              type="date"
+              value={value}
+              min={minimumDate ? toYmd(minimumDate) : undefined}
+              max={maximumDate ? toYmd(maximumDate) : undefined}
+              onChange={(e: { target: { value: string } }) => {
+                if (e.target.value) onChange(e.target.value);
+              }}
+              style={{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                fontSize: 16,
+                fontWeight: '600',
+                background: 'transparent',
+                fontFamily: 'inherit',
+                color: t.colors.text,
+              }}
+            />
+          </>
+        )}
       </View>
     );
   }
 
   return (
-    <View>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-      <Pressable style={styles.field} onPress={() => setOpen(true)}>
-        <Text style={styles.fieldText}>{formatRo(value)}</Text>
-        <Text style={styles.chevron}>📅</Text>
-      </Pressable>
-      <Text style={styles.hint}>Apasă pentru a deschide calendarul</Text>
+    <View style={styles.wrap}>
+      {label ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{label}</Text> : null}
+      {field(
+        <>
+          <Ionicons
+            name="calendar-outline"
+            size={17}
+            color={open ? t.colors.accent : t.colors.accent}
+          />
+          <Text style={[styles.fieldText, { color: t.colors.text }]} numberOfLines={1}>
+            {formatRo(value)}
+          </Text>
+          <Ionicons name="chevron-down" size={17} color={t.colors.textFaint} />
+        </>,
+        () => setOpen(true)
+      )}
 
       {/* Android: dialog nativ odată deschis */}
       {open && Platform.OS === 'android' ? (
@@ -127,9 +164,21 @@ export function DatePickerField({
       {/* iOS: modal cu spinner + Confirmă */}
       {Platform.OS === 'ios' ? (
         <Modal visible={open} transparent animationType="slide">
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Alege data</Text>
+          <Pressable
+            style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}
+            onPress={() => setOpen(false)}
+          >
+            <View
+              style={[
+                styles.modalCard,
+                { backgroundColor: t.colors.bgElevated },
+                t.shadows.lg,
+              ]}
+            >
+              <View style={styles.modalBar}>
+                <View style={[styles.modalGrabber, { backgroundColor: t.colors.borderStrong }]} />
+              </View>
+              <Text style={[styles.modalTitle, { color: t.colors.text }]}>Alege data</Text>
               <DateTimePicker
                 value={dateValue}
                 mode="date"
@@ -141,11 +190,21 @@ export function DatePickerField({
                 maximumDate={maximumDate}
                 style={{ alignSelf: 'center' }}
               />
-              <Pressable style={styles.modalBtn} onPress={() => setOpen(false)}>
-                <Text style={styles.modalBtnText}>Gata</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  {
+                    backgroundColor: t.colors.accent,
+                    opacity: pressed ? 0.85 : 1,
+                    minHeight: spacing.touchTarget,
+                  },
+                ]}
+                onPress={() => setOpen(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: t.colors.onAccent }]}>Gata</Text>
               </Pressable>
             </View>
-          </View>
+          </Pressable>
         </Modal>
       ) : null}
     </View>
@@ -153,51 +212,52 @@ export function DatePickerField({
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 13, color: '#475569', marginTop: 12, marginBottom: 6 },
+  wrap: { gap: 6 },
+  label: { fontSize: fontSize.sm, fontWeight: '600' },
   field: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 13,
+    minHeight: spacing.touchTarget,
   },
   fieldText: {
-    fontSize: 16,
+    fontSize: fontSize.lg,
     fontWeight: '600',
-    color: '#0f172a',
     flex: 1,
     textTransform: 'capitalize',
   },
-  chevron: { fontSize: 18, marginLeft: 8 },
-  hint: { fontSize: 12, color: '#94a3b8', marginTop: 4 },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 16,
-    paddingBottom: 32,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing['3xl'],
+  },
+  modalBar: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.sm },
+  modalGrabber: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: fontSize.lg,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   modalBtn: {
-    marginTop: 12,
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 14,
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    paddingVertical: 15,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  modalBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalBtnText: { fontWeight: '700', fontSize: fontSize.lg },
 });

@@ -1,22 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import QRCode from 'react-native-qrcode-svg';
 
+import {
+  Button,
+  Callout,
+  Card,
+  EmptyState,
+  LoadingScreen,
+  Screen,
+  SectionTitle,
+  useTheme,
+} from '@/components/ui';
+import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { getBookingPaths } from '@/lib/bookingLink';
+import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/types';
 
 export default function BusinessQrScreen() {
+  const t = useTheme();
+  const back = useBack();
+  const insets = useSafeAreaInsets();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,160 +81,146 @@ export default function BusinessQrScreen() {
 
   function openBookingInApp() {
     if (!links) return;
-    router.push(links.route as any);
+    router.push(links.route as never);
   }
 
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <LoadingScreen label="Se pregătește codul QR…" />;
   }
 
   if (error || !business || !links) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Business negăsit.'}</Text>
-      </View>
+      <Screen title="Cod QR" onBack={back}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Nu există încă un cod QR"
+          description={error ?? 'Business negăsit.'}
+          action={
+            <Button
+              label="Configurează business"
+              icon="settings-outline"
+              onPress={() => router.replace('/(app)/business/setup' as never)}
+            />
+          }
+        />
+      </Screen>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{business.name}</Text>
-      <Text style={styles.hint}>
-        Clienții scanează QR-ul ca să aleagă o oră liberă pe agenda ta.
-      </Text>
-
-      <View style={styles.qrWrap}>
-        <QRCode value={qrValue} size={220} />
+    <Screen title="Cod QR" subtitle={business.name} onBack={back}>
+      <View
+        style={[
+          styles.qrCard,
+          { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+          t.shadows.md,
+        ]}
+      >
+        <View style={styles.qrInner}>
+          <QRCode value={qrValue} size={216} backgroundColor={palette.white} color={palette.ink950} />
+        </View>
+        <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>
+          Clienții scanează codul ca să aleagă o oră liberă pe agenda ta.
+        </Text>
       </View>
 
-      <Text style={styles.codeLabel}>Cod business</Text>
-      <Text style={styles.code} selectable>
-        {links.code}
-      </Text>
-
-      {/* Cel mai important pe un singur telefon */}
-      <Pressable style={styles.primaryButton} onPress={openBookingInApp}>
-        <Text style={styles.primaryButtonText}>
-          Deschide programarea acum (în app)
+      <SectionTitle>Cod public</SectionTitle>
+      <View
+        style={[
+          styles.codeBox,
+          { backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border },
+        ]}
+      >
+        <Text style={[styles.code, { color: t.colors.text }]} selectable>
+          {links.code}
         </Text>
-      </Pressable>
-      <Text style={styles.help}>
-        Pe același telefon: nu e nevoie de cameră. Apasă butonul de mai sus → alegi
+      </View>
+
+      <Button
+        label="Deschide programarea acum"
+        icon="calendar-outline"
+        onPress={openBookingInApp}
+      />
+      <Text style={[styles.help, { color: t.colors.textMuted }]}>
+        Pe același telefon nu e nevoie de cameră: apeși butonul de mai sus, apoi alegi
         data și ora liberă.
       </Text>
 
-      <Pressable style={styles.secondaryButton} onPress={handleShare}>
-        <Text style={styles.secondaryButtonText}>Partajează link</Text>
-      </Pressable>
-      <Pressable style={styles.secondaryButton} onPress={handleCopy}>
-        <Text style={styles.secondaryButtonText}>
-          {copied ? 'Copiat!' : 'Copiază link Expo'}
-        </Text>
-      </Pressable>
-
-      <Text style={styles.link} selectable>
-        {links.expoUrl}
-      </Text>
-
-      <View style={styles.noteBox}>
-        <Text style={styles.noteTitle}>De ce camera nu deschide app-ul?</Text>
-        <Text style={styles.note}>
-          Camera telefonului nu știe de „Programari” cât timp rulezi în Expo Go.
-          Schemele custom (programari://) merg după ce publici app-ul (APK/App Store).
-          {'\n\n'}
-          • Pe același telefon: butonul „Deschide programarea acum”.{'\n'}
-          • Al doilea telefon: app → Scanează QR (scannerul din Programari).{'\n'}
-          • Sau deschide linkul Expo copiat pe telefonul unde e Expo Go deschis.
-        </Text>
+      <View style={styles.actionsRow}>
+        <View style={styles.action}>
+          <Button
+            label="Partajează"
+            variant="secondary"
+            size="md"
+            icon="share-social-outline"
+            onPress={handleShare}
+          />
+        </View>
+        <View style={styles.action}>
+          <Button
+            label={copied ? 'Copiat' : 'Copiază link'}
+            variant="secondary"
+            size="md"
+            icon={copied ? 'checkmark' : 'copy-outline'}
+            onPress={handleCopy}
+          />
+        </View>
       </View>
-    </ScrollView>
+
+      <Card icon="link-outline" iconTone="neutral" title="Link de programare" hint={links.expoUrl} />
+
+      <Callout tone="warning" title="De ce camera nu deschide app-ul?">
+        Camera telefonului nu știe de „Programări” cât timp rulezi în Expo Go. Schemele
+        custom (programari://) merg după ce publici app-ul (APK / App Store).
+        {'\n\n'}
+        • Pe același telefon: butonul „Deschide programarea acum”.'
+        {'\n'}
+        • Al doilea telefon: app → Scanează QR.'
+        {'\n'}
+        • Sau deschide linkul copiat pe telefonul unde e Expo Go deschis.
+      </Callout>
+
+      <View style={{ height: insets.bottom + spacing.md }} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  qrCard: {
     alignItems: 'center',
-    padding: 24,
-    paddingBottom: 48,
-    backgroundColor: '#fff',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
-  hint: { color: '#64748b', marginBottom: 20, textAlign: 'center' },
-  qrWrap: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    gap: spacing.lg,
+    padding: spacing.xl,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
   },
-  codeLabel: {
-    marginTop: 16,
-    fontSize: 12,
-    color: '#64748b',
-    textTransform: 'uppercase',
+  qrInner: {
+    padding: spacing.md,
+    backgroundColor: palette.white,
+    borderRadius: radius.lg,
+  },
+  qrHint: {
+    fontSize: fontSize.sm,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  codeBox: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
   },
   code: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 16,
-    color: '#0f172a',
+    fontSize: fontSize['2xl'],
+    fontWeight: '800',
+    letterSpacing: 2,
   },
-  primaryButton: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 10,
-    width: '100%',
-    alignItems: 'center',
-  },
-  primaryButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   help: {
-    marginTop: 10,
-    marginBottom: 16,
-    fontSize: 13,
-    color: '#475569',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  secondaryButton: {
-    marginTop: 8,
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    width: '100%',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
-  secondaryButtonText: { color: '#0f172a', fontWeight: '600' },
-  link: {
-    marginTop: 16,
-    fontSize: 11,
-    color: '#64748b',
+    fontSize: fontSize.sm,
+    lineHeight: 19,
     textAlign: 'center',
   },
-  noteBox: {
-    marginTop: 24,
-    padding: 14,
-    backgroundColor: '#fffbeb',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-    width: '100%',
-  },
-  noteTitle: { fontWeight: '700', color: '#92400e', marginBottom: 6 },
-  note: { fontSize: 12, color: '#78350f', lineHeight: 18 },
-  error: { color: '#b91c1c', textAlign: 'center' },
+  actionsRow: { flexDirection: 'row', gap: spacing.md },
+  action: { flex: 1 },
 });

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 
+import { LoadingScreen } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -61,26 +61,5 @@ export default function AuthCallbackScreen() {
     };
   }, []);
 
-  return (
-    <View style={styles.box}>
-      <ActivityIndicator />
-      <Text style={styles.text}>{status}</Text>
-    </View>
-  );
+  return <LoadingScreen label={status} />;
 }
-
-const styles = StyleSheet.create({
-  box: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#fff',
-  },
-  text: {
-    marginTop: 16,
-    textAlign: 'center',
-    color: '#333',
-    lineHeight: 22,
-  },
-});

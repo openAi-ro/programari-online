@@ -1,13 +1,15 @@
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
 import type { Session } from '@supabase/supabase-js';
 import { router, useSegments } from 'expo-router';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { buildTheme, palette } from '@/constants/theme';
 import {
   attachNotificationResponseListener,
   consumeLastNotificationResponse,
@@ -92,27 +94,60 @@ function usePushNavigation(session: Session | null | undefined) {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const session = useSessionGuard();
   usePushNavigation(session);
 
+  // Fiecare ecran isi deseneaza singur suprafata; tema de mai jos aliniaza
+  // doar chrome-ul nativ (bara de stare, fundalul navigatorului, tranzitiile).
+  const theme = useMemo(() => {
+    const t = buildTheme(scheme);
+    const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: scheme === 'dark',
+      colors: {
+        ...base.colors,
+        primary: t.colors.accent,
+        background: t.colors.bg,
+        card: t.colors.bgElevated,
+        text: t.colors.text,
+        border: t.colors.border,
+        notification: t.colors.accent,
+      },
+    };
+  }, [scheme]);
+
   if (session === undefined) {
+    const t = buildTheme(scheme);
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator />
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: t.colors.bg,
+        }}
+      >
+        <ActivityIndicator size="large" color={palette.accent500} />
       </View>
     );
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/callback" options={{ headerShown: false, title: 'Confirmare' }} />
-        <Stack.Screen name="b/[publicCode]" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
+    <ThemeProvider value={theme}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: theme.colors.background },
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
+        <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="b/[publicCode]" />
       </Stack>
     </ThemeProvider>
   );

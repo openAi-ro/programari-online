@@ -1,8 +1,8 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
+import { LoadingScreen } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 
 export default function Index() {
@@ -19,11 +19,7 @@ export default function Index() {
   }, []);
 
   if (session === undefined) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <LoadingScreen label="Se încarcă…" />;
   }
 
   if (!session) {

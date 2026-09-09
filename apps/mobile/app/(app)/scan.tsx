@@ -1,18 +1,25 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button, Field, useTheme } from '@/components/ui';
+import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { extractPublicCode } from '@/lib/bookingLink';
+import { useBack } from '@/lib/nav';
 
+/**
+ * Camera chrome: intentional dark overlay (palette.ink950) so the finder
+ * stays high-contrast regardless of light/dark app theme. Non-camera chrome
+ * (manual code sheet) uses useTheme tokens.
+ */
 export default function ScanScreen() {
+  const t = useTheme();
   const router = useRouter();
+  const back = useBack();
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
@@ -20,7 +27,7 @@ export default function ScanScreen() {
 
   function goToBook(code: string) {
     setLocked(true);
-    router.replace(`/(app)/book/${code}` as any);
+    router.replace(`/(app)/book/${code}` as never);
   }
 
   function onBarcode({ data }: { data: string }) {
@@ -45,13 +52,14 @@ export default function ScanScreen() {
   if (!permission) {
     return (
       <View style={styles.center}>
-        <Text>Se încarcă camera…</Text>
+        <Ionicons name="camera-outline" size={28} color={palette.white} />
+        <Text style={styles.centerText}>Se încarcă camera…</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: t.colors.bg }]}>
       {permission.granted ? (
         <CameraView
           style={styles.camera}
@@ -61,34 +69,86 @@ export default function ScanScreen() {
         />
       ) : (
         <View style={styles.center}>
-          <Text style={styles.text}>
-            Pentru scanare cu camera, permite accesul. Poți și introduce codul manual.
+          <View style={styles.centerIcon}>
+            <Ionicons name="scan-outline" size={30} color={palette.white} />
+          </View>
+          <Text style={styles.centerText}>
+            Camera nu are permisiunea încă. Poți oricând să introduci codul business
+            mai jos, fără cameră.
           </Text>
-          <Pressable style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Permite camera</Text>
-          </Pressable>
+          <Button
+            label="Permite camera"
+            icon="camera-outline"
+            onPress={requestPermission}
+            fullWidth={false}
+          />
         </View>
       )}
 
-      <View style={styles.overlay}>
-        <Text style={styles.overlayText}>
-          Scanează QR-ul SAU introdu codul business mai jos
+      {permission.granted ? (
+        <View style={styles.frame} pointerEvents="none">
+          <View style={[styles.frameBox, { borderColor: 'rgba(255,255,255,0.75)' }]} />
+          <Text style={styles.frameHint}>Alinează codul QR în interiorul cadrului</Text>
+        </View>
+      ) : null}
+
+      <View style={[styles.backWrap, { top: insets.top + spacing.sm }]}>
+        <Pressable
+          onPress={back}
+          accessibilityRole="button"
+          accessibilityLabel="Închide scanarea"
+          hitSlop={4}
+          style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons name="close" size={20} color={palette.white} />
+        </Pressable>
+      </View>
+
+      <View
+        style={[
+          styles.overlay,
+          {
+            backgroundColor: t.colors.bgElevated,
+            borderTopColor: t.colors.border,
+            paddingBottom: insets.bottom + spacing.lg,
+          },
+        ]}
+      >
+        <Text style={[styles.overlayTitle, { color: t.colors.text }]}>
+          Scanează codul QR sau introdu codul
         </Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Cod business"
-          placeholderTextColor="#94a3b8"
-          autoCapitalize="none"
+        <Field
           value={manual}
           onChangeText={setManual}
+          placeholder="Cod business"
+          icon="keypad-outline"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="go"
+          onSubmitEditing={onManual}
         />
-        <Pressable style={styles.button} onPress={onManual}>
-          <Text style={styles.buttonText}>Deschide programarea</Text>
-        </Pressable>
-        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        <Button
+          label="Deschide programarea"
+          icon="arrow-forward"
+          onPress={onManual}
+        />
+        {hint ? (
+          <View style={styles.hintRow}>
+            <Ionicons name="alert-circle-outline" size={14} color={t.colors.warning} />
+            <Text style={[styles.hint, { color: t.colors.warningSoftText }]}>{hint}</Text>
+          </View>
+        ) : null}
         {locked ? (
-          <Pressable style={styles.buttonOutline} onPress={() => setLocked(false)}>
-            <Text style={styles.buttonOutlineText}>Scanează din nou</Text>
+          <Pressable
+            onPress={() => setLocked(false)}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.retry,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Ionicons name="refresh" size={14} color={t.colors.accent} />
+            <Text style={[styles.retryText, { color: t.colors.accent }]}>Scanează din nou</Text>
           </Pressable>
         ) : null}
       </View>
@@ -97,54 +157,84 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1 },
   camera: { flex: 1 },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#0f172a',
+    padding: spacing['2xl'],
+    gap: spacing.lg,
+    backgroundColor: palette.ink950,
   },
-  text: { textAlign: 'center', marginBottom: 16, color: '#e2e8f0' },
-  overlay: {
+  centerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)', // on ink950 camera chrome
+  },
+  centerText: {
+    textAlign: 'center',
+    color: palette.ink200,
+    fontSize: fontSize.md,
+    lineHeight: 22,
+  },
+  frame: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    paddingBottom: 36,
-    backgroundColor: 'rgba(15,23,42,0.92)',
-  },
-  overlayText: {
-    color: '#fff',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  input: {
-    backgroundColor: '#1e293b',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#fff',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  hint: { color: '#fbbf24', marginTop: 8, textAlign: 'center' },
-  button: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
+    bottom: 0,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  buttonOutline: {
-    marginTop: 10,
-    paddingVertical: 10,
+  frameBox: {
+    width: 232,
+    height: 232,
+    borderRadius: radius.xl,
+    borderWidth: 3,
+  },
+  frameHint: {
+    marginTop: spacing.md,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 6,
+  },
+  backWrap: {
+    position: 'absolute',
+    left: spacing.md,
+  },
+  backBtn: {
+    width: spacing.touchTarget,
+    height: spacing.touchTarget,
+    borderRadius: radius.sm,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(11,17,32,0.55)',
   },
-  buttonOutlineText: { color: '#93c5fd' },
+  overlay: {
+    padding: spacing.lg,
+    gap: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  overlayTitle: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+  },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  hint: { flex: 1, fontSize: fontSize.sm, lineHeight: 18 },
+  retry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  retryText: { fontSize: fontSize.sm, fontWeight: '700' },
 });

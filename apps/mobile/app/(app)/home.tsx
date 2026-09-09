@@ -1,20 +1,35 @@
-import { Link, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  Avatar,
+  Banner,
+  Body,
+  Button,
+  Card,
+  LoadingScreen,
+  Screen,
+  SectionTitle,
+  useTheme,
+} from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import { registerForPushAsync } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 type Biz = { id: string; name: string; public_code: string };
 
+const GUIDE_STEPS = [
+  'Configurează agenda (business)',
+  'Deschide QR-ul sau copiază codul',
+  '„Testează ca client” — te programezi la tine',
+  '„Cereri” — aprobi sau respingi programarea',
+];
+
 export default function HomeScreen() {
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
   const [business, setBusiness] = useState<Biz | null>(null);
@@ -67,217 +82,247 @@ export default function HomeScreen() {
   );
 
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Se încarcă…</Text>
-      </View>
-    );
+    return <LoadingScreen label="Se încarcă agenda…" />;
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Programari</Text>
-      <Text style={styles.subtitle}>
-        Conectat{email ? `: ${email}` : ''}. Un singur cont = business + client.
-      </Text>
-
-      {/* Ghid mobil un cont */}
-      <View style={styles.guide}>
-        <Text style={styles.guideTitle}>Pe telefon, cu un singur email</Text>
-        <Text style={styles.guideStep}>1. Configurează agenda (business)</Text>
-        <Text style={styles.guideStep}>2. Deschide QR-ul / copiază codul</Text>
-        <Text style={styles.guideStep}>
-          3. „Testează ca client” — te programezi la tine (același cont e OK)
+    <Screen bottomInset={insets.bottom + spacing['3xl']}>
+      <View style={styles.hero}>
+        <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>
+          Bine ai venit
         </Text>
-        <Text style={styles.guideStep}>
-          4. „Cereri” — aprobi sau respingi programarea
+        <Text style={[styles.heroTitle, { color: t.colors.text }]} numberOfLines={1}>
+          Programări
         </Text>
-        <Text style={styles.guideNote}>
-          Nu ai nevoie de al doilea email. Rolurile business și client sunt pe același
-          cont.
-        </Text>
+        {email ? (
+          <View style={styles.accountRow}>
+            <Avatar initials={email} size="sm" />
+            <Text style={[styles.account, { color: t.colors.textMuted }]} numberOfLines={1}>
+              {email}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {!business ? (
-        <Pressable
-          style={styles.cta}
-          onPress={() => router.push('/(app)/business/setup')}
-        >
-          <Text style={styles.ctaTitle}>1. Configurează agenda</Text>
-          <Text style={styles.ctaHint}>
-            Timezone, durată ședință, program de lucru, pauză → se generează QR.
-          </Text>
-        </Pressable>
+        <>
+          <Banner
+            tone="accent"
+            icon="rocket-outline"
+            title="Începe prin a-ți configura agenda"
+            description="Timezone, durată ședință, program de lucru și pauză — apoi primești un cod QR."
+            actionLabel="Configurează"
+            onPress={() => router.push('/(app)/business/setup')}
+          />
+          <Guide />
+        </>
       ) : (
-        <View style={styles.bizBox}>
-          <Text style={styles.bizLabel}>Business-ul tău</Text>
-          <Text style={styles.bizName}>{business.name}</Text>
-          <Text style={styles.bizCode}>Cod: {business.public_code}</Text>
-
-          <Pressable
-            style={styles.primaryBtn}
-            onPress={() => router.push('/(app)/business/qr')}
+        <>
+          <View
+            style={[
+              styles.bizCard,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+              t.shadows.md,
+            ]}
           >
-            <Text style={styles.primaryBtnText}>Vezi QR / partajează</Text>
-          </Pressable>
+            <View style={styles.bizHead}>
+              <View style={[styles.bizIcon, { backgroundColor: t.colors.accentSoft }]}>
+                <Text style={[styles.bizInitial, { color: t.colors.accentSoftText }]}>
+                  {business.name.slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.flex}>
+                <Text style={[styles.bizLabel, { color: t.colors.textMuted }]}>
+                  Business-ul tău
+                </Text>
+                <Text style={[styles.bizName, { color: t.colors.text }]} numberOfLines={1}>
+                  {business.name}
+                </Text>
+              </View>
+            </View>
 
-          <Pressable
-            style={styles.secondaryBtn}
-            onPress={() =>
-              router.push(`/(app)/book/${business.public_code}` as any)
-            }
-          >
-            <Text style={styles.secondaryBtnText}>
-              Testează ca client (același cont)
-            </Text>
-          </Pressable>
+            <View style={[styles.codeBox, { backgroundColor: t.colors.surfaceMuted }]}>
+              <Text style={[styles.codeLabel, { color: t.colors.textMuted }]}>
+                Cod public
+              </Text>
+              <Text style={[styles.code, { color: t.colors.text }]} selectable>
+                {business.public_code}
+              </Text>
+            </View>
 
-          <Pressable
-            style={styles.secondaryBtn}
-            onPress={() => router.push('/(app)/business/requests')}
-          >
-            <Text style={styles.secondaryBtnText}>Cereri — aprobă / respinge</Text>
-          </Pressable>
-        </View>
+            <View style={styles.bizActions}>
+              <Button
+                label="Vezi QR / partajează"
+                icon="qr-code-outline"
+                onPress={() => router.push('/(app)/business/qr')}
+              />
+              <View style={styles.bizActionsRow}>
+                <View style={styles.bizAction}>
+                  <Button
+                    label="Cereri"
+                    icon="hourglass-outline"
+                    variant="secondary"
+                    size="md"
+                    onPress={() => router.push('/(app)/business/requests')}
+                  />
+                </View>
+                <View style={styles.bizAction}>
+                  <Button
+                    label="Ca client"
+                    icon="person-outline"
+                    variant="secondary"
+                    size="md"
+                    onPress={() =>
+                      router.push(`/(app)/book/${business.public_code}` as never)
+                    }
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <Body muted style={styles.oneAccountNote}>
+            Un singur cont acoperă ambele roluri: business și client. Nu ai nevoie de al
+            doilea email ca să testezi.
+          </Body>
+        </>
       )}
 
-      <Text style={styles.section}>Toate acțiunile</Text>
+      <SectionTitle>Toate acțiunile</SectionTitle>
 
-      <Link href="/(app)/business/setup" asChild>
-        <Pressable style={styles.card}>
-          <Text style={styles.cardTitle}>Configurare business</Text>
-          <Text style={styles.cardHint}>Nume, program, timezone, durată, pauză</Text>
-        </Pressable>
-      </Link>
+      <Card
+        icon="settings-outline"
+        title="Configurare business"
+        hint="Nume, program, timezone, durată, pauză"
+        chevron
+        onPress={() => router.push('/(app)/business/setup')}
+      />
+      <Card
+        icon="qr-code-outline"
+        title="Cod QR business"
+        hint="Arată sau partajează linkul de rezervare"
+        chevron
+        onPress={() => router.push('/(app)/business/qr')}
+      />
+      <Card
+        icon="hourglass-outline"
+        title="Cereri programări"
+        hint="Aprobă sau respinge cererile în așteptare"
+        iconTone="warning"
+        chevron
+        onPress={() => router.push('/(app)/business/requests')}
+      />
+      <Card
+        icon="scan-outline"
+        title="Scanează QR"
+        hint="Pentru alt business, sau codul tău pe un al doilea telefon"
+        iconTone="info"
+        chevron
+        onPress={() => router.push('/(app)/scan')}
+      />
+      <Card
+        icon="calendar-outline"
+        title="Programările mele"
+        hint="Status: în așteptare, confirmat, respins"
+        iconTone="success"
+        chevron
+        onPress={() => router.push('/(app)/my-appointments')}
+      />
+      <Card
+        icon="person-circle-outline"
+        title="Setări"
+        hint="Profil, WhatsApp, notificări push, deconectare"
+        iconTone="neutral"
+        chevron
+        onPress={() => router.push('/(app)/settings')}
+      />
+    </Screen>
+  );
+}
 
-      <Link href="/(app)/business/qr" asChild>
-        <Pressable style={styles.card}>
-          <Text style={styles.cardTitle}>Cod QR business</Text>
-          <Text style={styles.cardHint}>Arată sau partajează linkul de rezervare</Text>
-        </Pressable>
-      </Link>
-
-      <Link href="/(app)/business/requests" asChild>
-        <Pressable style={styles.card}>
-          <Text style={styles.cardTitle}>Cereri programări</Text>
-          <Text style={styles.cardHint}>Aprobă sau respinge cererile pending</Text>
-        </Pressable>
-      </Link>
-
-      <Link href="/(app)/scan" asChild>
-        <Pressable style={styles.card}>
-          <Text style={styles.cardTitle}>Scanează QR</Text>
-          <Text style={styles.cardHint}>
-            Pentru alt business (sau codul tău, pe un al doilea telefon)
-          </Text>
-        </Pressable>
-      </Link>
-
-      <Link href="/(app)/my-appointments" asChild>
-        <Pressable style={styles.card}>
-          <Text style={styles.cardTitle}>Programările mele (ca client)</Text>
-          <Text style={styles.cardHint}>Status: așteptare / confirmat / respins</Text>
-        </Pressable>
-      </Link>
-
-      <Link href="/(app)/settings" asChild>
-        <Pressable style={styles.card}>
-          <Text style={styles.cardTitle}>Setări</Text>
-          <Text style={styles.cardHint}>Profil, push, deconectare</Text>
-        </Pressable>
-      </Link>
-    </ScrollView>
+function Guide() {
+  const t = useTheme();
+  return (
+    <View
+      style={[
+        styles.guide,
+        { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+        t.shadows.sm,
+      ]}
+    >
+      <Text style={[styles.guideTitle, { color: t.colors.text }]}>
+        Cum funcționează, pe un singur telefon
+      </Text>
+      {GUIDE_STEPS.map((step, i) => (
+        <View key={step} style={styles.guideStep}>
+          <View style={[styles.guideNum, { backgroundColor: t.colors.accentSoft }]}>
+            <Text style={[styles.guideNumText, { color: t.colors.accentSoftText }]}>
+              {i + 1}
+            </Text>
+          </View>
+          <Text style={[styles.guideText, { color: t.colors.textMuted }]}>{step}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 20, paddingBottom: 48 },
-  centered: {
-    flex: 1,
+  flex: { flex: 1 },
+  hero: { gap: 4, marginBottom: spacing.sm },
+  heroLabel: { fontSize: fontSize.sm, fontWeight: '600' },
+  heroTitle: { fontSize: fontSize['3xl'], fontWeight: '800', letterSpacing: -0.8 },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
+  account: { fontSize: fontSize.sm, flexShrink: 1 },
+
+  bizCard: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  bizHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  bizIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
   },
-  loadingText: { marginTop: 12, color: '#64748b' },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 4 },
-  subtitle: { color: '#64748b', marginBottom: 16, fontSize: 14 },
+  bizInitial: { fontSize: fontSize.xl, fontWeight: '800' },
+  bizLabel: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  bizName: { fontSize: fontSize.xl, fontWeight: '800', letterSpacing: -0.3 },
+  codeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+  },
+  codeLabel: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  code: { fontSize: fontSize.lg, fontWeight: '800', letterSpacing: 1 },
+  bizActions: { gap: spacing.sm },
+  bizActionsRow: { flexDirection: 'row', gap: spacing.sm },
+  bizAction: { flex: 1 },
+  oneAccountNote: { fontSize: fontSize.sm, lineHeight: 19 },
+
   guide: {
-    backgroundColor: '#ecfdf5',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#6ee7b7',
+    gap: spacing.md,
   },
-  guideTitle: {
-    fontWeight: '700',
-    color: '#065f46',
-    marginBottom: 8,
-    fontSize: 15,
-  },
-  guideStep: { color: '#047857', fontSize: 13, marginBottom: 4, lineHeight: 18 },
-  guideNote: {
-    marginTop: 8,
-    fontSize: 12,
-    color: '#064e3b',
-    fontStyle: 'italic',
-  },
-  cta: {
-    backgroundColor: '#eff6ff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#93c5fd',
-  },
-  ctaTitle: { fontSize: 16, fontWeight: '700', color: '#1d4ed8' },
-  ctaHint: { fontSize: 13, color: '#1e40af', marginTop: 4 },
-  bizBox: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  bizLabel: { fontSize: 12, color: '#64748b', textTransform: 'uppercase' },
-  bizName: { fontSize: 20, fontWeight: '700', color: '#0f172a', marginTop: 4 },
-  bizCode: { fontSize: 13, color: '#475569', marginTop: 4, marginBottom: 12 },
-  primaryBtn: {
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 12,
+  guideTitle: { fontSize: fontSize.md, fontWeight: '700' },
+  guideStep: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  guideNum: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
   },
-  primaryBtnText: { color: '#fff', fontWeight: '600' },
-  secondaryBtn: {
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
-  secondaryBtnText: { color: '#0f172a', fontWeight: '600', fontSize: 14 },
-  section: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: '#0f172a' },
-  cardHint: { fontSize: 13, color: '#64748b', marginTop: 4 },
+  guideNumText: { fontSize: fontSize.xs, fontWeight: '800' },
+  guideText: { flex: 1, fontSize: fontSize.sm, lineHeight: 19 },
 });
