@@ -67,10 +67,13 @@ function useSessionGuard() {
     // Allow Supabase email redirect page without forcing login
     const inAuthCallback =
       segments[0] === 'auth' && segments[1] === 'callback';
+    // Recovery session must stay on reset-password (do not bounce to home)
+    const onResetPassword =
+      inAuthGroup && segments[1] === 'reset-password';
 
     if (!session && !inAuthGroup && !inAuthCallback) {
       router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthGroup && !onResetPassword) {
       router.replace('/(app)/home');
     }
   }, [session, segments]);

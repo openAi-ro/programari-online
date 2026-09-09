@@ -44,6 +44,28 @@ export function mapAuthError(error: AuthError | Error | null | undefined): strin
   if (raw.includes('email not confirmed') || raw.includes('confirm')) {
     return 'Email neconfirmat. În Supabase: Auth → Providers → Email → dezactivează „Confirm email” (pentru dezvoltare), sau confirmă din mail după ce Site URL e http://localhost:8084.';
   }
+  if (
+    raw.includes('same email rate') ||
+    raw.includes('for security purposes') ||
+    raw.includes('only request this after')
+  ) {
+    return 'Prea multe cereri pentru acest email. Așteaptă câteva minute și încearcă din nou.';
+  }
+  if (
+    raw.includes('weak password') ||
+    raw.includes('password should be') ||
+    (raw.includes('password') && (raw.includes('too short') || raw.includes('too weak')))
+  ) {
+    return 'Parola e prea slabă. Folosește cel puțin 6 caractere.';
+  }
+  if (
+    raw.includes('expired') ||
+    raw.includes('otp_expired') ||
+    raw.includes('flow state') ||
+    (raw.includes('recovery') && (raw.includes('invalid') || raw.includes('expired')))
+  ) {
+    return 'Linkul de resetare a expirat sau nu mai e valid. Cere un link nou.';
+  }
   if (raw.includes('invalid otp') || raw.includes('token')) {
     return 'Cod invalid. Supabase îți trimite acum doar link „Sign in”, nu cod — folosește email + parolă.';
   }
@@ -108,6 +130,18 @@ export async function verifyOtp(params: {
     token: params.token.trim(),
     type: 'sms',
   });
+}
+
+/** Trimite email cu link de resetare a parolei (nu divulgă dacă emailul există). */
+export async function resetPasswordForEmail(email: string) {
+  return supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: getEmailRedirectTo(),
+  });
+}
+
+/** Setează parola nouă după ce sesiunea de recovery e activă. */
+export async function updatePassword(newPassword: string) {
+  return supabase.auth.updateUser({ password: newPassword });
 }
 
 export async function signOut() {

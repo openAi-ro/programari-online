@@ -259,3 +259,9 @@ export function messageTest(): { subject: string; text: string } {
     'Test Programari: mesajele WhatsApp funcționează. Vei primi confirmări și reminder-uri aici.';
   return { subject: 'Test WhatsApp Programari', text };
 }
+
+/** Romanian OTP for WhatsApp phone login. */
+export function messageAuthOtp(code: string): { subject: string; text: string } {
+  const text = `Codul tau Programari: ${code}. Valabil 10 minute.`;
+  return { subject: 'Cod autentificare Programari', text };
+}

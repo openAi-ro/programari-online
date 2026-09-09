@@ -5,9 +5,25 @@ import * as Linking from 'expo-linking';
 import { LoadingScreen } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 
+function isRecoveryFromUrl(url: string | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes('type=recovery') || lower.includes('type%3drecovery');
+}
+
+function isRecoveryFromWindow(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hash = window.location.hash?.replace(/^#/, '') ?? '';
+  const search = window.location.search?.replace(/^\?/, '') ?? '';
+  const params = new URLSearchParams(hash || search);
+  const type = (params.get('type') ?? '').toLowerCase();
+  return type === 'recovery';
+}
+
 /**
  * Handles magic-link / email redirect from Supabase.
  * URL must match Redirect URLs in Supabase (e.g. http://localhost:8084/auth/callback).
+ * Password recovery (type=recovery) → /(auth)/reset-password.
  */
 export default function AuthCallbackScreen() {
   const [status, setStatus] = useState('Se confirmă sesiunea…');
@@ -18,12 +34,14 @@ export default function AuthCallbackScreen() {
     (async () => {
       try {
         const url = await Linking.getInitialURL();
+        let recovery = isRecoveryFromUrl(url);
+
         if (url && (url.includes('access_token') || url.includes('code='))) {
           // Some flows put tokens in the hash/query — supabase-js on web may pick them up.
           await supabase.auth.getSession();
         }
 
-        // PKCE: exchange code if present
+        // PKCE / hash tokens
         if (typeof window !== 'undefined') {
           const hash = window.location.hash?.replace(/^#/, '') ?? '';
           const search = window.location.search?.replace(/^\?/, '') ?? '';
@@ -33,13 +51,19 @@ export default function AuthCallbackScreen() {
           if (access_token && refresh_token) {
             await supabase.auth.setSession({ access_token, refresh_token });
           }
+          if (isRecoveryFromWindow()) recovery = true;
         }
 
         const { data } = await supabase.auth.getSession();
         if (cancelled) return;
         if (data.session) {
-          setStatus('Autentificat. Redirecționare…');
-          router.replace('/(app)/home');
+          if (recovery) {
+            setStatus('Link de resetare confirmat. Redirecționare…');
+            router.replace('/(auth)/reset-password');
+          } else {
+            setStatus('Autentificat. Redirecționare…');
+            router.replace('/(app)/home');
+          }
         } else {
           setStatus(
             'Nu s-a putut deschide sesiunea din link. Înapoi la login și folosește codul OTP din email (6 cifre), nu linkul.'
