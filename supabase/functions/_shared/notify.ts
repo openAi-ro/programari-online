@@ -1,7 +1,8 @@
 /**
- * Shared client notification channels: email (Resend) + WhatsApp (Twilio).
+ * Shared client notification channels: email (Resend) + WhatsApp (Twilio / Meta Cloud).
  * When env keys are missing, stubs log to console and return ok.
  */
+import { normalizePhoneE164, phoneForMetaApi } from './phone.ts';
 
 export type SendResult = {
   ok: boolean;
@@ -9,6 +10,7 @@ export type SendResult = {
   status?: number;
   channel: 'email' | 'whatsapp';
   error?: string;
+  provider?: 'twilio' | 'meta' | 'stub';
 };
 
 export async function sendEmail(
@@ -52,16 +54,75 @@ export async function sendEmail(
   }
 }
 
-export async function sendWhatsApp(
+async function sendWhatsAppMeta(
+  toE164: string,
+  text: string
+): Promise<SendResult> {
+  const token = Deno.env.get('WHATSAPP_ACCESS_TOKEN');
+  const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+  if (!token || !phoneNumberId) {
+    console.log('WHATSAPP_STUB', { toE164, text, provider: 'meta' });
+    return { ok: true, stub: true, channel: 'whatsapp', provider: 'stub' };
+  }
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: phoneForMetaApi(toE164),
+          type: 'text',
+          text: { body: text },
+        }),
+      }
+    );
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      console.error('Meta WhatsApp error', res.status, errBody);
+      return {
+        ok: false,
+        status: res.status,
+        channel: 'whatsapp',
+        provider: 'meta',
+        error: errBody,
+      };
+    }
+    return { ok: true, status: res.status, channel: 'whatsapp', provider: 'meta' };
+  } catch (e) {
+    console.error('sendWhatsAppMeta exception', e);
+    return {
+      ok: false,
+      channel: 'whatsapp',
+      provider: 'meta',
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+async function sendWhatsAppTwilio(
   toE164: string,
   text: string
 ): Promise<SendResult> {
   const sid = Deno.env.get('TWILIO_ACCOUNT_SID');
-  const token = Deno.env.get('TWILIO_AUTH_TOKEN');
-  const from = Deno.env.get('TWILIO_WHATSAPP_FROM'); // e.g. whatsapp:+14155238886
-  if (!sid || !token || !from) {
-    console.log('WHATSAPP_STUB', { toE164, text });
-    return { ok: true, stub: true, channel: 'whatsapp' };
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const apiKeySid = Deno.env.get('TWILIO_API_KEY_SID');
+  const apiKeySecret = Deno.env.get('TWILIO_API_KEY_SECRET');
+  const from = Deno.env.get('TWILIO_WHATSAPP_FROM');
+
+  const authUser =
+    apiKeySid?.startsWith('SK') && apiKeySecret ? apiKeySid : sid;
+  const authPass =
+    apiKeySid?.startsWith('SK') && apiKeySecret ? apiKeySecret : authToken;
+
+  if (!sid || !authPass || !from) {
+    console.log('WHATSAPP_STUB', { toE164, text, provider: 'twilio' });
+    return { ok: true, stub: true, channel: 'whatsapp', provider: 'stub' };
   }
 
   try {
@@ -78,7 +139,7 @@ export async function sendWhatsApp(
       {
         method: 'POST',
         headers: {
-          Authorization: 'Basic ' + btoa(`${sid}:${token}`),
+          Authorization: 'Basic ' + btoa(`${authUser}:${authPass}`),
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body,
@@ -91,18 +152,61 @@ export async function sendWhatsApp(
         ok: false,
         status: res.status,
         channel: 'whatsapp',
+        provider: 'twilio',
         error: errBody,
       };
     }
-    return { ok: true, status: res.status, channel: 'whatsapp' };
+    return { ok: true, status: res.status, channel: 'whatsapp', provider: 'twilio' };
   } catch (e) {
-    console.error('sendWhatsApp exception', e);
+    console.error('sendWhatsAppTwilio exception', e);
     return {
       ok: false,
       channel: 'whatsapp',
+      provider: 'twilio',
       error: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+export async function sendWhatsApp(
+  toRaw: string,
+  text: string
+): Promise<SendResult> {
+  const toE164 = normalizePhoneE164(toRaw);
+  if (!toE164) {
+    console.error('sendWhatsApp invalid phone', toRaw);
+    return {
+      ok: false,
+      channel: 'whatsapp',
+      error: 'invalid_phone',
+    };
+  }
+
+  const provider = (Deno.env.get('WHATSAPP_PROVIDER') ?? 'auto').toLowerCase();
+
+  if (provider === 'meta') {
+    return sendWhatsAppMeta(toE164, text);
+  }
+  if (provider === 'twilio') {
+    return sendWhatsAppTwilio(toE164, text);
+  }
+
+  // auto: prefer Meta if configured, else Twilio
+  const hasMeta =
+    !!Deno.env.get('WHATSAPP_ACCESS_TOKEN') &&
+    !!Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+  const hasTwilio =
+    !!Deno.env.get('TWILIO_ACCOUNT_SID') &&
+    !!Deno.env.get('TWILIO_WHATSAPP_FROM') &&
+    (!!Deno.env.get('TWILIO_AUTH_TOKEN') ||
+      (!!Deno.env.get('TWILIO_API_KEY_SID') &&
+        !!Deno.env.get('TWILIO_API_KEY_SECRET')));
+
+  if (hasMeta) return sendWhatsAppMeta(toE164, text);
+  if (hasTwilio) return sendWhatsAppTwilio(toE164, text);
+
+  console.log('WHATSAPP_STUB', { toE164, text, provider: 'none' });
+  return { ok: true, stub: true, channel: 'whatsapp', provider: 'stub' };
 }
 
 export async function notifyClientChannels(opts: {
@@ -148,4 +252,10 @@ export function messageReminder(
 ): { subject: string; text: string } {
   const text = `Salut! Ai o programare la ${businessName} în 30 de minute (${timeLocal}, ${timezone}).`;
   return { subject: 'Reminder programare — 30 minute', text };
+}
+
+export function messageTest(): { subject: string; text: string } {
+  const text =
+    'Test Programari: mesajele WhatsApp funcționează. Vei primi confirmări și reminder-uri aici.';
+  return { subject: 'Test WhatsApp Programari', text };
 }

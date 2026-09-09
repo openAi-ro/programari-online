@@ -22,6 +22,7 @@ RPC: `create_appointment_if_free`
 | `notify-decision` | Webhook UPDATE `appointments` (approved/rejected) | Email/WhatsApp client + `decision_notified` |
 | `send-reminders` | Cron ~2 min | Reminder −30 min (fereastră 25–35 min) |
 | `expire-pending` | Cron ~60 min | Pending > 24h → `cancelled` |
+| `test-whatsapp` | App Setări (JWT) | Mesaj test WhatsApp către telefonul din profil |
 
 ### Deploy
 
@@ -30,6 +31,7 @@ supabase functions deploy notify-pending-push
 supabase functions deploy notify-decision
 supabase functions deploy send-reminders
 supabase functions deploy expire-pending
+supabase functions deploy test-whatsapp
 ```
 
 ### Secrets
@@ -37,14 +39,23 @@ supabase functions deploy expire-pending
 ```bash
 supabase secrets set RESEND_API_KEY=re_xxx
 supabase secrets set EMAIL_FROM="Programari <onboarding@resend.dev>"
-supabase secrets set TWILIO_ACCOUNT_SID=ACxxx
-supabase secrets set TWILIO_AUTH_TOKEN=xxx
-supabase secrets set TWILIO_WHATSAPP_FROM="whatsapp:+14155238886"
+
+# Meta WhatsApp Cloud API (recomandat)
+supabase secrets set WHATSAPP_PROVIDER=meta
+supabase secrets set WHATSAPP_ACCESS_TOKEN=EAAxxxx
+supabase secrets set WHATSAPP_PHONE_NUMBER_ID=123456789
+
+# Twilio (alternativ)
+# supabase secrets set WHATSAPP_PROVIDER=twilio
+# supabase secrets set TWILIO_ACCOUNT_SID=ACxxx
+# supabase secrets set TWILIO_AUTH_TOKEN=xxx
+# supabase secrets set TWILIO_WHATSAPP_FROM="whatsapp:+14155238886"
+
 supabase secrets set WEBHOOK_SECRET=random-long-string
 supabase secrets set CRON_SECRET=random-long-string
 ```
 
-Fără `RESEND_API_KEY` / Twilio: funcțiile loghează `EMAIL_STUB` / `WHATSAPP_STUB` (flux testabil).
+Fără `RESEND_API_KEY` / WhatsApp: funcțiile loghează `EMAIL_STUB` / `WHATSAPP_STUB` (flux testabil din app).
 
 `SUPABASE_URL` și `SUPABASE_SERVICE_ROLE_KEY` sunt disponibile automat pe hosted Edge Functions.
 

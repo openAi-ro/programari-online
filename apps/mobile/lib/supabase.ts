@@ -22,6 +22,24 @@ function createAuthStorage(): SupportedStorage {
   if (typeof window === 'undefined') {
     return memoryStorage;
   }
+  // On web, AsyncStorage's native module is null; use localStorage instead.
+  try {
+    if (typeof window.localStorage !== 'undefined') {
+      return {
+        getItem: (key: string) => Promise.resolve(window.localStorage.getItem(key)),
+        setItem: (key: string, value: string) => {
+          window.localStorage.setItem(key, value);
+          return Promise.resolve();
+        },
+        removeItem: (key: string) => {
+          window.localStorage.removeItem(key);
+          return Promise.resolve();
+        },
+      };
+    }
+  } catch {
+    // localStorage unavailable; fall through to AsyncStorage
+  }
   return AsyncStorage;
 }
 

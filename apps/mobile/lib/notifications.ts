@@ -1,21 +1,17 @@
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 
 import { supabase } from './supabase';
 
-// Avoid calling native notification APIs during web SSR / Node.
-if (Platform.OS !== 'web' && typeof window !== 'undefined') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+// expo-notifications throws at import time in Expo Go (SDK 53+), so we load it
+// lazily inside the functions that actually need it. This keeps the rest of the
+// app working even when remote push isn't available (Expo Go / web / simulator).
+async function loadNotifications(): Promise<typeof import('expo-notifications') | null> {
+  try {
+    return await import('expo-notifications');
+  } catch {
+    return null;
+  }
 }
 
 export type PushRegisterResult = {
@@ -30,8 +26,14 @@ export async function registerForPushAsync(userId: string): Promise<PushRegister
   if (Platform.OS === 'web') {
     return { token: null, reason: 'web_unsupported' };
   }
+  const Device = await import('expo-device');
   if (!Device.isDevice) {
     return { token: null, reason: 'simulator' };
+  }
+
+  const Notifications = await loadNotifications();
+  if (!Notifications) {
+    return { token: null, reason: 'push_unavailable' };
   }
 
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -90,18 +92,37 @@ export function attachNotificationResponseListener() {
   if (Platform.OS === 'web') {
     return () => {};
   }
-  const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-    const data = response.notification.request.content.data as
-      | Record<string, unknown>
-      | undefined;
-    handleNotificationNavigation(data);
-  });
-  return () => sub.remove();
+  // In Expo Go (SDK 53+) remote push isn't available; skip silently.
+  let cancelled = false;
+  (async () => {
+    const Notifications = await loadNotifications();
+    if (!Notifications || cancelled) return;
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as
+        | Record<string, unknown>
+        | undefined;
+      handleNotificationNavigation(data);
+    });
+    if (cancelled) {
+      sub.remove();
+    } else {
+      // keep a handle so the caller can detach
+      cleanupRef = () => sub.remove();
+    }
+  })();
+  return () => {
+    cancelled = true;
+    cleanupRef?.();
+  };
 }
+
+let cleanupRef: (() => void) | null = null;
 
 /** If app was opened from a cold-start notification tap. */
 export async function consumeLastNotificationResponse() {
   if (Platform.OS === 'web') return;
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   const last = await Notifications.getLastNotificationResponseAsync();
   if (!last) return;
   const data = last.notification.request.content.data as Record<string, unknown> | undefined;

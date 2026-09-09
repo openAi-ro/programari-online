@@ -4,12 +4,15 @@
  * On appointment status → approved | rejected (decision_notified = false):
  * notify client via email/WhatsApp, then set decision_notified = true.
  *
- * Webhook (Dashboard): UPDATE on public.appointments
- * Filter recommended: only when status changes to approved/rejected.
+ * Triggers:
+ * - Database webhook UPDATE on appointments
+ * - App invoke after approve/reject (JWT business owner)
+ * - Manual POST with service role
  *
  * URL: https://<ref>.supabase.co/functions/v1/notify-decision
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { authorizeNotifyRequest } from '../_shared/auth-notify.ts';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import {
   messageApproved,
@@ -33,6 +36,7 @@ type Payload = {
   record?: AppointmentRow;
   old_record?: AppointmentRow | null;
   id?: string;
+  appointment_id?: string;
 };
 
 function formatWhen(iso: string, timezone: string): string {
@@ -55,14 +59,6 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'method_not_allowed' }, 405);
   }
 
-  const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
-  if (webhookSecret) {
-    const header = req.headers.get('x-webhook-secret');
-    if (header !== webhookSecret) {
-      return jsonResponse({ error: 'unauthorized' }, 401);
-    }
-  }
-
   let payload: Payload;
   try {
     payload = await req.json();
@@ -78,12 +74,20 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceKey);
 
+  const appointmentId =
+    payload.record?.id ?? payload.id ?? payload.appointment_id;
+
+  const authResult = await authorizeNotifyRequest(req, admin, appointmentId);
+  if (!authResult.ok) {
+    return jsonResponse({ error: authResult.error }, authResult.status);
+  }
+
   let record = payload.record;
-  if (!record?.id && payload.id) {
+  if (!record?.id && appointmentId) {
     const { data } = await admin
       .from('appointments')
       .select('*')
-      .eq('id', payload.id)
+      .eq('id', appointmentId)
       .maybeSingle();
     record = data as AppointmentRow | undefined;
   }
@@ -96,12 +100,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: true, skipped: 'status_not_decision' });
   }
 
-  // Idempotency: skip if already notified
   if (record.decision_notified) {
     return jsonResponse({ ok: true, skipped: 'already_notified' });
   }
 
-  // Prefer live row for race safety
   const { data: live, error: liveErr } = await admin
     .from('appointments')
     .select('*')
@@ -142,7 +144,6 @@ Deno.serve(async (req) => {
     text: copy.text,
   });
 
-  // Mark notified even if channels stubbed / partial failure (MVP: avoid spam loops)
   const { error: updErr } = await admin
     .from('appointments')
     .update({
