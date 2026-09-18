@@ -1,64 +1,55 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
+import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import {
   Badge,
   Button,
   Callout,
   ErrorState,
-  LoadingScreen,
   Screen,
   SectionTitle,
+  SkeletonScreen,
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import {
+  firstBookableDateYmd,
+  mapBookingRpcError,
+  maxBookingDate,
+  notBeforeUtc,
+  staffSchedule,
+  toYmd,
+} from '@/lib/bookingRules';
+import { createAppointmentIfFree, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
+import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import { useBack } from '@/lib/nav';
+import { locationFromBusiness } from '@/lib/location';
+import { markWaitlistBooked, invokePendingPush } from '@/lib/notify-client';
+import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
-import type { BusinessProfile, FreeSlot } from '@/lib/types';
-
-function toYmd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/** Default to next Mon–Fri (agenda e închisă sâmbătă/duminică în config). */
-function defaultBookingDateYmd(): string {
-  const d = new Date();
-  for (let i = 0; i < 7; i++) {
-    const day = d.getDay(); // 0=Sun … 6=Sat
-    if (day !== 0 && day !== 6) return toYmd(d);
-    d.setDate(d.getDate() + 1);
-  }
-  return toYmd(new Date());
-}
-
-function mapRpcError(message: string): string {
-  if (message.includes('contact_required')) {
-    return 'Contul trebuie să aibă email sau telefon.';
-  }
-  if (message.includes('slot_taken')) {
-    return 'Slotul tocmai a fost rezervat. Alege altul.';
-  }
-  if (message.includes('not_authenticated')) {
-    return 'Trebuie să fii autentificat.';
-  }
-  return message;
-}
+import type { BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
 
 export default function BookScreen() {
   const t = useTheme();
-  const { publicCode } = useLocalSearchParams<{ publicCode: string }>();
+  const router = useRouter();
+  const { publicCode, rescheduleId } = useLocalSearchParams<{
+    publicCode: string;
+    rescheduleId?: string;
+  }>();
   const goBack = useBack();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
-  const [dateLocal, setDateLocal] = useState(defaultBookingDateYmd());
+  const [services, setServices] = useState<Service[]>([]);
+  const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [staffId, setStaffId] = useState<string | null>(null);
+  const [serviceId, setServiceId] = useState<string | null>(null);
+  const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +57,20 @@ export default function BookScreen() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
+
+  const isReschedule = Boolean(rescheduleId);
+  const selectedService = useMemo(
+    () => services.find((s) => s.id === serviceId) ?? null,
+    [services, serviceId]
+  );
+  const selectedStaff = useMemo(
+    () => staffList.find((s) => s.id === staffId) ?? null,
+    [staffList, staffId]
+  );
+
+  const durationMinutes =
+    selectedService?.duration_minutes ?? business?.session_duration_minutes ?? 60;
 
   const minDate = useMemo(() => {
     const d = new Date();
@@ -73,11 +78,10 @@ export default function BookScreen() {
     return d;
   }, []);
 
-  const maxDate = useMemo(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 3);
-    return d;
-  }, []);
+  const maxDate = useMemo(
+    () => (business ? maxBookingDate(business) : minDate),
+    [business, minDate]
+  );
 
   useEffect(() => {
     (async () => {
@@ -95,14 +99,69 @@ export default function BookScreen() {
         .maybeSingle();
       if (err) {
         setError(err.message);
-      } else if (!data) {
+        setLoading(false);
+        return;
+      }
+      if (!data) {
         setError('Business-ul nu a fost găsit.');
-      } else {
-        setBusiness(data as BusinessProfile);
+        setLoading(false);
+        return;
+      }
+      const biz = data as BusinessProfile;
+      biz.blocked_dates = Array.isArray(biz.blocked_dates) ? biz.blocked_dates : [];
+      setBusiness(biz);
+
+      const { data: svcRows } = await supabase
+        .from('services')
+        .select('*')
+        .eq('business_id', biz.id)
+        .eq('active', true)
+        .order('sort_order', { ascending: true });
+      const list = (svcRows ?? []) as Service[];
+      setServices(list);
+      if (list.length > 0) setServiceId(list[0].id);
+
+      const { data: staffRows } = await supabase
+        .from('staff')
+        .select('*')
+        .eq('business_id', biz.id)
+        .eq('active', true)
+        .order('sort_order', { ascending: true });
+      const team = (staffRows ?? []) as Staff[];
+      setStaffList(team);
+      if (team.length > 0) setStaffId(team[0].id);
+
+      const hours = staffSchedule(team[0] ?? null, biz);
+      setDateLocal(
+        firstBookableDateYmd({
+          timezone: biz.timezone,
+          workingHours: hours.workingHours,
+          breakHours: hours.breakHours,
+          blockedDates: biz.blocked_dates ?? [],
+          minNoticeMinutes: biz.min_notice_minutes ?? 0,
+          maxAdvanceDays: biz.max_advance_days ?? 90,
+          sessionDurationMinutes:
+            list[0]?.duration_minutes ?? biz.session_duration_minutes ?? 60,
+          bufferMinutes: biz.buffer_minutes ?? 0,
+        })
+      );
+
+      if (rescheduleId) {
+        const { data: apt } = await supabase
+          .from('appointments')
+          .select('service_id, staff_id')
+          .eq('id', String(rescheduleId))
+          .maybeSingle();
+        if (apt?.service_id && list.some((s) => s.id === apt.service_id)) {
+          setServiceId(apt.service_id as string);
+        }
+        if (apt?.staff_id && team.some((s) => s.id === apt.staff_id)) {
+          setStaffId(apt.staff_id as string);
+        }
       }
       setLoading(false);
     })();
-  }, [publicCode]);
+  }, [publicCode, rescheduleId]);
 
   const loadSlots = useCallback(async () => {
     if (!business) return;
@@ -112,38 +171,49 @@ export default function BookScreen() {
     setMessage(null);
 
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
-
-    const { data: appointments, error: err } = await supabase
-      .from('appointments')
-      .select('start_at, end_at, status')
-      .eq('business_id', business.id)
-      .in('status', ['pending', 'approved'])
-      .lt('start_at', endUtc.toISOString())
-      .gt('end_at', startUtc.toISOString());
+    const { busy: rawBusy, error: err } = await listBusyRanges({
+      businessId: business.id,
+      fromIso: startUtc.toISOString(),
+      toIso: endUtc.toISOString(),
+      staffId,
+    });
 
     if (err) {
-      setError(err.message);
+      setError(err);
       setSlots([]);
       setSlotsLoading(false);
       return;
     }
 
-    const busy = (appointments ?? []).map((a) => ({
-      startUtc: a.start_at as string,
-      endUtc: a.end_at as string,
-    }));
+    let busy = rawBusy;
+    if (rescheduleId) {
+      const { data: current } = await supabase
+        .from('appointments')
+        .select('start_at, end_at')
+        .eq('id', String(rescheduleId))
+        .maybeSingle();
+      if (current?.start_at) {
+        busy = rawBusy.filter(
+          (b) => !(b.startUtc === current.start_at && b.endUtc === current.end_at)
+        );
+      }
+    }
 
+    const hours = staffSchedule(selectedStaff, business);
     const free = generateFreeSlots({
       dateLocal,
       timezone: business.timezone,
-      sessionDurationMinutes: business.session_duration_minutes,
-      workingHours: business.working_hours,
-      breakHours: business.break_hours,
+      sessionDurationMinutes: durationMinutes,
+      workingHours: hours.workingHours,
+      breakHours: hours.breakHours,
       busy,
+      bufferMinutes: business.buffer_minutes ?? 0,
+      blockedDates: business.blocked_dates ?? [],
+      notBeforeUtc: notBeforeUtc(business),
     });
     setSlots(free);
     setSlotsLoading(false);
-  }, [business, dateLocal]);
+  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, selectedStaff]);
 
   useEffect(() => {
     loadSlots();
@@ -154,30 +224,139 @@ export default function BookScreen() {
       setError('Alege un slot.');
       return;
     }
+    if (services.length > 0 && !serviceId) {
+      setError('Alege un serviciu.');
+      return;
+    }
     setBooking(true);
     setError(null);
     setMessage(null);
 
-    const { error: err } = await supabase.rpc('create_appointment_if_free', {
-      p_business_id: business.id,
-      p_start_at: selected.startUtc,
-      p_end_at: selected.endUtc,
+    if (isReschedule && rescheduleId) {
+      const { error: err } = await supabase.rpc('reschedule_appointment', {
+        p_appointment_id: String(rescheduleId),
+        p_start_at: selected.startUtc,
+        p_end_at: selected.endUtc,
+      });
+      setBooking(false);
+      if (err) {
+        setError(mapBookingRpcError(err.message));
+        await loadSlots();
+        return;
+      }
+      // Anunță business-ul că s-a mutat ora — altfel, cu app-ul închis,
+      // nu află decât când deschide calendarul.
+      const { data: moved } = await supabase
+        .from('appointments')
+        .select('id, business_id, status, client_email, client_phone, start_at')
+        .eq('id', String(rescheduleId))
+        .maybeSingle();
+      if (moved?.id && moved?.business_id) {
+        const notify = await invokePendingPush(
+          {
+            id: moved.id,
+            business_id: moved.business_id,
+            status: moved.status ?? 'approved',
+            client_email: moved.client_email,
+            client_phone: moved.client_phone,
+            start_at: moved.start_at,
+          },
+          { reason: 'rescheduled' }
+        );
+        if (!notify.ok) {
+          console.warn('notify after reschedule failed', notify.error);
+        }
+      }
+      setSelected(null);
+      setMessage('Programarea a fost mutată.');
+      setTimeout(() => router.replace('/(app)/my-appointments'), 800);
+      return;
+    }
+
+    const { appointment: created, error: err } = await createAppointmentIfFree({
+      businessId: business.id,
+      startAt: selected.startUtc,
+      endAt: selected.endUtc,
+      serviceId,
+      staffId,
     });
 
     setBooking(false);
     if (err) {
-      setError(mapRpcError(err.message));
+      setError(mapBookingRpcError(err));
       await loadSlots();
       return;
     }
-    // Mesajul se setează după reîncărcare: `loadSlots` golește starea de mesaj.
+
+    const appointment = created;
+    if (appointment?.id) {
+      const notify = await notifyAfterBooking(appointment);
+      if (!notify.ok) {
+        console.warn('notify after book failed', notify.error);
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await markWaitlistBooked({
+          businessId: business.id,
+          clientUserId: user.id,
+          desiredDate: dateLocal,
+        });
+      }
+      if (appointment.payment_status === 'unpaid') {
+        const pay = await startDepositCheckout(appointment.id);
+        if (!pay.ok && pay.error !== 'stripe_not_configured') {
+          setError(mapPayError(pay.error ?? 'checkout_failed'));
+        }
+      }
+    }
+
     setSelected(null);
     await loadSlots();
-    setMessage('Cererea a fost trimisă. Așteaptă confirmarea.');
+    if (appointment?.loyalty_redeemed) {
+      setMessage('Ședință cadou (loialitate). Cererea a fost trimisă.');
+    } else if (appointment?.status === 'approved') {
+      setMessage(
+        appointment.payment_status === 'unpaid'
+          ? `Programarea e confirmată. Avans: ${formatLei(appointment.deposit_ron)}.`
+          : 'Programarea a fost confirmată automat.'
+      );
+    } else {
+      setMessage(
+        appointment?.payment_status === 'unpaid'
+          ? `Cererea a fost trimisă. Avans: ${formatLei(appointment.deposit_ron)}. Așteaptă confirmarea.`
+          : 'Cererea a fost trimisă. Așteaptă confirmarea.'
+      );
+    }
+    if (appointment?.id) {
+      setTimeout(() => router.replace('/(app)/my-appointments'), 600);
+    }
+  }
+
+  async function handleWaitlist() {
+    if (!business) return;
+    setWaitlistBusy(true);
+    setError(null);
+    setMessage(null);
+    const { error: err } = await supabase.rpc('join_waitlist', {
+      p_business_id: business.id,
+      p_desired_date: dateLocal,
+      p_service_id: serviceId,
+      p_staff_id: staffId,
+    });
+    setWaitlistBusy(false);
+    if (err) {
+      setError(mapBookingRpcError(err.message));
+      return;
+    }
+    setMessage('Te-am pus pe lista de așteptare. Te anunțăm dacă se eliberează un loc.');
   }
 
   if (loading) {
-    return <LoadingScreen label="Căutăm agenda…" />;
+    return (
+      <SkeletonScreen title="Rezervare" onBack={goBack} blocks={5} label="Căutăm agenda…" />
+    );
   }
 
   if (!business) {
@@ -194,20 +373,39 @@ export default function BookScreen() {
 
   return (
     <Screen
-      title={business.name}
-      subtitle={`${business.session_duration_minutes} min · ${business.timezone}`}
+      title={isReschedule ? 'Reprogramare' : business.name}
+      subtitle={
+        selectedService
+          ? `${selectedService.name} · ${formatDuration(selectedService.duration_minutes)}`
+          : `${durationMinutes} min · ${business.timezone}`
+      }
       onBack={goBack}
       footer={
         <>
           {error ? <Callout tone="danger">{error}</Callout> : null}
           {message ? <Callout tone="success">{message}</Callout> : null}
           <Button
-            label={booking ? 'Se trimite…' : 'Trimite cererea'}
+            label={
+              booking
+                ? 'Se trimite…'
+                : isReschedule
+                  ? 'Mută programarea'
+                  : 'Trimite cererea'
+            }
             icon="paper-plane-outline"
             onPress={handleBook}
             loading={booking}
             disabled={!selected}
           />
+          {!isReschedule && !slotsLoading && slots.length === 0 ? (
+            <Button
+              label={waitlistBusy ? 'Se salvează…' : 'Anunță-mă dacă se eliberează'}
+              variant="secondary"
+              icon="notifications-outline"
+              loading={waitlistBusy}
+              onPress={() => void handleWaitlist()}
+            />
+          ) : null}
         </>
       }
     >
@@ -220,11 +418,109 @@ export default function BookScreen() {
             {business.name}
           </Text>
           <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
-            Ședință de {business.session_duration_minutes} min · {business.timezone}
+            {selectedService
+              ? `${selectedService.name} · ${formatDuration(selectedService.duration_minutes)} · ${formatRon(selectedService.price)}`
+              : `Ședință de ${durationMinutes} min · ${business.timezone}`}
           </Text>
         </View>
         <Badge tone="accent">{slots.length} libere</Badge>
       </View>
+
+      <LocationCard location={locationFromBusiness(business)} />
+
+      {!isReschedule && (business.deposit_ron ?? 0) > 0 ? (
+        <Callout tone="info" title="Avans">
+          La rezervare se cere un avans de {formatLei(business.deposit_ron)}.
+        </Callout>
+      ) : null}
+
+      {(business.loyalty_every ?? 0) >= 2 ? (
+        <Callout tone="accent" title="Loialitate">
+          A {business.loyalty_every}-a ședință confirmată e gratuită.
+        </Callout>
+      ) : null}
+
+      {staffList.length > 1 ? (
+        <>
+          <SectionTitle>Specialist</SectionTitle>
+          <View style={styles.serviceList}>
+            {staffList.map((s) => {
+              const on = s.id === staffId;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => {
+                    setStaffId(s.id);
+                    setSelected(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.serviceChip,
+                    {
+                      backgroundColor: on ? t.colors.accent : t.colors.surface,
+                      borderColor: on ? t.colors.accent : t.colors.borderStrong,
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.serviceName,
+                      { color: on ? t.colors.onAccent : t.colors.text },
+                    ]}
+                  >
+                    {s.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
+      {services.length > 0 ? (
+        <>
+          <SectionTitle>Serviciu</SectionTitle>
+          <View style={styles.serviceList}>
+            {services.map((s) => {
+              const on = s.id === serviceId;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => {
+                    setServiceId(s.id);
+                    setSelected(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.serviceChip,
+                    {
+                      backgroundColor: on ? t.colors.accent : t.colors.surface,
+                      borderColor: on ? t.colors.accent : t.colors.borderStrong,
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.serviceName,
+                      { color: on ? t.colors.onAccent : t.colors.text },
+                    ]}
+                  >
+                    {s.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.serviceMeta,
+                      { color: on ? t.colors.onAccent : t.colors.textMuted },
+                    ]}
+                  >
+                    {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       <DatePickerField
         label="Data programării"
@@ -237,9 +533,7 @@ export default function BookScreen() {
         maximumDate={maxDate}
       />
 
-      <SectionTitle>
-        Ora — doar din sloturile libere
-      </SectionTitle>
+      <SectionTitle>Ora — doar din sloturile libere</SectionTitle>
 
       <View
         style={[
@@ -272,12 +566,18 @@ export default function BookScreen() {
           slots={slots}
           selectedStartUtc={selected?.startUtc}
           onSelect={setSelected}
+          emptyLabel={
+            (business.blocked_dates ?? []).includes(dateLocal)
+              ? 'Această zi este blocată (concediu / sărbătoare).'
+              : `Nu există sloturi libere pe ${dateLocal}. Alege altă dată (preaviz minim ${Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60))}h).`
+          }
         />
       )}
 
       <Text style={[styles.note, { color: t.colors.textFaint }]}>
-        Ora nu se poate modifica manual — alege un slot liber de mai sus. După trimitere,
-        cererea apare ca „în așteptare” până la confirmare.
+        {isReschedule
+          ? 'Alege un slot nou. Statusul programării rămâne neschimbat.'
+          : 'Ora nu se poate modifica manual — alege un slot liber. După trimitere, cererea apare ca „în așteptare” până la confirmare.'}
       </Text>
     </Screen>
   );
@@ -301,6 +601,16 @@ const styles = StyleSheet.create({
   },
   summaryName: { fontSize: fontSize.md, fontWeight: '800' },
   summaryMeta: { fontSize: fontSize.sm, marginTop: 1 },
+  serviceList: { gap: spacing.sm },
+  serviceChip: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: 2,
+  },
+  serviceName: { fontSize: fontSize.md, fontWeight: '700' },
+  serviceMeta: { fontSize: fontSize.sm },
   timeLocked: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "113668028567",
+    "project_id": "programari-online-50c3e",
+    "storage_bucket": "programari-online-50c3e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113668028567:android:2c2c8ef4b7afff406a91d2",
+        "android_client_info": {
+          "package_name": "com.programari.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,7 +1,7 @@
 import type { User } from '@supabase/supabase-js';
 
 import { normalizePhoneE164 } from './phone';
-import { supabase } from './supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 
 export type WhatsAppOtpRequestResult = {
   ok: true;
@@ -15,16 +15,95 @@ export type WhatsAppOtpSession = {
   expires_at?: number;
   token_type?: string;
   user: User;
+  created?: boolean;
 };
 
-function functionsErrorMessage(error: unknown, fallback: string): string {
-  if (!error) return fallback;
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const m = (error as { message?: unknown }).message;
-    if (typeof m === 'string' && m.trim()) return m;
+type FnJson = {
+  ok?: boolean;
+  stub?: boolean;
+  error?: string;
+  hint?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  expires_at?: number;
+  token_type?: string;
+  user?: User;
+  created?: boolean;
+};
+
+/**
+ * Call public WhatsApp OTP functions with the anon key.
+ * Avoids sending a leftover/expired user JWT (which 401s when verify_jwt is on).
+ */
+async function invokePublicAuthFunction(
+  name: string,
+  body: Record<string, unknown>
+): Promise<{ data: FnJson | null; error: string | null }> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return {
+      data: null,
+      error: 'Aplicația nu e configurată (lipsește URL-ul Supabase).',
+    };
   }
-  return fallback;
+
+  let res: Response;
+  try {
+    res = await fetch(`${supabaseUrl.replace(/\/$/, '')}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        apikey: supabaseAnonKey,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return {
+      data: null,
+      error: 'Nu am putut contacta serverul. Verifică internetul și încearcă din nou.',
+    };
+  }
+
+  let payload: FnJson | null = null;
+  try {
+    payload = (await res.json()) as FnJson;
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      return {
+        data: payload,
+        error:
+          'Funcția WhatsApp nu e instalată pe server. Rulează: supabase functions deploy auth-whatsapp-otp --no-verify-jwt',
+      };
+    }
+    if (res.status === 401) {
+      return {
+        data: payload,
+        error:
+          'Serverul respinge apelul (JWT). Redeploy: supabase functions deploy auth-whatsapp-otp --no-verify-jwt',
+      };
+    }
+    return {
+      data: payload,
+      error:
+        payload?.hint ||
+        payload?.error ||
+        `Nu am putut trimite cererea (cod ${res.status}).`,
+    };
+  }
+
+  if (payload?.error) {
+    return {
+      data: payload,
+      error: payload.hint || payload.error,
+    };
+  }
+
+  return { data: payload, error: null };
 }
 
 /**
@@ -43,33 +122,12 @@ export async function requestWhatsAppOtp(phoneRaw: string): Promise<{
     };
   }
 
-  const { data, error } = await supabase.functions.invoke('auth-whatsapp-otp', {
-    body: { phone },
+  const { data, error } = await invokePublicAuthFunction('auth-whatsapp-otp', {
+    phone,
   });
 
   if (error) {
-    // functions.invoke may put JSON body on error.context
-    let hint: string | undefined;
-    try {
-      const ctx = error as { context?: Response };
-      if (ctx.context && typeof ctx.context.json === 'function') {
-        const body = await ctx.context.json();
-        hint = body?.hint ?? body?.error;
-      }
-    } catch {
-      // ignore parse errors
-    }
-    return {
-      data: null,
-      error: hint || functionsErrorMessage(error, 'Nu am putut trimite codul.'),
-    };
-  }
-
-  if (data?.error) {
-    return {
-      data: null,
-      error: data.hint || data.error || 'Nu am putut trimite codul.',
-    };
+    return { data: null, error };
   }
 
   return {
@@ -84,13 +142,14 @@ export async function requestWhatsAppOtp(phoneRaw: string): Promise<{
  */
 export async function verifyWhatsAppOtp(
   phoneRaw: string,
-  codeRaw: string
+  codeRaw: string,
+  accountKind: 'client' | 'business' = 'client'
 ): Promise<{
   data: WhatsAppOtpSession | null;
   error: string | null;
 }> {
   const phone = normalizePhoneE164(phoneRaw);
-  const code = codeRaw.trim();
+  const code = codeRaw.replace(/\D/g, '');
   if (!phone) {
     return {
       data: null,
@@ -101,31 +160,16 @@ export async function verifyWhatsAppOtp(
     return { data: null, error: 'Codul trebuie să aibă 6 cifre.' };
   }
 
-  const { data, error } = await supabase.functions.invoke(
+  const { data, error } = await invokePublicAuthFunction(
     'auth-whatsapp-verify',
-    {
-      body: { phone, code },
-    }
+    { phone, code, account_kind: accountKind }
   );
 
   if (error) {
-    let hint: string | undefined;
-    try {
-      const ctx = error as { context?: Response };
-      if (ctx.context && typeof ctx.context.json === 'function') {
-        const body = await ctx.context.json();
-        hint = body?.hint ?? body?.error;
-      }
-    } catch {
-      // ignore
-    }
-    return {
-      data: null,
-      error: hint || functionsErrorMessage(error, 'Verificare eșuată.'),
-    };
+    return { data: null, error };
   }
 
-  if (data?.error || !data?.access_token || !data?.refresh_token) {
+  if (!data?.access_token || !data?.refresh_token) {
     return {
       data: null,
       error: data?.hint || data?.error || 'Verificare eșuată.',
@@ -136,10 +180,11 @@ export async function verifyWhatsAppOtp(
     data: {
       access_token: data.access_token,
       refresh_token: data.refresh_token,
-      expires_in: data.expires_in,
+      expires_in: data.expires_in ?? 3600,
       expires_at: data.expires_at,
       token_type: data.token_type,
-      user: data.user,
+      user: data.user as User,
+      created: data.created === true,
     },
     error: null,
   };

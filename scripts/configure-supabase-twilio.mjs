@@ -73,27 +73,24 @@ for (const [key, value] of secrets) {
 }
 
 console.log('\nDeploy funcții WhatsApp...');
-const deploy = spawnSync(
-  'supabase',
-  [
-    'functions',
-    'deploy',
-    'test-whatsapp',
-    '--no-verify-jwt',
-  ],
-  { stdio: 'inherit', shell: true, cwd: join(__dir, '..') }
-);
-
-if (deploy.status !== 0) {
-  console.warn('Deploy test-whatsapp eșuat — rulează manual după login.');
-} else {
-  for (const fn of ['notify-decision', 'send-reminders']) {
-    spawnSync('supabase', ['functions', 'deploy', fn], {
-      stdio: 'inherit',
-      shell: true,
-      cwd: join(__dir, '..'),
-    });
+for (const fn of ['test-whatsapp', 'auth-whatsapp-otp', 'auth-whatsapp-verify']) {
+  const extra = fn.startsWith('auth-') ? ['--no-verify-jwt'] : [];
+  const deploy = spawnSync(
+    'supabase',
+    ['functions', 'deploy', fn, ...extra],
+    { stdio: 'inherit', shell: true, cwd: join(__dir, '..') }
+  );
+  if (deploy.status !== 0) {
+    console.warn(`Deploy ${fn} eșuat — rulează manual după login.`);
   }
+}
+
+for (const fn of ['notify-decision', 'send-reminders']) {
+  spawnSync('supabase', ['functions', 'deploy', fn], {
+    stdio: 'inherit',
+    shell: true,
+    cwd: join(__dir, '..'),
+  });
 }
 
 console.log(`

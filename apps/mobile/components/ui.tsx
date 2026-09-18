@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,7 +22,8 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { buildTheme, fontSize, radius, spacing, type Theme } from '@/constants/theme';
 
 export function useTheme(): Theme {
-  return buildTheme(useColorScheme() === 'dark' ? 'dark' : 'light');
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  return useMemo(() => buildTheme(scheme), [scheme]);
 }
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -61,7 +63,9 @@ export function Screen({
     <ScrollView
       style={styles.flex}
       contentContainerStyle={[styles.scrollContent, styles.shell, { paddingBottom: bottomInset }]}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="always"
+      keyboardDismissMode="none"
+      removeClippedSubviews={false}
       showsVerticalScrollIndicator={false}
     >
       {children}
@@ -448,7 +452,6 @@ export function Field({ label, hint, error, icon, style, ...inputProps }: FieldP
                 ? t.colors.accent
                 : t.colors.borderStrong,
           },
-          focused && !error ? t.shadows.sm : null,
         ]}
       >
         {icon ? (
@@ -460,6 +463,9 @@ export function Field({ label, hint, error, icon, style, ...inputProps }: FieldP
         ) : null}
         <TextInput
           {...inputProps}
+          blurOnSubmit={inputProps.blurOnSubmit ?? false}
+          showSoftInputOnFocus={inputProps.showSoftInputOnFocus ?? true}
+          underlineColorAndroid="transparent"
           onFocus={(e) => {
             setFocused(true);
             inputProps.onFocus?.(e);
@@ -825,6 +831,182 @@ export function LoadingScreen({ label = 'Se încarcă…' }: { label?: string })
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Skeletons                                                           */
+/* ------------------------------------------------------------------ */
+
+type SkeletonProps = {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+};
+
+/** Bloc de schelet cu pulsație, folosit în locul conținutului cât se încarcă. */
+export function Skeleton({
+  width = '100%',
+  height = 14,
+  radius: r = radius.sm,
+  style,
+}: SkeletonProps) {
+  const t = useTheme();
+  const pulse = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.5, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        { width, height, borderRadius: r, backgroundColor: t.colors.skeleton, opacity: pulse },
+        style,
+      ]}
+    />
+  );
+}
+
+/** Schelet pentru un rând de listă: icon opțional + titlu + linii de text. */
+export function SkeletonCard({
+  showIcon = true,
+  lines = 2,
+}: {
+  showIcon?: boolean;
+  lines?: number;
+}) {
+  const t = useTheme();
+  return (
+    <View
+      style={[
+        styles.skeletonCard,
+        { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+      ]}
+    >
+      {showIcon ? <Skeleton width={40} height={40} radius={radius.md} /> : null}
+      <View style={[styles.flex, styles.skeletonCardBody]}>
+        <Skeleton width="55%" height={15} />
+        {Array.from({ length: Math.max(0, lines - 1) }, (_, i) => (
+          <Skeleton key={i} width={i === 0 ? '80%' : '65%'} height={12} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Listă de schelete, afișată cât se încarcă datele unui ecran. */
+export function SkeletonList({
+  count = 4,
+  showIcon = true,
+  lines = 2,
+}: {
+  count?: number;
+  showIcon?: boolean;
+  lines?: number;
+}) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonCard key={i} showIcon={showIcon} lines={lines} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * Ecran de listă în încărcare: păstrează header-ul (titlu, subtitlu, back)
+ * și afișează schelete în locul rândurilor, în loc să înlocuiască tot ecranul.
+ */
+export function ListLoadingScreen({
+  title,
+  subtitle,
+  onBack,
+  count = 4,
+  showIcon = true,
+  lines = 2,
+  label = 'Se încarcă…',
+}: {
+  title?: string;
+  subtitle?: string;
+  onBack?: () => void;
+  count?: number;
+  showIcon?: boolean;
+  lines?: number;
+  label?: string;
+}) {
+  return (
+    <Screen title={title} subtitle={subtitle} onBack={onBack}>
+      <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.skeletonList}>
+        <SkeletonList count={count} showIcon={showIcon} lines={lines} />
+      </View>
+    </Screen>
+  );
+}
+
+/** Ecran de formular / detaliu în încărcare: păstrează header-ul și afișează blocuri schelet. */
+export function SkeletonScreen({
+  title,
+  subtitle,
+  onBack,
+  blocks = 4,
+  label = 'Se încarcă…',
+  children,
+}: {
+  title?: string;
+  subtitle?: string;
+  onBack?: () => void;
+  blocks?: number;
+  label?: string;
+  /** Conținut schelet custom; înlocuiește blocurile implicite. */
+  children?: React.ReactNode;
+}) {
+  return (
+    <Screen title={title} subtitle={subtitle} onBack={onBack}>
+      <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.skeletonList}>
+        {children ??
+          Array.from({ length: blocks }, (_, i) => (
+            <Skeleton key={i} height={i === 0 ? 44 : 64} radius={radius.lg} />
+          ))}
+      </View>
+    </Screen>
+  );
+}
+
+/** Schelet pentru ecranele cu cifre cheie (rapoarte): grilă de cartonașe. */
+export function SkeletonStatGrid({
+  count = 6,
+  label = 'Se calculează rapoartele…',
+}: {
+  count?: number;
+  label?: string;
+}) {
+  const t = useTheme();
+  return (
+    <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.skeletonGrid}>
+      {Array.from({ length: count }, (_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.skeletonStat,
+            { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+          ]}
+        >
+          <Skeleton width="70%" height={12} />
+          <Skeleton width="45%" height={20} radius={radius.sm} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** Buton de tip „banner” pentru un pas important (CTA). */
 export function Banner({
   tone = 'accent',
@@ -1108,4 +1290,24 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   bannerPillText: { fontSize: fontSize.sm, fontWeight: '700' },
+
+  skeletonList: { gap: spacing.md },
+  skeletonCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  skeletonCardBody: { gap: spacing.sm, paddingTop: 2 },
+  skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  skeletonStat: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
 });

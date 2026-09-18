@@ -6,11 +6,11 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageAuthOtp, sendWhatsApp } from '../_shared/notify.ts';
+import { messageAuthOtp, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 const COOLDOWN_MS = 60_000;
-const TTL_MS = 10 * 60_000;
+const TTL_MS = 15 * 60_000;
 
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -82,40 +82,48 @@ Deno.serve(async (req) => {
   }
 
   const now = new Date();
-  await admin
-    .from('auth_whatsapp_otps')
-    .update({ consumed_at: now.toISOString() })
-    .eq('phone', phone)
-    .is('consumed_at', null);
-
   const code = generateCode();
   const codeHash = await sha256Hex(code);
   const expiresAt = new Date(now.getTime() + TTL_MS).toISOString();
 
-  const { error: insertErr } = await admin.from('auth_whatsapp_otps').insert({
-    phone,
-    code_hash: codeHash,
-    expires_at: expiresAt,
-  });
+  const { data: inserted, error: insertErr } = await admin
+    .from('auth_whatsapp_otps')
+    .insert({
+      phone,
+      code_hash: codeHash,
+      expires_at: expiresAt,
+    })
+    .select('id')
+    .single();
 
-  if (insertErr) {
+  if (insertErr || !inserted?.id) {
     console.error('auth-whatsapp-otp insert', insertErr);
     return jsonResponse({ error: 'otp_store_failed' }, 500);
   }
 
   const copy = messageAuthOtp(code);
-  const wa = await sendWhatsApp(phone, copy.text);
+  const wa = await sendWhatsApp(phone, copy.text, { otpCode: code });
 
   if (!wa.ok && !wa.stub) {
     console.error('auth-whatsapp-otp send failed', wa);
+    await admin.from('auth_whatsapp_otps').delete().eq('id', inserted.id);
     return jsonResponse(
       {
         error: 'whatsapp_send_failed',
-        hint: 'Nu am putut trimite mesajul WhatsApp. Încearcă din nou.',
+        hint: whatsappUserHint(wa),
       },
       502
     );
   }
+
+  // Invalidate previous codes only after this one is stored and sent.
+  await admin
+    .from('auth_whatsapp_otps')
+    .update({ consumed_at: new Date().toISOString() })
+    .eq('phone', phone)
+    .is('consumed_at', null)
+    .neq('id', inserted.id);
+
 
   // Always ok for valid phone (do not leak whether a user account exists).
   if (wa.stub) {

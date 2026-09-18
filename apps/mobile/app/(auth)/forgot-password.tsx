@@ -1,9 +1,10 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
+  View,
 } from 'react-native';
 import { router } from 'expo-router';
 
@@ -37,12 +38,8 @@ export default function ForgotPasswordScreen() {
     setSent(true);
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <Screen
+  const form = (
+    <Screen
         title="Resetare parolă"
         onBack={() => router.replace('/(auth)/login')}
         scroll
@@ -93,8 +90,16 @@ export default function ForgotPasswordScreen() {
           style={styles.back}
         />
       </Screen>
-    </KeyboardAvoidingView>
   );
+
+  if (Platform.OS === 'ios') {
+    return (
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
+        {form}
+      </KeyboardAvoidingView>
+    );
+  }
+  return <View style={styles.flex}>{form}</View>;
 }
 
 const styles = StyleSheet.create({

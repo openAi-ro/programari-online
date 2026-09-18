@@ -17,3 +17,14 @@ export const DEFAULT_BREAK_HOURS: BreakHours = {
   start: '13:00',
   end: '14:00',
 };
+
+export const DEFAULT_MIN_NOTICE_MINUTES = 120;
+export const DEFAULT_BUFFER_MINUTES = 0;
+export const DEFAULT_MAX_ADVANCE_DAYS = 90;
+export const DEFAULT_CANCEL_NOTICE_MINUTES = 120;
+export const DEFAULT_DEPOSIT_RON = 0;
+export const DEFAULT_AUTO_APPROVE_RETURNING = false;
+export const DEFAULT_NO_SHOW_BLOCK_AFTER = 2;
+export const DEFAULT_LOYALTY_EVERY = 0;
+
+export const STAFF_COLORS = ['#5B6CFF', '#E85D4C', '#2A9D8F', '#E9C46A', '#9B5DE5', '#F4A261'];

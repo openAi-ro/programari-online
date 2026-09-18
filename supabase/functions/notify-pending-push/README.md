@@ -28,6 +28,11 @@ supabase secrets set WEBHOOK_SECRET=your-random-secret
 supabase functions deploy notify-pending-push
 ```
 
+> IMPORTANT: redeploy obligatoriu — versiunile mai vechi importau
+> `messageNewPendingRequest` din `_shared/notify.ts` unde funcția nu exista,
+> deci funcția crăpa la import și push-ul remote nu ajungea niciodată
+> (inclusiv cu webhook configurat și token valid).
+
 ## Test manual
 
 ```bash

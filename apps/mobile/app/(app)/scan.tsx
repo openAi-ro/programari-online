@@ -27,14 +27,15 @@ export default function ScanScreen() {
 
   function goToBook(code: string) {
     setLocked(true);
-    router.replace(`/(app)/book/${code}` as never);
+    // push (nu replace): păstrăm Acasă/Scan în istoric ca să existe buton Înapoi
+    router.push(`/(app)/book/${code}` as never);
   }
 
   function onBarcode({ data }: { data: string }) {
     if (locked) return;
     const code = extractPublicCode(data);
     if (!code) {
-      setHint('QR invalid. Aștept link book/… sau programari://b/…');
+      setHint('QR invalid. Aștept link /b/…, book/… sau programari://b/…');
       return;
     }
     goToBook(code);

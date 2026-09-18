@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { Appointment } from './types';
 
 type InvokeResult<T = unknown> = {
   ok: boolean;
@@ -22,6 +23,38 @@ export async function invokeDecisionNotify(
   return { ok: true, data };
 }
 
+/** Amână programarea cu 1h sau 2h și notifică clientul (WhatsApp/email). */
+export async function invokePostpone(
+  appointmentId: string,
+  hours: 1 | 2
+): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
+  const { data, error } = await supabase.functions.invoke('notify-postpone', {
+    body: { appointment_id: appointmentId, hours },
+  });
+
+  if (error) {
+    console.warn('notify-postpone invoke failed', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  const payload = data as {
+    ok?: boolean;
+    error?: string;
+    start_at?: string;
+    end_at?: string;
+  };
+
+  if (payload?.error || payload?.ok === false) {
+    return {
+      ok: false,
+      error: payload.error ?? 'postpone_failed',
+      data: payload,
+    };
+  }
+
+  return { ok: true, data: payload };
+}
+
 /** Trimite mesaj test WhatsApp către telefonul din profil. */
 export async function invokeTestWhatsApp(): Promise<
   InvokeResult<{ phone?: string; result?: { stub?: boolean }; hint?: string }>
@@ -31,20 +64,113 @@ export async function invokeTestWhatsApp(): Promise<
   });
 
   if (error) {
-    return { ok: false, error: error.message };
+    const payload = data as { hint?: string; error?: string } | null;
+    return {
+      ok: false,
+      error: payload?.hint || payload?.error || error.message,
+      data: payload ?? undefined,
+    };
   }
 
   const payload = data as {
     ok?: boolean;
     error?: string;
     phone?: string;
-    result?: { stub?: boolean };
+    result?: { stub?: boolean; ok?: boolean; error?: string };
     hint?: string;
   };
 
-  if (payload?.error) {
-    return { ok: false, error: payload.error, data: payload };
+  if (payload?.ok === false || payload?.error) {
+    return {
+      ok: false,
+      error: payload.hint || payload.error || 'whatsapp_send_failed',
+      data: payload,
+    };
   }
 
   return { ok: true, data: payload };
+}
+
+export type PendingPushResult = {
+  sent_push?: number;
+  sent_whatsapp?: boolean;
+  sent_email?: boolean;
+  reason?: string;
+};
+
+/**
+ * Notifică business-ul despre o cerere pending (push + WhatsApp/email owner).
+ * Folosește-o DOAR pentru reprogramări (reason 'rescheduled', UPDATE neacoperit
+ * de webhook) sau re-trimitere manuală — la rezervări NOI webhook-ul Database
+ * (INSERT) apelează deja funcția; un invoke direct ar produce popup DUBLU.
+ */
+export async function invokePendingPush(
+  appointment: Pick<
+    Appointment,
+    'id' | 'business_id' | 'status' | 'client_email' | 'client_phone' | 'start_at'
+  >,
+  opts?: { reason?: 'rescheduled' }
+): Promise<InvokeResult<PendingPushResult>> {
+  const { data, error } = await supabase.functions.invoke('notify-pending-push', {
+    body: {
+      record: {
+        id: appointment.id,
+        business_id: appointment.business_id,
+        status: appointment.status ?? 'pending',
+        client_email: appointment.client_email,
+        client_phone: appointment.client_phone,
+        start_at: appointment.start_at,
+      },
+      id: appointment.id,
+      business_id: appointment.business_id,
+      status: appointment.status ?? 'pending',
+      client_email: appointment.client_email,
+      client_phone: appointment.client_phone,
+      start_at: appointment.start_at,
+      reason: opts?.reason ?? null,
+    },
+  });
+
+  if (error) {
+    console.warn('notify-pending-push invoke failed', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, data: data as PendingPushResult };
+}
+
+export async function markWaitlistBooked(opts: {
+  businessId: string;
+  clientUserId: string;
+  desiredDate: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('waitlist')
+    .update({ status: 'booked' })
+    .eq('business_id', opts.businessId)
+    .eq('client_user_id', opts.clientUserId)
+    .eq('desired_date', opts.desiredDate)
+    .in('status', ['active', 'notified']);
+  if (error) {
+    console.warn('markWaitlistBooked failed', error.message);
+  }
+}
+
+export async function invokeWaitlistNotify(opts: {
+  business_id: string;
+  desired_date: string;
+  booking_url: string;
+}): Promise<InvokeResult> {
+  const { data, error } = await supabase.functions.invoke('notify-waitlist', {
+    body: opts,
+  });
+  if (error) {
+    console.warn('notify-waitlist invoke failed', error.message);
+    return { ok: false, error: error.message };
+  }
+  const payload = data as { ok?: boolean; error?: string };
+  if (payload?.ok === false || payload?.error) {
+    return { ok: false, error: payload.error ?? 'waitlist_notify_failed' };
+  }
+  return { ok: true, data };
 }

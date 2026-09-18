@@ -10,9 +10,9 @@ import {
   Callout,
   Card,
   EmptyState,
-  LoadingScreen,
   Screen,
   SectionTitle,
+  SkeletonScreen,
   useTheme,
 } from '@/components/ui';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
@@ -56,25 +56,30 @@ export default function BusinessQrScreen() {
     })();
   }, []);
 
-  const links = useMemo(
-    () => (business ? getBookingPaths(business.public_code) : null),
-    [business]
-  );
+  const links = useMemo(() => {
+    if (!business?.public_code) return null;
+    try {
+      return getBookingPaths(business.public_code);
+    } catch (e) {
+      console.warn('getBookingPaths', e);
+      return null;
+    }
+  }, [business]);
 
-  // QR folosește linkul Expo (deschide app-ul în Expo Go pe același Wi‑Fi)
-  const qrValue = links?.expoUrl ?? links?.appScheme ?? '';
+  // QR public HTTPS — Instagram, WhatsApp, camera nativă, browser
+  const qrValue = links?.webUrl ?? '';
 
   async function handleShare() {
     if (!links || !business) return;
     await Share.share({
-      message: `Rezervă la ${business.name}\n\nDeschide în app:\n${links.expoUrl}\n\nSau cod: ${links.code}`,
-      url: links.expoUrl,
+      message: `Rezervă la ${business.name}\n${links.webUrl}`,
+      url: links.webUrl,
     });
   }
 
   async function handleCopy() {
     if (!links) return;
-    await Clipboard.setStringAsync(links.expoUrl);
+    await Clipboard.setStringAsync(links.webUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -85,7 +90,7 @@ export default function BusinessQrScreen() {
   }
 
   if (loading) {
-    return <LoadingScreen label="Se pregătește codul QR…" />;
+    return <SkeletonScreen title="Cod QR" onBack={back} blocks={3} label="Se pregătește codul QR…" />;
   }
 
   if (error || !business || !links) {
@@ -120,7 +125,7 @@ export default function BusinessQrScreen() {
           <QRCode value={qrValue} size={216} backgroundColor={palette.white} color={palette.ink950} />
         </View>
         <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>
-          Clienții scanează codul ca să aleagă o oră liberă pe agenda ta.
+          Clienții scanează și deschid pagina publică de rezervare, fără să instaleze app-ul.
         </Text>
       </View>
 
@@ -167,17 +172,18 @@ export default function BusinessQrScreen() {
         </View>
       </View>
 
-      <Card icon="link-outline" iconTone="neutral" title="Link de programare" hint={links.expoUrl} />
+      <Card icon="link-outline" iconTone="neutral" title="Link public" hint={links.webUrl} />
 
-      <Callout tone="warning" title="De ce camera nu deschide app-ul?">
-        Camera telefonului nu știe de „Programări” cât timp rulezi în Expo Go. Schemele
-        custom (programari://) merg după ce publici app-ul (APK / App Store).
-        {'\n\n'}
-        • Pe același telefon: butonul „Deschide programarea acum”.'
-        {'\n'}
-        • Al doilea telefon: app → Scanează QR.'
-        {'\n'}
-        • Sau deschide linkul copiat pe telefonul unde e Expo Go deschis.
+      <Callout tone="accent" title="Pagină publică /b/…">
+        Clienții rezervă din browser pe {links.webUrl}. Trebuie să fii autentificat ca să
+        trimiți cererea; vizualizarea orelor libere e deschisă oricui. Linkul din QR e
+        mereu public (nu localhost), ca să se deschidă de pe telefon.
+      </Callout>
+
+      <Callout tone="warning" title="Expo Go pe telefon">
+        Camera nativă deschide linkul HTTPS. Dacă rulezi doar Expo Go local, poți totuși
+        să folosești „Deschide programarea acum” pe același telefon, sau Scanează QR
+        din app pe un al doilea telefon.
       </Callout>
 
       <View style={{ height: insets.bottom + spacing.md }} />

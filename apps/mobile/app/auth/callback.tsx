@@ -1,81 +1,86 @@
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 
-import { LoadingScreen } from '@/components/ui';
+import { Button, Callout, LoadingScreen, Screen } from '@/components/ui';
+import { persistAccountKind, parseAccountKind } from '@/lib/accountKind';
+import {
+  completeAuthFromUrl,
+  getNativeAuthCallbackUrl,
+  isAuthCallbackUrl,
+  mapAuthError,
+} from '@/lib/auth';
+import { takeAuthCallbackUrl } from '@/lib/auth-link';
 import { supabase } from '@/lib/supabase';
 
-function isRecoveryFromUrl(url: string | null): boolean {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  return lower.includes('type=recovery') || lower.includes('type%3drecovery');
-}
-
-function isRecoveryFromWindow(): boolean {
-  if (typeof window === 'undefined') return false;
-  const hash = window.location.hash?.replace(/^#/, '') ?? '';
-  const search = window.location.search?.replace(/^\?/, '') ?? '';
-  const params = new URLSearchParams(hash || search);
-  const type = (params.get('type') ?? '').toLowerCase();
-  return type === 'recovery';
-}
-
 /**
- * Handles magic-link / email redirect from Supabase.
- * URL must match Redirect URLs in Supabase (e.g. http://localhost:8084/auth/callback).
- * Password recovery (type=recovery) → /(auth)/reset-password.
+ * Handles magic-link / email activation redirect from Supabase.
+ * Emails always point at the public https URL, then we hand off to the app.
  */
 export default function AuthCallbackScreen() {
-  const [status, setStatus] = useState('Se confirmă sesiunea…');
+  const [status, setStatus] = useState('Se activează contul…');
+  const [error, setError] = useState<string | null>(null);
+  const [activated, setActivated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const url = await Linking.getInitialURL();
-        let recovery = isRecoveryFromUrl(url);
+        const url = takeAuthCallbackUrl() || (await Linking.getInitialURL());
+        const href =
+          typeof window !== 'undefined'
+            ? `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`
+            : url;
 
-        if (url && (url.includes('access_token') || url.includes('code='))) {
-          // Some flows put tokens in the hash/query — supabase-js on web may pick them up.
-          await supabase.auth.getSession();
-        }
+        const toParse = href && isAuthCallbackUrl(href) ? href : url;
+        const result = toParse
+          ? await completeAuthFromUrl(toParse)
+          : {
+              session: (await supabase.auth.getSession()).data.session,
+              recovery: false,
+              error: null,
+            };
 
-        // PKCE / hash tokens
-        if (typeof window !== 'undefined') {
-          const hash = window.location.hash?.replace(/^#/, '') ?? '';
-          const search = window.location.search?.replace(/^\?/, '') ?? '';
-          const params = new URLSearchParams(hash || search);
-          const access_token = params.get('access_token');
-          const refresh_token = params.get('refresh_token');
-          if (access_token && refresh_token) {
-            await supabase.auth.setSession({ access_token, refresh_token });
-          }
-          if (isRecoveryFromWindow()) recovery = true;
-        }
-
-        const { data } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (data.session) {
-          if (recovery) {
+
+        if (result.error && !result.session) {
+          setError(mapAuthError({ message: result.error } as Error) ?? result.error);
+          setStatus('Nu am putut activa contul din acest link.');
+          return;
+        }
+
+        if (result.session) {
+          const kind = parseAccountKind(
+            result.session.user.user_metadata?.account_kind as string | undefined
+          );
+          await persistAccountKind(kind);
+          if (result.recovery) {
             setStatus('Link de resetare confirmat. Redirecționare…');
             router.replace('/(auth)/reset-password');
-          } else {
-            setStatus('Autentificat. Redirecționare…');
-            router.replace('/(app)/home');
+            return;
           }
-        } else {
-          setStatus(
-            'Nu s-a putut deschide sesiunea din link. Înapoi la login și folosește codul OTP din email (6 cifre), nu linkul.'
-          );
-          setTimeout(() => {
-            if (!cancelled) router.replace('/(auth)/login');
-          }, 4000);
+
+          if (Platform.OS === 'web') {
+            const nativeUrl = getNativeAuthCallbackUrl(toParse);
+            void Linking.openURL(nativeUrl).catch(() => undefined);
+            setActivated(true);
+            setStatus('Cont activat.');
+            return;
+          }
+
+          setStatus('Cont activat. Redirecționare…');
+          router.replace('/(app)/home');
+          return;
         }
-      } catch {
+
+        setStatus('Nu s-a putut deschide sesiunea din link.');
+        setError('Deschide din nou linkul din cel mai recent email, sau revino la login.');
+      } catch (e) {
         if (!cancelled) {
-          setStatus('Eroare la confirmare. Folosește codul din email pe ecranul de login.');
-          setTimeout(() => router.replace('/(auth)/login'), 3000);
+          setStatus('Eroare la activare.');
+          setError(e instanceof Error ? e.message : 'Eroare necunoscută.');
         }
       }
     })();
@@ -84,6 +89,49 @@ export default function AuthCallbackScreen() {
       cancelled = true;
     };
   }, []);
+
+  if (error) {
+    return (
+      <Screen title="Activare cont">
+        <Callout tone="danger" title={status}>
+          {error}
+        </Callout>
+        <Button
+          label="Înapoi la login"
+          onPress={() => router.replace('/(auth)/login')}
+          icon="log-in-outline"
+        />
+      </Screen>
+    );
+  }
+
+  if (activated) {
+    return (
+      <Screen title="Activare cont">
+        <Callout tone="success" title={status}>
+          Contul e activ. Dacă aplicația nu s-a deschis automat, deschide-o pe telefon și apasă
+          „Intră în cont” cu aceeași adresă și parolă.
+        </Callout>
+        <Button
+          label="Deschide aplicația"
+          icon="phone-portrait-outline"
+          onPress={() => {
+            const href =
+              typeof window !== 'undefined'
+                ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+                : '';
+            void Linking.openURL(getNativeAuthCallbackUrl(href));
+          }}
+        />
+        <Button
+          label="Continuă pe web"
+          variant="ghost"
+          icon="globe-outline"
+          onPress={() => router.replace('/(app)/home')}
+        />
+      </Screen>
+    );
+  }
 
   return <LoadingScreen label={status} />;
 }

@@ -14,6 +14,12 @@ export type GenerateFreeSlotsInput = {
   workingHours: WorkingHours;
   breakHours: BreakHours;
   busy: BusyRange[];
+  /** Extra minutes after each slot / busy range (prep between clients). */
+  bufferMinutes?: number;
+  /** YYYY-MM-DD days the business is closed (holiday / leave). */
+  blockedDates?: string[];
+  /** Hide slots that start at or before this instant (min notice / now). */
+  notBeforeUtc?: string | Date;
 };
 
 /** Overlap: [aStart, aEnd) overlaps [bStart, bEnd) if aStart < bEnd && bStart < aEnd */
@@ -54,9 +60,13 @@ export function generateFreeSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
     workingHours,
     breakHours,
     busy,
+    bufferMinutes = 0,
+    blockedDates = [],
+    notBeforeUtc,
   } = input;
 
   if (sessionDurationMinutes <= 0) return [];
+  if (blockedDates.includes(dateLocal)) return [];
 
   const dayKey = dayKeyForDateLocal(dateLocal, timezone);
   const dayHours = workingHours[dayKey];
@@ -70,9 +80,17 @@ export function generateFreeSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
   const breakStartMin = breakEnabled ? hhmmToMinutes(breakHours.start) : 0;
   const breakEndMin = breakEnabled ? hhmmToMinutes(breakHours.end) : 0;
 
+  const bufferMs = Math.max(0, bufferMinutes) * 60 * 1000;
+  const stepMinutes = sessionDurationMinutes + Math.max(0, bufferMinutes);
+  const notBefore = notBeforeUtc
+    ? notBeforeUtc instanceof Date
+      ? notBeforeUtc
+      : new Date(notBeforeUtc)
+    : null;
+
   const busyRanges = busy.map((b) => ({
     start: new Date(b.startUtc),
-    end: new Date(b.endUtc),
+    end: new Date(new Date(b.endUtc).getTime() + bufferMs),
   }));
 
   const slots: FreeSlot[] = [];
@@ -97,7 +115,9 @@ export function generateFreeSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
         rangesOverlap(startUtcDate, endUtcDate, b.start, b.end)
       );
 
-      if (!overlapsBusy) {
+      const tooSoon = notBefore ? startUtcDate.getTime() <= notBefore.getTime() : false;
+
+      if (!overlapsBusy && !tooSoon) {
         slots.push({
           startUtc: startUtcDate.toISOString(),
           endUtc: endUtcDate.toISOString(),
@@ -106,7 +126,7 @@ export function generateFreeSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
       }
     }
 
-    cursorMin += sessionDurationMinutes;
+    cursorMin += stepMinutes;
   }
 
   return slots;

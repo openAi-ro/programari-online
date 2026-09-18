@@ -1,8 +1,12 @@
+import { Platform } from 'react-native';
 import { createClient, type SupportedStorage } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+export const supabaseUrl = url;
+export const supabaseAnonKey = anon;
 
 if (!url || !anon) {
   console.warn(
@@ -17,39 +21,46 @@ const memoryStorage: SupportedStorage = {
   removeItem: async (_key: string) => {},
 };
 
+/** Web SSR in Node has no window. React Native also lacks window — do not treat native as SSR. */
+function isWebSsr(): boolean {
+  return Platform.OS === 'web' && typeof window === 'undefined';
+}
+
 function createAuthStorage(): SupportedStorage {
-  // Expo web SSR runs this module in Node — AsyncStorage touches `window`.
-  if (typeof window === 'undefined') {
+  if (isWebSsr()) {
     return memoryStorage;
   }
   // On web, AsyncStorage's native module is null; use localStorage instead.
-  try {
-    if (typeof window.localStorage !== 'undefined') {
-      return {
-        getItem: (key: string) => Promise.resolve(window.localStorage.getItem(key)),
-        setItem: (key: string, value: string) => {
-          window.localStorage.setItem(key, value);
-          return Promise.resolve();
-        },
-        removeItem: (key: string) => {
-          window.localStorage.removeItem(key);
-          return Promise.resolve();
-        },
-      };
+  if (Platform.OS === 'web') {
+    try {
+      if (typeof window.localStorage !== 'undefined') {
+        return {
+          getItem: (key: string) => Promise.resolve(window.localStorage.getItem(key)),
+          setItem: (key: string, value: string) => {
+            window.localStorage.setItem(key, value);
+            return Promise.resolve();
+          },
+          removeItem: (key: string) => {
+            window.localStorage.removeItem(key);
+            return Promise.resolve();
+          },
+        };
+      }
+    } catch {
+      // localStorage unavailable (private mode / SSR edge)
     }
-  } catch {
-    // localStorage unavailable; fall through to AsyncStorage
+    return memoryStorage;
   }
   return AsyncStorage;
 }
 
-const isBrowser = typeof window !== 'undefined';
+const persistAuth = !isWebSsr();
 
 export const supabase = createClient(url, anon, {
   auth: {
     storage: createAuthStorage(),
-    autoRefreshToken: isBrowser,
-    persistSession: isBrowser,
+    autoRefreshToken: persistAuth,
+    persistSession: persistAuth,
     detectSessionInUrl: false,
   },
 });

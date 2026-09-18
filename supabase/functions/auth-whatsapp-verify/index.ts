@@ -9,6 +9,7 @@ import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 const MAX_ATTEMPTS = 5;
+const IDEMPOTENT_MS = 3 * 60_000;
 
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -39,15 +40,16 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'server_misconfigured' }, 500);
   }
 
-  let body: { phone?: string; code?: string };
+  let body: { phone?: string; code?: string; account_kind?: string };
   try {
     body = await req.json();
   } catch {
     return jsonResponse({ error: 'invalid_json' }, 400);
   }
 
+  const accountKind = body.account_kind === 'business' ? 'business' : 'client';
   const phone = normalizePhoneE164(body.phone);
-  const code = (body.code ?? '').trim();
+  const code = (body.code ?? '').replace(/\D/g, '');
   if (!phone) {
     return jsonResponse(
       {
@@ -68,67 +70,125 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const nowIso = new Date().toISOString();
-  const { data: otpRow, error: otpErr } = await admin
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const codeHash = await sha256Hex(code);
+
+  const { data: rows, error: otpErr } = await admin
     .from('auth_whatsapp_otps')
-    .select('id, code_hash, attempts, expires_at')
+    .select('id, code_hash, attempts, expires_at, consumed_at')
     .eq('phone', phone)
-    .is('consumed_at', null)
-    .gt('expires_at', nowIso)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(8);
 
   if (otpErr) {
     console.error('auth-whatsapp-verify otp lookup', otpErr);
     return jsonResponse({ error: 'otp_lookup_failed' }, 500);
   }
 
-  if (!otpRow) {
+  const list = rows ?? [];
+  const matched = list.find((r) => r.code_hash === codeHash);
+  const latestActive = list.find(
+    (r) =>
+      !r.consumed_at &&
+      new Date(r.expires_at).getTime() > now
+  );
+
+  if (matched?.consumed_at) {
+    const consumedAt = new Date(matched.consumed_at).getTime();
+    if (now - consumedAt <= IDEMPOTENT_MS) {
+      // Same code submitted twice (double tap) — continue to session.
+    } else {
+      return jsonResponse(
+        {
+          error: 'otp_already_used',
+          hint: 'Acest cod a fost deja folosit. Cere un cod nou.',
+        },
+        400
+      );
+    }
+  } else if (matched && new Date(matched.expires_at).getTime() <= now) {
     return jsonResponse(
       {
-        error: 'otp_not_found',
-        hint: 'Cod expirat sau inexistent. Cere un cod nou.',
+        error: 'otp_expired',
+        hint: 'Codul a expirat. Cere un cod nou.',
       },
       400
     );
-  }
-
-  if ((otpRow.attempts ?? 0) >= MAX_ATTEMPTS) {
-    await admin
-      .from('auth_whatsapp_otps')
-      .update({ consumed_at: nowIso })
-      .eq('id', otpRow.id);
-    return jsonResponse(
-      {
-        error: 'too_many_attempts',
-        hint: 'Prea multe încercări. Cere un cod nou.',
-      },
-      429
-    );
-  }
-
-  const codeHash = await sha256Hex(code);
-  if (codeHash !== otpRow.code_hash) {
-    await admin
-      .from('auth_whatsapp_otps')
-      .update({ attempts: (otpRow.attempts ?? 0) + 1 })
-      .eq('id', otpRow.id);
+  } else if (matched) {
+    if ((matched.attempts ?? 0) >= MAX_ATTEMPTS) {
+      await admin
+        .from('auth_whatsapp_otps')
+        .update({ consumed_at: nowIso })
+        .eq('id', matched.id);
+      return jsonResponse(
+        {
+          error: 'too_many_attempts',
+          hint: 'Prea multe încercări. Cere un cod nou.',
+        },
+        429
+      );
+    }
+  } else if (latestActive) {
+    const attempts = (latestActive.attempts ?? 0) + 1;
+    const patch: { attempts: number; consumed_at?: string } = { attempts };
+    if (attempts >= MAX_ATTEMPTS) patch.consumed_at = nowIso;
+    await admin.from('auth_whatsapp_otps').update(patch).eq('id', latestActive.id);
+    if (attempts >= MAX_ATTEMPTS) {
+      return jsonResponse(
+        {
+          error: 'too_many_attempts',
+          hint: 'Prea multe încercări. Cere un cod nou.',
+        },
+        429
+      );
+    }
     return jsonResponse(
       { error: 'invalid_code', hint: 'Cod greșit. Încearcă din nou.' },
       400
     );
+  } else {
+    const latest = list[0];
+    if (latest && new Date(latest.expires_at).getTime() <= now) {
+      return jsonResponse(
+        {
+          error: 'otp_expired',
+          hint: 'Codul a expirat. Cere un cod nou.',
+        },
+        400
+      );
+    }
+    return jsonResponse(
+      {
+        error: 'otp_not_found',
+        hint: 'Nu am găsit un cod pentru acest număr. Cere un cod nou.',
+      },
+      400
+    );
   }
 
-  await admin
-    .from('auth_whatsapp_otps')
-    .update({ consumed_at: nowIso })
-    .eq('id', otpRow.id);
+  const otpRow = matched;
+  if (!otpRow) {
+    return jsonResponse(
+      {
+        error: 'otp_not_found',
+        hint: 'Nu am găsit un cod pentru acest număr. Cere un cod nou.',
+      },
+      400
+    );
+  }
+
+  if (!otpRow.consumed_at) {
+    await admin
+      .from('auth_whatsapp_otps')
+      .update({ consumed_at: nowIso })
+      .eq('id', otpRow.id);
+  }
 
   // Find existing profile by phone (E.164)
   const { data: profile } = await admin
     .from('profiles')
-    .select('id, email, phone')
+    .select('id, email, phone, account_kind')
     .eq('phone', phone)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -136,8 +196,22 @@ Deno.serve(async (req) => {
 
   let userId: string;
   let sessionEmail: string;
+  let isNewUser = false;
 
   if (profile?.id) {
+    const existingKind = profile.account_kind === 'business' ? 'business' : 'client';
+    if (existingKind !== accountKind) {
+      return jsonResponse(
+        {
+          error: 'wrong_account_kind',
+          hint:
+            existingKind === 'business'
+              ? 'Acest număr e un cont business. Folosește „Cont business”.'
+              : 'Acest număr e un cont client. Folosește „Cont client”.',
+        },
+        403
+      );
+    }
     userId = profile.id;
     const { data: userData, error: getUserErr } =
       await admin.auth.admin.getUserById(userId);
@@ -183,16 +257,16 @@ Deno.serve(async (req) => {
     }
   } else {
     sessionEmail = phonePlaceholderEmail(phone);
-    const { data: created, error: createErr } =
+    const { data: createdUser, error: createErr } =
       await admin.auth.admin.createUser({
         phone,
         phone_confirm: true,
         email: sessionEmail,
         email_confirm: true,
-        user_metadata: { auth_via: 'whatsapp_otp' },
+        user_metadata: { auth_via: 'whatsapp_otp', account_kind: accountKind },
       });
 
-    if (createErr || !created?.user) {
+    if (createErr || !createdUser?.user) {
       console.error('auth-whatsapp-verify createUser', createErr);
       // Race / already exists: resolve by phone then placeholder email
       let again = (
@@ -224,12 +298,30 @@ Deno.serve(async (req) => {
       }
       userId = again.id;
       if (again.email) sessionEmail = again.email;
+      const { data: raced } = await admin
+        .from('profiles')
+        .select('account_kind')
+        .eq('id', again.id)
+        .maybeSingle();
+      const racedKind = raced?.account_kind === 'business' ? 'business' : 'client';
+      if (racedKind !== accountKind) {
+        return jsonResponse(
+          {
+            error: 'wrong_account_kind',
+            hint:
+              racedKind === 'business'
+                ? 'Acest număr e un cont business. Folosește „Cont business”.'
+                : 'Acest număr e un cont client. Folosește „Cont client”.',
+          },
+          403
+        );
+      }
     } else {
-      userId = created.user.id;
-      // Trigger handle_new_user inserts profile; ensure phone/email set
+      userId = createdUser.user.id;
+      isNewUser = true;
       await admin
         .from('profiles')
-        .update({ phone, email: sessionEmail })
+        .update({ phone, email: sessionEmail, account_kind: accountKind })
         .eq('id', userId);
     }
   }
@@ -281,5 +373,6 @@ Deno.serve(async (req) => {
     expires_at: session.expires_at,
     token_type: session.token_type ?? 'bearer',
     user: session.user ?? verified.user,
+    created: isNewUser,
   });
 });

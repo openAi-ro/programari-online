@@ -8,7 +8,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageTest, sendWhatsApp } from '../_shared/notify.ts';
+import { messageTest, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 Deno.serve(async (req) => {
@@ -64,6 +64,19 @@ Deno.serve(async (req) => {
 
   const copy = messageTest();
   const result = await sendWhatsApp(phone, copy.text);
+
+  if (!result.ok && !result.stub) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: 'whatsapp_send_failed',
+        phone,
+        result,
+        hint: whatsappUserHint(result),
+      },
+      502
+    );
+  }
 
   return jsonResponse({
     ok: result.ok,

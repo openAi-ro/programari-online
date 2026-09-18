@@ -3,5 +3,8 @@
 **/.env
 apps/mobile/.env
 scripts/twilio.env
+scripts/meta.env
+key.txt
+cont test.txt
 node_modules/
 .superpowers/

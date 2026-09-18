@@ -7,8 +7,17 @@
 
 import { generateFreeSlots } from './slots';
 import { generatePublicCode } from './publicCode';
+import { formatInTimeZone } from './timezone';
 import {
+  DEFAULT_AUTO_APPROVE_RETURNING,
   DEFAULT_BREAK_HOURS,
+  DEFAULT_BUFFER_MINUTES,
+  DEFAULT_CANCEL_NOTICE_MINUTES,
+  DEFAULT_DEPOSIT_RON,
+  DEFAULT_LOYALTY_EVERY,
+  DEFAULT_MAX_ADVANCE_DAYS,
+  DEFAULT_MIN_NOTICE_MINUTES,
+  DEFAULT_NO_SHOW_BLOCK_AFTER,
   DEFAULT_TIMEZONE,
   DEFAULT_WORKING_HOURS,
 } from './defaults';
@@ -73,6 +82,7 @@ const db = {
     text: string;
     event: string;
   }[],
+  blocks: [] as { business_id: string; client_user_id: string }[],
 };
 
 function createProfile(partial: {
@@ -118,6 +128,15 @@ function createBusiness(
       start: '13:00',
       end: '14:00',
     },
+    min_notice_minutes: DEFAULT_MIN_NOTICE_MINUTES,
+    buffer_minutes: DEFAULT_BUFFER_MINUTES,
+    max_advance_days: DEFAULT_MAX_ADVANCE_DAYS,
+    cancel_notice_minutes: DEFAULT_CANCEL_NOTICE_MINUTES,
+    blocked_dates: [],
+    deposit_ron: DEFAULT_DEPOSIT_RON,
+    auto_approve_returning: DEFAULT_AUTO_APPROVE_RETURNING,
+    no_show_block_after: DEFAULT_NO_SHOW_BLOCK_AFTER,
+    loyalty_every: DEFAULT_LOYALTY_EVERY,
     created_at: now,
     updated_at: now,
   };
@@ -138,6 +157,9 @@ function createAppointmentIfFree(
   if (!client.email && !client.phone) {
     return { error: 'contact_required' };
   }
+  if (db.blocks.some((b) => b.business_id === business.id && b.client_user_id === client.id)) {
+    return { error: 'client_blocked' };
+  }
   const start = new Date(startUtc);
   const end = new Date(endUtc);
   if (!(end > start)) return { error: 'invalid_range' };
@@ -151,6 +173,24 @@ function createAppointmentIfFree(
   );
   if (conflict) return { error: 'slot_taken' };
 
+  const returning = db.appointments.some(
+    (a) =>
+      a.business_id === business.id &&
+      a.client_user_id === client.id &&
+      a.status === 'approved'
+  );
+  const status: AppointmentStatus =
+    business.auto_approve_returning && returning ? 'approved' : 'pending';
+  const visits = db.appointments.filter(
+    (a) =>
+      a.business_id === business.id &&
+      a.client_user_id === client.id &&
+      a.status === 'approved' &&
+      !a.no_show
+  ).length;
+  const loyalty =
+    (business.loyalty_every ?? 0) >= 2 && (visits + 1) % business.loyalty_every === 0;
+  const deposit = loyalty ? 0 : business.deposit_ron ?? 0;
   const now = new Date().toISOString();
   const row: Appointment = {
     id: uid('apt'),
@@ -158,11 +198,14 @@ function createAppointmentIfFree(
     client_user_id: client.id,
     start_at: startUtc,
     end_at: endUtc,
-    status: 'pending',
+    status,
     client_email: client.email,
     client_phone: client.phone,
     reminder_sent: false,
     decision_notified: false,
+    payment_status: deposit > 0 ? 'unpaid' : 'none',
+    deposit_ron: deposit,
+    loyalty_redeemed: loyalty,
     created_at: now,
     updated_at: now,
   };
@@ -253,7 +296,8 @@ function runReminders(now: Date) {
     const start = new Date(apt.start_at);
     if (start < min || start > max) continue;
     const business = db.businesses.find((b) => b.id === apt.business_id)!;
-    const text = `Salut! Ai o programare la ${business.name} în 30 de minute (${apt.start_at}, ${business.timezone}).`;
+    const when = formatInTimeZone(new Date(apt.start_at), business.timezone, 'dd.MM.yyyy HH:mm');
+    const text = `Salut! Ai o programare la ${business.name} în 30 de minute (${when}, ${business.timezone}).`;
     if (apt.client_email) {
       db.notifications.push({
         channel: 'email',
@@ -519,6 +563,67 @@ const match = deepLink.match(/^programari:\/\/b\/([a-z0-9]+)$/);
 assert(!!match && match[1] === business.public_code, 'Deep link valid', deepLink);
 const found = db.businesses.find((b) => b.public_code === match![1]);
 assert(!!found, 'Business găsit după public_code din QR');
+
+// 11. v1.3 auto-approve + blocare
+console.log('\n11) Avans, auto-aprobare, blocare');
+business.deposit_ron = 30;
+const lateSlot = generateFreeSlots({
+  dateLocal: nextMondayLocal(),
+  timezone: business.timezone,
+  sessionDurationMinutes: business.session_duration_minutes,
+  workingHours: business.working_hours,
+  breakHours: business.break_hours,
+  busy: db.appointments
+    .filter((a) => a.business_id === business.id && (a.status === 'pending' || a.status === 'approved'))
+    .map((a) => ({ startUtc: a.start_at, endUtc: a.end_at })),
+})[0];
+assert(!!lateSlot, 'Mai e un slot pentru test v1.3');
+const withDeposit = createAppointmentIfFree(business, client2, lateSlot.startUtc, lateSlot.endUtc);
+assert(!('error' in withDeposit) && withDeposit.payment_status === 'unpaid', 'Avans 30 lei → unpaid');
+assert(!('error' in withDeposit) && withDeposit.deposit_ron === 30, 'deposit_ron snapshot 30');
+
+business.auto_approve_returning = true;
+const later = generateFreeSlots({
+  dateLocal: nextMondayLocal(),
+  timezone: business.timezone,
+  sessionDurationMinutes: business.session_duration_minutes,
+  workingHours: business.working_hours,
+  breakHours: business.break_hours,
+  busy: db.appointments
+    .filter((a) => a.business_id === business.id && (a.status === 'pending' || a.status === 'approved'))
+    .map((a) => ({ startUtc: a.start_at, endUtc: a.end_at })),
+})[0];
+assert(!!later, 'Slot pentru client recurent');
+const auto = createAppointmentIfFree(business, client, later.startUtc, later.endUtc);
+assert(!('error' in auto) && auto.status === 'approved', 'Client cu vizită aprobată → auto-approved');
+
+db.blocks.push({ business_id: business.id, client_user_id: client2.id });
+const blockedTry = createAppointmentIfFree(business, client2, later.startUtc, later.endUtc);
+assert('error' in blockedTry && blockedTry.error === 'client_blocked', 'Client blocat → client_blocked');
+
+business.auto_approve_returning = false;
+db.blocks = [];
+const paidVisits = db.appointments.filter(
+  (a) =>
+    a.client_user_id === client.id &&
+    a.status === 'approved' &&
+    !a.no_show
+).length;
+assert(paidVisits >= 1, 'Client are vizite pentru loialitate');
+business.loyalty_every = paidVisits + 1;
+const giftSlot = generateFreeSlots({
+  dateLocal: nextMondayLocal(),
+  timezone: business.timezone,
+  sessionDurationMinutes: business.session_duration_minutes,
+  workingHours: business.working_hours,
+  breakHours: business.break_hours,
+  busy: db.appointments
+    .filter((a) => a.business_id === business.id && (a.status === 'pending' || a.status === 'approved'))
+    .map((a) => ({ startUtc: a.start_at, endUtc: a.end_at })),
+})[0];
+assert(!!giftSlot, 'Slot pentru loialitate');
+const gift = createAppointmentIfFree(business, client, giftSlot.startUtc, giftSlot.endUtc);
+assert(!('error' in gift) && gift.loyalty_redeemed === true, 'Următoarea vizită (every=N) → cadou');
 
 // ─── Summary ───────────────────────────────────────────────────────────────
 

@@ -23,6 +23,7 @@ import {
 type AppointmentRow = {
   id: string;
   business_id: string;
+  client_user_id: string | null;
   status: string;
   client_email: string | null;
   client_phone: string | null;
@@ -137,12 +138,24 @@ Deno.serve(async (req) => {
       ? messageApproved(businessName, whenLabel)
       : messageRejected(businessName, whenLabel);
 
-  const results = await notifyClientChannels({
-    email: live.client_email,
-    phone: live.client_phone,
-    subject: copy.subject,
-    text: copy.text,
-  });
+  let wantsDecision = true;
+  if (live.client_user_id) {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('notify_decision')
+      .eq('id', live.client_user_id)
+      .maybeSingle();
+    wantsDecision = profile?.notify_decision !== false;
+  }
+
+  const results = wantsDecision
+    ? await notifyClientChannels({
+        email: live.client_email,
+        phone: live.client_phone,
+        subject: copy.subject,
+        text: copy.text,
+      })
+    : [{ ok: true, channel: 'email' as const, stub: true }];
 
   const { error: updErr } = await admin
     .from('appointments')

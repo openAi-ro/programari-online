@@ -2,14 +2,20 @@
  * Edge Function: send-reminders
  *
  * Cron every 1–5 minutes:
- * Select approved appointments with reminder_sent=false and
- * start_at between now+25m and now+35m; notify client; set reminder_sent.
+ * 1) 24h before: approved, reminder_24h_sent=false, start_at in now+23.5h … now+24.5h
+ * 2) 1h before: approved, reminder_sent=false, start_at in now+55m … now+65m
  *
  * Invoke with service role (cron / scheduled function).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageReminder, notifyClientChannels } from '../_shared/notify.ts';
+import {
+  messageReminder,
+  messageReminder24h,
+  notifyClientChannels,
+} from '../_shared/notify.ts';
+
+type Admin = ReturnType<typeof createClient>;
 
 function formatTimeLocal(iso: string, timezone: string): string {
   try {
@@ -23,11 +29,124 @@ function formatTimeLocal(iso: string, timezone: string): string {
   }
 }
 
+async function processWindow(
+  admin: Admin,
+  opts: {
+    from: string;
+    to: string;
+    flag: 'reminder_sent' | 'reminder_24h_sent';
+    kind: '1h' | '24h';
+  }
+): Promise<{ id: string; ok: boolean; detail?: string; kind: string }[]> {
+  const { data: rows, error } = await admin
+    .from('appointments')
+    .select(
+      'id, business_id, client_user_id, client_email, client_phone, start_at, status, reminder_sent, reminder_24h_sent'
+    )
+    .eq('status', 'approved')
+    .eq(opts.flag, false)
+    .gte('start_at', opts.from)
+    .lte('start_at', opts.to);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const list = rows ?? [];
+  const outcomes: { id: string; ok: boolean; detail?: string; kind: string }[] = [];
+
+  const clientIds = [
+    ...new Set(list.map((r) => r.client_user_id).filter((v): v is string => !!v)),
+  ];
+  const notifyByUser: Record<string, boolean> = {};
+  if (clientIds.length) {
+    const { data: profiles } = await admin
+      .from('profiles')
+      .select('id, notify_reminders')
+      .in('id', clientIds);
+    for (const p of profiles ?? []) {
+      notifyByUser[p.id as string] = p.notify_reminders !== false;
+    }
+  }
+
+  for (const appt of list) {
+    const wantsReminder =
+      !appt.client_user_id || notifyByUser[appt.client_user_id] !== false;
+
+    if (!wantsReminder) {
+      await admin
+        .from('appointments')
+        .update({
+          [opts.flag]: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', appt.id)
+        .eq(opts.flag, false);
+      outcomes.push({ id: appt.id, ok: true, kind: opts.kind, detail: 'opted_out' });
+      continue;
+    }
+
+    const { data: business } = await admin
+      .from('business_profiles')
+      .select('name, timezone')
+      .eq('id', appt.business_id)
+      .maybeSingle();
+
+    const businessName = business?.name ?? 'business';
+    const timezone = business?.timezone ?? 'Europe/Bucharest';
+    const timeLocal = formatTimeLocal(appt.start_at, timezone);
+    const copy =
+      opts.kind === '24h'
+        ? messageReminder24h(businessName, timeLocal, timezone)
+        : messageReminder(businessName, timeLocal, timezone);
+
+    try {
+      await notifyClientChannels({
+        email: appt.client_email,
+        phone: appt.client_phone,
+        subject: copy.subject,
+        text: copy.text,
+      });
+
+      const { error: updErr } = await admin
+        .from('appointments')
+        .update({
+          [opts.flag]: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', appt.id)
+        .eq(opts.flag, false);
+
+      if (updErr) {
+        outcomes.push({ id: appt.id, ok: false, detail: updErr.message, kind: opts.kind });
+      } else {
+        outcomes.push({ id: appt.id, ok: true, kind: opts.kind });
+      }
+    } catch (e) {
+      await admin
+        .from('appointments')
+        .update({
+          [opts.flag]: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', appt.id)
+        .eq(opts.flag, false);
+      outcomes.push({
+        id: appt.id,
+        ok: false,
+        kind: opts.kind,
+        detail: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return outcomes;
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  // Allow GET for simple cron pings
   if (req.method !== 'POST' && req.method !== 'GET') {
     return jsonResponse({ error: 'method_not_allowed' }, 405);
   }
@@ -38,7 +157,6 @@ Deno.serve(async (req) => {
     const headerSecret = req.headers.get('x-cron-secret');
     const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
     if (headerSecret !== cronSecret && bearer !== cronSecret) {
-      // Also accept service role as auth when CRON_SECRET not matched
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
       if (!serviceKey || bearer !== serviceKey) {
         return jsonResponse({ error: 'unauthorized' }, 401);
@@ -53,85 +171,46 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(supabaseUrl, serviceKey);
-
   const now = Date.now();
-  const from = new Date(now + 25 * 60 * 1000).toISOString();
-  const to = new Date(now + 35 * 60 * 1000).toISOString();
 
-  const { data: rows, error } = await admin
-    .from('appointments')
-    .select(
-      'id, business_id, client_email, client_phone, start_at, status, reminder_sent'
-    )
-    .eq('status', 'approved')
-    .eq('reminder_sent', false)
-    .gte('start_at', from)
-    .lte('start_at', to);
+  const window1h = {
+    from: new Date(now + 55 * 60 * 1000).toISOString(),
+    to: new Date(now + 65 * 60 * 1000).toISOString(),
+  };
+  const window24h = {
+    from: new Date(now + 23.5 * 60 * 60 * 1000).toISOString(),
+    to: new Date(now + 24.5 * 60 * 60 * 1000).toISOString(),
+  };
 
-  if (error) {
-    console.error('select reminders failed', error);
-    return jsonResponse({ error: error.message }, 500);
+  try {
+    const [outcomes24h, outcomes1h] = await Promise.all([
+      processWindow(admin, {
+        from: window24h.from,
+        to: window24h.to,
+        flag: 'reminder_24h_sent',
+        kind: '24h',
+      }),
+      processWindow(admin, {
+        from: window1h.from,
+        to: window1h.to,
+        flag: 'reminder_sent',
+        kind: '1h',
+      }),
+    ]);
+
+    const outcomes = [...outcomes24h, ...outcomes1h];
+    return jsonResponse({
+      ok: true,
+      window_24h: window24h,
+      window_1h: window1h,
+      processed: outcomes.length,
+      outcomes,
+    });
+  } catch (e) {
+    console.error('send-reminders failed', e);
+    return jsonResponse(
+      { error: e instanceof Error ? e.message : String(e) },
+      500
+    );
   }
-
-  const list = rows ?? [];
-  const outcomes: { id: string; ok: boolean; detail?: string }[] = [];
-
-  for (const appt of list) {
-    const { data: business } = await admin
-      .from('business_profiles')
-      .select('name, timezone')
-      .eq('id', appt.business_id)
-      .maybeSingle();
-
-    const businessName = business?.name ?? 'business';
-    const timezone = business?.timezone ?? 'Europe/Bucharest';
-    const timeLocal = formatTimeLocal(appt.start_at, timezone);
-    const copy = messageReminder(businessName, timeLocal, timezone);
-
-    try {
-      await notifyClientChannels({
-        email: appt.client_email,
-        phone: appt.client_phone,
-        subject: copy.subject,
-        text: copy.text,
-      });
-
-      const { error: updErr } = await admin
-        .from('appointments')
-        .update({
-          reminder_sent: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', appt.id)
-        .eq('reminder_sent', false);
-
-      if (updErr) {
-        outcomes.push({ id: appt.id, ok: false, detail: updErr.message });
-      } else {
-        outcomes.push({ id: appt.id, ok: true });
-      }
-    } catch (e) {
-      // Still mark sent after attempt to avoid infinite retries (MVP)
-      await admin
-        .from('appointments')
-        .update({
-          reminder_sent: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', appt.id)
-        .eq('reminder_sent', false);
-      outcomes.push({
-        id: appt.id,
-        ok: false,
-        detail: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-
-  return jsonResponse({
-    ok: true,
-    window: { from, to },
-    processed: list.length,
-    outcomes,
-  });
 });

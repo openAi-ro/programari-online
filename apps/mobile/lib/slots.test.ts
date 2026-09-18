@@ -130,5 +130,56 @@ console.log('slots tests\n');
   );
 }
 
+// 5) buffer 15 min → step 75, Mon 09-12 duration 60 → 2 slots (09:00, 10:15)
+{
+  const slots = generateFreeSlots({
+    dateLocal: MONDAY,
+    timezone: TZ,
+    sessionDurationMinutes: 60,
+    workingHours: openMonFri,
+    breakHours: noBreak,
+    busy: [],
+    bufferMinutes: 15,
+  });
+  assertEq(slots.length, 2, 'buffer 15 → 2 slots in 09-12');
+  assertEq(
+    slots.map((s) => s.labelLocal),
+    ['09:00', '10:15'],
+    'labels 09:00, 10:15 with buffer'
+  );
+}
+
+// 6) blocked date → []
+{
+  const slots = generateFreeSlots({
+    dateLocal: MONDAY,
+    timezone: TZ,
+    sessionDurationMinutes: 60,
+    workingHours: openMonFri,
+    breakHours: noBreak,
+    busy: [],
+    blockedDates: [MONDAY],
+  });
+  assertEq(slots.length, 0, 'blocked date → []');
+}
+
+// 7) notBeforeUtc hides morning slots
+{
+  const slots = generateFreeSlots({
+    dateLocal: MONDAY,
+    timezone: TZ,
+    sessionDurationMinutes: 60,
+    workingHours: openMonFri,
+    breakHours: noBreak,
+    busy: [],
+    notBeforeUtc: '2026-08-03T07:30:00.000Z', // 10:30 Bucharest summer
+  });
+  assertEq(
+    slots.map((s) => s.labelLocal),
+    ['11:00'],
+    'notBeforeUtc keeps only 11:00'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

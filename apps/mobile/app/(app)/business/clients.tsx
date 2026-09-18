@@ -1,0 +1,274 @@
+import { useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+
+import {
+  Button,
+  Callout,
+  EmptyState,
+  Field,
+  ListLoadingScreen,
+  Screen,
+  useTheme,
+} from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { useBack } from '@/lib/nav';
+import { STATUS_META } from '@/lib/status';
+import { mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
+import { formatInTimeZone } from '@/lib/timezone';
+import { supabase } from '@/lib/supabase';
+import type { Appointment, BusinessClientRow } from '@/lib/types';
+
+export default function BusinessClientsScreen() {
+  const t = useTheme();
+  const back = useBack();
+  const router = useRouter();
+  const [rows, setRows] = useState<BusinessClientRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [history, setHistory] = useState<Appointment[]>([]);
+  const [note, setNote] = useState('');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [blockAfter, setBlockAfter] = useState(2);
+  const [loyaltyEvery, setLoyaltyEvery] = useState(0);
+
+  const load = useCallback(async () => {
+    setError(null);
+    const { data, error: err } = await supabase.rpc('list_business_clients');
+    if (err) {
+      setError(err.message);
+      setRows([]);
+    } else {
+      setRows((data ?? []) as BusinessClientRow[]);
+    }
+    const { data: biz } = await supabase
+      .from('business_profiles')
+      .select('no_show_block_after, loyalty_every')
+      .limit(1)
+      .maybeSingle();
+    if (typeof biz?.no_show_block_after === 'number') {
+      setBlockAfter(biz.no_show_block_after);
+    }
+    if (typeof biz?.loyalty_every === 'number') {
+      setLoyaltyEvery(biz.loyalty_every);
+    }
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void load();
+    }, [load])
+  );
+
+  const shown = rows.filter((r) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (r.display_name ?? '').toLowerCase().includes(q) ||
+      r.contact.toLowerCase().includes(q)
+    );
+  });
+
+  async function openClient(row: BusinessClientRow) {
+    if (openId === row.client_user_id) {
+      setOpenId(null);
+      return;
+    }
+    setOpenId(row.client_user_id);
+    setNote(row.note ?? '');
+    const { data } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('business_id', row.business_id)
+      .eq('client_user_id', row.client_user_id)
+      .order('start_at', { ascending: false })
+      .limit(20);
+    setHistory((data ?? []) as Appointment[]);
+  }
+
+  async function saveNote(row: BusinessClientRow) {
+    setNoteBusy(true);
+    setError(null);
+    const { error: err } = await supabase.from('client_notes').upsert({
+      business_id: row.business_id,
+      client_user_id: row.client_user_id,
+      note: note.trim(),
+      updated_at: new Date().toISOString(),
+    });
+    setNoteBusy(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    await load();
+  }
+
+  async function toggleBlock(row: BusinessClientRow) {
+    setError(null);
+    if (row.blocked) {
+      const { error: err } = await supabase.rpc('unblock_client', {
+        p_business_id: row.business_id,
+        p_client_user_id: row.client_user_id,
+      });
+      if (err) {
+        setError(mapBookingRpcError(err.message));
+        return;
+      }
+    } else {
+      const { error: err } = await supabase.rpc('block_client', {
+        p_business_id: row.business_id,
+        p_client_user_id: row.client_user_id,
+        p_reason: 'no-show',
+      });
+      if (err) {
+        setError(mapBookingRpcError(err.message));
+        return;
+      }
+    }
+    await load();
+  }
+
+  if (loading && rows.length === 0) {
+    return (
+      <ListLoadingScreen
+        title="Clienți"
+        subtitle="Istoric, vizite, note"
+        onBack={back}
+        label="Se încarcă clienții…"
+      />
+    );
+  }
+
+  return (
+    <Screen title="Clienți" subtitle="Istoric, vizite, note" onBack={back}>
+      <Field
+        label="Caută"
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Nume, telefon, email"
+        icon="search-outline"
+      />
+      {error ? <Callout tone="danger">{error}</Callout> : null}
+      {shown.length === 0 ? (
+        <EmptyState
+          icon="people-outline"
+          title="Niciun client încă"
+          description="Clienții apar aici după prima programare."
+        />
+      ) : (
+        shown.map((row) => {
+          const open = openId === row.client_user_id;
+          const last = row.last_start_at
+            ? formatInTimeZone(new Date(row.last_start_at), 'Europe/Bucharest', 'dd.MM.yyyy')
+            : '—';
+          return (
+            <View
+              key={row.client_user_id}
+              style={[
+                styles.card,
+                { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+              ]}
+            >
+              <Pressable onPress={() => void openClient(row)} style={styles.head}>
+                <View style={styles.flex}>
+                  <Text style={[styles.name, { color: t.colors.text }]}>
+                    {row.display_name || row.contact}
+                  </Text>
+                  <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                    {row.contact} · {row.visit_count} vizite · ultima {last}
+                    {row.upcoming_count > 0 ? ` · ${row.upcoming_count} viitoare` : ''}
+                    {row.no_show_count > 0 ? ` · ${row.no_show_count} absențe` : ''}
+                    {row.blocked ? ' · BLOCAT' : ''}
+                    {visitsUntilFree(Number(row.visit_count), loyaltyEvery)
+                      ? ` · cadou în ${visitsUntilFree(Number(row.visit_count), loyaltyEvery)} vizite`
+                      : ''}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={open ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={t.colors.textFaint}
+                />
+              </Pressable>
+              {open ? (
+                <View style={styles.detail}>
+                  <Field
+                    label="Notă internă"
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder="Preferințe, alergii…"
+                    multiline
+                  />
+                  <Pressable
+                    onPress={() => void saveNote(row)}
+                    disabled={noteBusy}
+                    style={({ pressed }) => [
+                      styles.saveNote,
+                      { backgroundColor: t.colors.accentSoft, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Text style={[styles.saveNoteText, { color: t.colors.accentSoftText }]}>
+                      {noteBusy ? 'Se salvează…' : 'Salvează nota'}
+                    </Text>
+                  </Pressable>
+                  {history.map((a) => (
+                    <Text key={a.id} style={[styles.hist, { color: t.colors.textMuted }]}>
+                      {formatInTimeZone(new Date(a.start_at), 'Europe/Bucharest', 'dd.MM.yyyy HH:mm')}
+                      {' · '}
+                      {a.service_name ?? 'Ședință'}
+                      {' · '}
+                      {a.no_show ? 'Nu s-a prezentat' : STATUS_META[a.status]?.label ?? a.status}
+                    </Text>
+                  ))}
+                  {blockAfter > 0 && row.no_show_count >= blockAfter && !row.blocked ? (
+                    <Callout tone="warning" title="Absențe repetate">
+                      Clientul are {row.no_show_count} no-show-uri. Poți să-l blochezi.
+                    </Callout>
+                  ) : null}
+                  <Button
+                    label={row.blocked ? 'Deblochează clientul' : 'Blochează clientul'}
+                    variant={row.blocked ? 'secondary' : 'danger'}
+                    size="sm"
+                    icon={row.blocked ? 'lock-open-outline' : 'ban-outline'}
+                    onPress={() => void toggleBlock(row)}
+                  />
+                  <Pressable onPress={() => router.push('/(app)/business/calendar' as never)}>
+                    <Text style={[styles.link, { color: t.colors.accent }]}>Deschide calendarul</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          );
+        })
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden' },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  flex: { flex: 1, gap: 2 },
+  name: { fontSize: fontSize.md, fontWeight: '700' },
+  meta: { fontSize: fontSize.sm },
+  detail: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm },
+  saveNote: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  saveNoteText: { fontSize: fontSize.sm, fontWeight: '700' },
+  hist: { fontSize: fontSize.sm },
+  link: { fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.xs },
+});
