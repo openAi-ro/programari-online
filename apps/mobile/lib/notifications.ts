@@ -1,5 +1,6 @@
-import { Linking, Platform, Vibration } from 'react-native';
+﻿import { Linking, Platform, Vibration } from 'react-native';
 import Constants from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 import { router } from 'expo-router';
 
 import { ensureMyProfile } from './bookingRpc';
@@ -13,12 +14,18 @@ import { supabase } from './supabase';
  */
 export const BOOKING_PUSH_CHANNEL_ID = 'cereri_heads';
 
+export const CHAT_PUSH_CHANNEL_ID = 'chat_heads';
+
 const LEGACY_CHANNEL_IDS = ['cereri', 'cereri_v2'] as const;
 
-// expo-notifications throws at import time in Expo Go (SDK 53+), so we load it
-// lazily inside the functions that actually need it. This keeps the rest of the
-// app working even when remote push isn't available (Expo Go / web / simulator).
+// expo-notifications: pe Android Expo Go (SDK 53+) importul aruncă Error.
+// Nu încărcăm modulul deloc în Expo Go / web; în build nativ îl încărcăm lazy.
 async function loadNotifications(): Promise<typeof import('expo-notifications') | null> {
+  // SDK 53+: pe Android, importul expo-notifications din Expo Go ARUNCĂ Error
+  // (push remote scos). Nu încărcăm deloc modulul acolo — vibrație/fallback rămân.
+  if (Platform.OS === 'web' || isRunningInExpoGo()) {
+    return null;
+  }
   try {
     return await import('expo-notifications');
   } catch {
@@ -92,6 +99,23 @@ async function ensureHeadsUpChannel(
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 120, 250],
     lightColor: '#7C3AED',
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: false,
+    enableVibrate: true,
+    enableLights: true,
+    showBadge: true,
+    sound: 'default',
+  });
+
+  // Canal de chat — importance MAX ca pop-urile de mesaje să apare și cu
+  // aplicația închisă / pe ecranul de bloare.
+  await Notifications.setNotificationChannelAsync(CHAT_PUSH_CHANNEL_ID, {
+    name: 'Mesaje (popup)',
+    description:
+      'Popup pe ecran când primești un mesaj nou în chat. Activează „Pop on screen” / „Pe ecran” dacă e oprit.',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 100, 80, 100],
+    lightColor: '#0EA5E9',
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false,
     enableVibrate: true,
@@ -192,6 +216,63 @@ export async function presentLocalBookingNotification(opts: {
 }
 
 /**
+ * Popup local în bara de notificări pentru un mesaj de chat nou.
+ * Fallback pentru push-ul remote (Expo Push): când aplicația e deschisă / în
+ * background și sosește un INSERT realtime pe chat_messages, afișăm heads-up
+ * pe canalul `chat_heads` (importance MAX = „Pop on screen").
+ */
+export async function presentLocalChatNotification(opts: {
+  title?: string;
+  body: string;
+  conversationId?: string;
+  businessId?: string;
+  isClient?: boolean;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (Platform.OS === 'web') {
+    return { ok: false, reason: 'web_unsupported' };
+  }
+  // Vibrație tactilă imediată — codul ăsta rulează doar cu app-ul viu.
+  try {
+    Vibration.vibrate([0, 100, 80, 100]);
+  } catch {
+    // ignore — unele medii nu au motor de vibrație
+  }
+  const Notifications = await loadNotifications();
+  if (!Notifications) {
+    return { ok: false, reason: 'push_unavailable' };
+  }
+  await configureNotificationPresentation();
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: opts.title ?? 'Mesaj nou',
+        body: opts.body,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        vibrate: [0, 100, 80, 100],
+        data: {
+          screen: 'chat',
+          conversationId: opts.conversationId ?? null,
+          businessId: opts.businessId ?? null,
+          isClient: opts.isClient ?? null,
+        },
+      },
+      trigger:
+        Platform.OS === 'android'
+          ? { channelId: CHAT_PUSH_CHANNEL_ID }
+          : null,
+    });
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      reason: e instanceof Error ? e.message : 'schedule_failed',
+    };
+  }
+}
+
+/**
  * Test local pentru „Pop on screen”: trimite după câteva secunde ca să poți
  * minimaliza app-ul — Android rareori face heads-up cât timp ești în aplicație.
  */
@@ -262,6 +343,13 @@ export type PushRegisterResult = {
 export async function registerForPushAsync(userId: string): Promise<PushRegisterResult> {
   if (Platform.OS === 'web') {
     return { token: null, reason: 'web_unsupported' };
+  }
+  if (isRunningInExpoGo()) {
+    return {
+      token: null,
+      reason:
+        'Expo Go (SDK 53+) nu suportă push remote pe Android. Folosește un development build / APK EAS.',
+    };
   }
   const Device = await import('expo-device');
   if (!Device.isDevice) {
@@ -466,13 +554,31 @@ export function mapPushTokenError(raw: string): string {
   return raw;
 }
 
-/** Navigate from push tap payload (data.screen / appointmentId). */
+/** Navigate from push tap payload (data.screen / appointmentId / conversationId). */
 export function handleNotificationNavigation(data: Record<string, unknown> | undefined) {
   if (!data) return;
   const screen = typeof data.screen === 'string' ? data.screen : null;
+
   if (screen === 'requests') {
     void setAppMode('business');
-    router.push('/(app)/business/requests');
+    router.push('/(app)/business/(tabs)/requests');
+    return;
+  }
+
+  if (screen === 'my-appointments') {
+    void setAppMode('client');
+    router.push('/(app)/my-appointments');
+    return;
+  }
+
+  if (screen === 'chat' && typeof data.conversationId === 'string' && data.conversationId) {
+    // Determină rolul și deschide fîșioara de conversație corespunzătoare.
+    const isClient = data.isClient === true;
+    const path = isClient
+      ? `/(app)/chat/${data.conversationId}`
+      : `/(app)/business/chat/${data.conversationId}`;
+    void setAppMode(isClient ? 'client' : 'business');
+    router.push(path as never);
   }
 }
 

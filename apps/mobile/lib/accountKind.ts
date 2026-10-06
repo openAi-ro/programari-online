@@ -13,18 +13,35 @@ export async function persistAccountKind(kind: AppMode): Promise<void> {
   } = await supabase.auth.getUser();
   if (!user) return;
 
-  const patch: {
-    id: string;
-    account_kind: AppMode;
-    email?: string;
-    phone?: string;
-  } = { id: user.id, account_kind: kind };
-  if (user.email) patch.email = user.email;
-  if (user.phone) patch.phone = user.phone;
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id, email, phone')
+    .eq('id', user.id)
+    .maybeSingle();
 
-  const { error } = await supabase.from('profiles').upsert(patch, { onConflict: 'id' });
+  if (!existing) {
+    const { error } = await supabase.from('profiles').insert({
+      id: user.id,
+      account_kind: kind,
+      email: user.email ?? null,
+      phone: user.phone ?? null,
+    });
+    if (error) console.warn('persistAccountKind insert failed', error.message);
+    return;
+  }
+
+  const patch: {
+    account_kind: AppMode;
+    email?: string | null;
+    phone?: string | null;
+  } = { account_kind: kind };
+  // Nu suprascriem un telefon deja salvat din Setări.
+  if (!existing.email && user.email) patch.email = user.email;
+  if (!existing.phone && user.phone) patch.phone = user.phone;
+
+  const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
   if (error) {
-    console.warn('persistAccountKind failed', error.message);
+    console.warn('persistAccountKind update failed', error.message);
   }
 }
 

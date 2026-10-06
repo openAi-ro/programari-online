@@ -19,9 +19,6 @@ export default function LoginScreen() {
           <Ionicons name="calendar" size={30} color={t.colors.onAccent} />
         </View>
         <Text style={[styles.title, { color: t.colors.text }]}>Programări</Text>
-        <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>
-          Alege tipul de cont. Client și business sunt conturi separate.
-        </Text>
         <Text style={[styles.version, { color: t.colors.textMuted }]}>
           {getAppVersionLabel()}
         </Text>
@@ -66,10 +63,6 @@ export default function LoginScreen() {
         </View>
         <View style={styles.flex}>
           <Text style={[styles.roleTitle, { color: t.colors.accent }]}>Creează cont client</Text>
-          <Text style={[styles.roleHint, { color: t.colors.textMuted }]}>
-            Scanează QR, rezervă un loc și vezi programările tale. Ai deja cont? Intră din
-            ecranul următor.
-          </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={t.colors.textFaint} />
       </Pressable>
@@ -93,9 +86,6 @@ export default function LoginScreen() {
         </View>
         <View style={styles.flex}>
           <Text style={[styles.roleTitle, { color: t.colors.accent }]}>Creează cont business</Text>
-          <Text style={[styles.roleHint, { color: t.colors.textMuted }]}>
-            Agenda, cereri, clienți, echipă, servicii, QR de rezervare și rapoarte.
-          </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={t.colors.textFaint} />
       </Pressable>
@@ -122,10 +112,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: -0.5,
   },
-  subtitle: {
-    fontSize: fontSize.md,
-    textAlign: 'center',
-  },
   version: {
     fontSize: fontSize.xs,
     textAlign: 'center',
@@ -150,7 +136,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   roleTitle: { fontSize: fontSize.lg, fontWeight: '800', letterSpacing: -0.3 },
-  roleHint: { fontSize: fontSize.sm, lineHeight: 19, marginTop: 2 },
   backBook: {
     flexDirection: 'row',
     alignItems: 'center',

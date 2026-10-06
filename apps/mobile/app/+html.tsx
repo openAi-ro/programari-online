@@ -13,6 +13,15 @@ export default function Root({ children }: { children: ReactNode }) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
 
+        {/* PWA / installable */}
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#0D9488" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Programări" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
           However, body scrolling is often nice to have for mobile web. If you want to enable it, remove this line.
@@ -21,6 +30,13 @@ export default function Root({ children }: { children: ReactNode }) {
 
         {/* Fundalul nu trebuie să clipească între scheme, înainte ca React să monteze tema. */}
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
+
+        {/* Register SW only on https or localhost — safe for Firebase Hosting / local web. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var h=location.hostname;var ok=location.protocol==='https:'||h==='localhost'||h==='127.0.0.1';if(!ok||!('serviceWorker' in navigator))return;window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>

@@ -19,6 +19,7 @@ import { applyAvailableUpdateWithTimeout } from '@/lib/appVersion';
 import { consumePendingAuthRedirect } from '@/lib/auth-redirect';
 import { isAuthCallbackUrl, isAuthRedirectHeld } from '@/lib/auth';
 import { stashAuthCallbackUrl } from '@/lib/auth-link';
+import { getThemePreference } from '@/lib/themePreference';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
 
@@ -41,6 +42,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
+
+  useEffect(() => {
+    void getThemePreference();
+  }, []);
 
   useEffect(() => {
     if (isUpdatePending) {
@@ -134,6 +139,9 @@ function useSessionGuard() {
     const inPublicBook = segments[0] === 'b' || path.startsWith('/b/');
     const inPublicInstall =
       (segments[0] as string) === 'install' || path.startsWith('/install');
+    const inDevNavBench =
+      __DEV__ &&
+      ((segments[0] as string) === 'dev-nav-bench' || path.startsWith('/dev-nav-bench'));
     const inAuthCallbackPath = inAuthCallback || path.startsWith('/auth/callback');
 
     if (
@@ -141,7 +149,8 @@ function useSessionGuard() {
       !inAuthGroup &&
       !inAuthCallbackPath &&
       !inPublicBook &&
-      !inPublicInstall
+      !inPublicInstall &&
+      !inDevNavBench
     ) {
       router.replace('/(auth)/login');
     } else if (

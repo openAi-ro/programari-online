@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-import { Button, Callout, Field, Screen, Segmented, useTheme } from '@/components/ui';
-import { fontSize, radius, spacing } from '@/constants/theme';
-import { InstallQrCard } from '@/components/InstallQrCard';
+import { Button, Callout, Screen, Segmented, useTheme } from '@/components/ui';
+import { fontSize, spacing } from '@/constants/theme';
+import {
+  LoginButton,
+  LoginButtonHalf,
+  LoginButtonRow,
+  LoginCard,
+  LoginField,
+} from '@/components/LoginCard';
 import { assertAccountKind, persistAccountKind } from '@/lib/accountKind';
 import type { AppMode } from '@/lib/appMode';
 import {
@@ -24,6 +30,11 @@ import {
 import { getAppVersionLabel } from '@/lib/appVersion';
 import { peekPendingAuthRedirect } from '@/lib/auth-redirect';
 import { isValidRoMobile, normalizePhoneE164 } from '@/lib/phone';
+import {
+  clearRememberedCredentials,
+  loadRememberedCredentials,
+  saveRememberedCredentials,
+} from '@/lib/rememberCredentials';
 
 type Channel = 'email' | 'phone';
 type Mode = 'login' | 'register';
@@ -31,11 +42,6 @@ type Mode = 'login' | 'register';
 const CHANNELS: { value: Channel; label: string }[] = [
   { value: 'email', label: 'Email' },
   { value: 'phone', label: 'Telefon' },
-];
-
-const MODES: { value: Mode; label: string }[] = [
-  { value: 'register', label: 'Creează cont' },
-  { value: 'login', label: 'Intră în cont' },
 ];
 
 const RESEND_COOLDOWN_SEC = 60;
@@ -96,11 +102,12 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberPassword, setRememberPassword] = useState(false);
 
   const [phone, setPhone] = useState('');
+  const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [stubSend, setStubSend] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const otpPhoneRef = useRef<string | null>(null);
   const otpLock = useRef(false);
@@ -119,12 +126,31 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     return () => clearInterval(id);
   }, [cooldown]);
 
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = await loadRememberedCredentials();
+      if (cancelled || !saved) return;
+      setEmail(saved.email);
+      if (saved.password) setPassword(saved.password);
+      setRememberPassword(true);
+      setMode('login');
+      setChannel('email');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+
   function clearFeedback() {
     setError(null);
     setMessage(null);
   }
 
-  async function handleEmailSubmit() {
+  async function handleEmailSubmit(asMode: Mode = mode) {
+    setMode(asMode);
     clearFeedback();
     const e = email.trim();
     if (!e) {
@@ -137,7 +163,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     }
 
     setLoading(true);
-    if (mode === 'register') {
+    if (asMode === 'register') {
       await signOut();
       const { data, error: err } = await signUpWithPassword(e, password, kind);
       if (err) {
@@ -180,6 +206,11 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       setError(check.error);
       return;
     }
+    if (rememberPassword) {
+      await saveRememberedCredentials(e, password);
+    } else {
+      await clearRememberedCredentials();
+    }
     setMessage('Autentificare reușită.');
   }
 
@@ -204,6 +235,10 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
   async function handleSendWhatsAppOtp() {
     if (otpLock.current) return;
     clearFeedback();
+    if (!whatsappConsent) {
+      setError('Bifeaza acordul pentru a primi codul pe WhatsApp.');
+      return;
+    }
     const normalized = normalizePhoneE164(phone);
     if (!normalized || !isValidRoMobile(normalized)) {
       setError('Folosește un număr valid (07xxxxxxxx sau +40...).');
@@ -222,7 +257,6 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
     setOtpSent(true);
     otpPhoneRef.current = normalized;
-    setStubSend(data?.stub === true);
     setCooldown(RESEND_COOLDOWN_SEC);
     setMessage(
       data?.stub
@@ -277,27 +311,6 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
   return (
     <Screen scroll bottomInset={spacing['3xl']}>
-      <View style={styles.hero}>
-        <View style={[styles.logo, { backgroundColor: t.colors.accent }, t.shadows.accent]}>
-          <Ionicons
-            name={isBusiness ? 'storefront-outline' : 'person-outline'}
-            size={30}
-            color={t.colors.onAccent}
-          />
-        </View>
-        <Text style={[styles.title, { color: t.colors.text }]}>
-          {isBusiness ? 'Cont business' : 'Cont client'}
-        </Text>
-        <Text style={[styles.subtitle, { color: t.colors.textMuted }]}>
-          {isBusiness
-            ? 'Agenda, cereri, clienți, echipă, servicii, QR și rapoarte'
-            : 'Rezervă un loc, scanează QR-ul și vezi programările tale'}
-        </Text>
-        <Text style={[styles.version, { color: t.colors.textMuted }]}>
-          {getAppVersionLabel()}
-        </Text>
-      </View>
-
       <Button
         label={
           peekPendingAuthRedirect()
@@ -320,226 +333,208 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
       <Segmented value={channel} onChange={setChannel} options={CHANNELS} />
 
-      {channel === 'email' ? (
-        <>
-          <Segmented
-            value={mode}
-            onChange={(next) => {
-              setMode(next);
-              clearFeedback();
-            }}
-            options={MODES}
-          />
+      <LoginCard heading={isBusiness ? 'Cont business' : 'Cont client'}>
+        {channel === 'email' ? (
+          <>
+            <LoginField
+              icon="mail-outline"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              autoCorrect={false}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              editable={!loading}
+            />
+            <LoginField
+              icon="lock-closed-outline"
+              secureTextEntry
+              autoComplete={mode === 'register' ? 'new-password' : 'password'}
+              placeholder="Parola"
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
+              onSubmitEditing={() => void handleEmailSubmit()}
+              returnKeyType="go"
+            />
 
-          <Field
-            label="Email"
-            icon="mail-outline"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            autoCorrect={false}
-            placeholder="email@exemplu.ro"
-            hint={
-              mode === 'register'
-                ? 'Îți trimitem un link de activare pe această adresă. Contul se activează doar după ce apeși linkul.'
-                : undefined
-            }
-            value={email}
-            onChangeText={setEmail}
-            editable={!loading}
-          />
-          <Field
-            label="Parolă"
-            icon="lock-closed-outline"
-            secureTextEntry
-            autoComplete={mode === 'register' ? 'new-password' : 'password'}
-            placeholder="Minim 6 caractere"
-            value={password}
-            onChangeText={setPassword}
-            editable={!loading}
-            onSubmitEditing={() => void handleEmailSubmit()}
-            returnKeyType="go"
-          />
 
-          {mode === 'login' ? (
-            <Button
-              label="Ai uitat parola?"
-              variant="ghost"
-              size="sm"
-              fullWidth={false}
+            <Pressable
+              onPress={() => setRememberPassword((v) => !v)}
+              style={[
+                styles.consentRow,
+                {
+                  borderColor: rememberPassword ? t.colors.accent : t.colors.border,
+                  backgroundColor: rememberPassword
+                    ? t.colors.accentSoft ?? t.colors.surfaceMuted
+                    : t.colors.surface,
+                },
+              ]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rememberPassword }}
+              accessibilityLabel="Reține parola"
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  {
+                    borderColor: t.colors.border,
+                    backgroundColor: rememberPassword ? t.colors.accent : 'transparent',
+                  },
+                ]}
+              >
+                {rememberPassword ? (
+                  <Ionicons name="checkmark" size={14} color={t.colors.onAccent} />
+                ) : null}
+              </View>
+              <Text style={[styles.consentText, { color: t.colors.text }]}>
+                Reține parola
+              </Text>
+            </Pressable>
+
+            {error ? <Callout tone="danger">{error}</Callout> : null}
+            {message ? <Callout tone="success">{message}</Callout> : null}
+
+            <LoginButtonRow>
+              <LoginButtonHalf>
+                <LoginButton
+                  label="Intră în cont"
+                  onPress={() => void handleEmailSubmit('login')}
+                  disabled={loading}
+                  loading={loading && mode === 'login'}
+                />
+              </LoginButtonHalf>
+              <LoginButtonHalf>
+                <LoginButton
+                  label="Creează cont"
+                  onPress={() => void handleEmailSubmit('register')}
+                  disabled={loading}
+                  loading={loading && mode === 'register'}
+                />
+              </LoginButtonHalf>
+            </LoginButtonRow>
+            <LoginButton
+              label="Recuperează parola"
+              tone="danger"
               onPress={() => router.push('/(auth)/forgot-password')}
-              style={styles.forgot}
               disabled={loading}
             />
-          ) : null}
-
-          {error ? <Callout tone="danger">{error}</Callout> : null}
-          {message ? <Callout tone="success">{message}</Callout> : null}
-
-          <Button
-            label={mode === 'login' ? 'Intră în cont' : 'Creează cont'}
-            icon={mode === 'login' ? 'log-in-outline' : 'person-add-outline'}
-            onPress={() => void handleEmailSubmit()}
-            loading={loading}
-            style={styles.submit}
-          />
-          {activationEmail ? (
-            <Button
-              label={resendBusy ? 'Se trimite…' : 'Retrimite linkul de activare'}
-              variant="ghost"
-              icon="mail-outline"
-              onPress={() => void handleResendActivation()}
-              loading={resendBusy}
-              disabled={loading || resendBusy}
-              style={styles.resend}
-            />
-          ) : null}
-        </>
-      ) : (
-        <>
-          <Field
-            label="Telefon"
-            icon="logo-whatsapp"
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            autoCorrect={false}
-            placeholder="07xxxxxxxx sau +407xxxxxxxx"
-            hint="Primești un cod pe WhatsApp. Dacă nu ai cont, se creează automat ca acest tip."
-            value={phone}
-            onChangeText={setPhone}
-            onBlur={() => {
-              if (!otpSent || !otpPhoneRef.current) return;
-              const n = normalizePhoneE164(phone);
-              if (n !== otpPhoneRef.current) {
-                setOtpSent(false);
-                setStubSend(false);
-                setOtpCode('');
-                otpPhoneRef.current = null;
-              }
-            }}
-            editable={!loading}
-          />
-
-          {!otpSent ? (
-            <>
-              {error ? <Callout tone="danger">{error}</Callout> : null}
-              {message ? <Callout tone="success">{message}</Callout> : null}
-              <Button
-                label="Trimite cod pe WhatsApp"
-                icon="chatbubble-ellipses-outline"
-                onPress={() => void handleSendWhatsAppOtp()}
-                loading={loading}
-                style={styles.submit}
+            {activationEmail ? (
+              <LoginButton
+                label={resendBusy ? 'Se trimite…' : 'Retrimite linkul de activare'}
+                onPress={() => void handleResendActivation()}
+                disabled={loading || resendBusy}
               />
-            </>
-          ) : (
-            <>
-              {stubSend ? (
-                <Callout tone="warning" title="Trimitere simulată">
-                  Serverul a simulat trimiterea (stub). Folosește codul din logurile Edge
-                  Function / mediul de dezvoltare.
-                </Callout>
-              ) : null}
-
-              <Field
-                label="Cod din WhatsApp"
-                icon="keypad-outline"
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                autoCorrect={false}
-                placeholder="6 cifre"
-                maxLength={6}
-                value={otpCode}
-                onChangeText={setOtpCode}
-                editable={!loading}
-                onSubmitEditing={() => void handleVerifyWhatsAppOtp()}
-                returnKeyType="go"
-              />
-
-              {error ? <Callout tone="danger">{error}</Callout> : null}
-              {message ? <Callout tone="success">{message}</Callout> : null}
-
-              <Button
-                label="Intră în cont"
-                icon="log-in-outline"
-                onPress={() => void handleVerifyWhatsAppOtp()}
-                loading={loading}
-                style={styles.submit}
-              />
-
-              <Button
-                label={
-                  cooldown > 0 ? `Retrimite cod (${cooldown}s)` : 'Retrimite cod pe WhatsApp'
+            ) : null}
+          </>
+        ) : (
+          <>
+            <LoginField
+              icon="logo-whatsapp"
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              autoCorrect={false}
+              placeholder="Telefon"
+              value={phone}
+              onChangeText={setPhone}
+              onBlur={() => {
+                if (!otpSent || !otpPhoneRef.current) return;
+                const n = normalizePhoneE164(phone);
+                if (n !== otpPhoneRef.current) {
+                  setOtpSent(false);
+                  setOtpCode('');
+                  otpPhoneRef.current = null;
                 }
-                variant="ghost"
-                icon="refresh-outline"
-                onPress={() => void handleSendWhatsAppOtp()}
-                disabled={loading || cooldown > 0}
-                style={styles.resend}
-              />
-            </>
-          )}
-
-          <View style={[styles.hintBox, { backgroundColor: t.colors.surfaceMuted }]}>
-            <Ionicons
-              name="logo-whatsapp"
-              size={16}
-              color={t.colors.textMuted}
-              style={styles.hintIcon}
+              }}
+              editable={!loading}
             />
-            <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-              Autentificare cu număr de telefon prin WhatsApp. Același număr ține minte dacă
-              ești client sau business — nu poți intra pe ușa cealaltă.
-            </Text>
-          </View>
-        </>
-      )}
 
-      <InstallQrCard />
+            {!otpSent ? (
+              <>
+                <Pressable
+                  onPress={() => setWhatsappConsent((v) => !v)}
+                  style={[styles.consentRow, { borderColor: whatsappConsent ? t.colors.accent : t.colors.border, backgroundColor: whatsappConsent ? t.colors.accentSoft ?? t.colors.surfaceMuted : t.colors.surface }]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: whatsappConsent }}
+                >
+                  <View style={[styles.checkbox, { borderColor: t.colors.border, backgroundColor: whatsappConsent ? t.colors.accent : 'transparent' }]}>
+                    {whatsappConsent ? <Ionicons name="checkmark" size={14} color={t.colors.onAccent} /> : null}
+                  </View>
+                  <Text style={[styles.consentText, { color: t.colors.text }]}>
+                    Sunt de acord sa primesc codul de verificare pe WhatsApp la numarul introdus.{' '}
+                    <Text onPress={() => Linking.openURL('https://programari.expo.app/privacy')} style={[styles.consentLink, { color: t.colors.accent }]}>
+                      Politica de confidențialitate
+                    </Text>
+                  </Text>
+                </Pressable>
+                {error ? <Callout tone="danger">{error}</Callout> : null}
+                {message ? <Callout tone="success">{message}</Callout> : null}
+                <LoginButton
+                  label="Trimite cod pe WhatsApp"
+                  onPress={() => void handleSendWhatsAppOtp()}
+                  disabled={loading}
+                  loading={loading}
+                />
+              </>
+            ) : (
+              <>
+                <LoginField
+                  icon="keypad-outline"
+                  keyboardType="number-pad"
+                  autoComplete="one-time-code"
+                  autoCorrect={false}
+                  placeholder="Cod"
+                  maxLength={6}
+                  value={otpCode}
+                  onChangeText={setOtpCode}
+                  editable={!loading}
+                  onSubmitEditing={() => void handleVerifyWhatsAppOtp()}
+                  returnKeyType="go"
+                />
+
+                {error ? <Callout tone="danger">{error}</Callout> : null}
+                {message ? <Callout tone="success">{message}</Callout> : null}
+
+                <LoginButton
+                  label="Intră în cont"
+                  onPress={() => void handleVerifyWhatsAppOtp()}
+                  disabled={loading}
+                  loading={loading}
+                />
+
+                <LoginButton
+                  label={
+                    cooldown > 0 ? `Retrimite cod (${cooldown}s)` : 'Retrimite cod pe WhatsApp'
+                  }
+                  onPress={() => void handleSendWhatsAppOtp()}
+                  disabled={loading || cooldown > 0}
+                />
+              </>
+            )}
+          </>
+        )}
+      </LoginCard>
+
+      <Text style={[styles.version, { color: t.colors.textMuted }]}>
+        {getAppVersionLabel()}
+      </Text>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  logo: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: fontSize.md,
-    textAlign: 'center',
-  },
   version: {
     fontSize: fontSize.xs,
     textAlign: 'center',
     fontWeight: '600',
     letterSpacing: 0.3,
     marginBottom: spacing.md,
-    marginTop: spacing.xs,
+    marginTop: spacing.md,
   },
   switchRole: { alignSelf: 'center', marginBottom: spacing.md },
-  forgot: { alignSelf: 'flex-end', marginTop: -spacing.xs, marginBottom: spacing.xs },
-  submit: { marginTop: spacing.sm },
-  resend: { marginTop: spacing.xs },
-  hintBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    marginTop: spacing.lg,
-  },
-  hintIcon: { marginTop: 1 },
-  hint: { flex: 1, fontSize: fontSize.xs, lineHeight: 18 },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderWidth: 1, borderRadius: 12, marginTop: 8 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  consentText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18 },
+  consentLink: { textDecorationLine: 'underline', fontWeight: '600' },
 });

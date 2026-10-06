@@ -9,6 +9,8 @@ export function normalizePhoneE164(
 
   let digits = raw.replace(/[^\d+]/g, '');
   if (digits.startsWith('+')) digits = digits.slice(1);
+  // 0039… / 0040… (prefix internațional)
+  if (digits.startsWith('00')) digits = digits.slice(2);
 
   if (digits.startsWith('0') && digits.length >= 10) {
     digits = defaultCountry + digits.slice(1);

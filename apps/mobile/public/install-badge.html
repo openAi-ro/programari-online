@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Instalează Programări — badge</title>
+  <style>
+    :root { --teal: #0D9488; --bg: #F0FDFA; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); display: grid; place-items: center; min-height: 100vh; }
+    a.badge {
+      display: inline-flex; align-items: center; gap: 12px;
+      padding: 12px 18px; border-radius: 999px;
+      background: var(--teal); color: #fff; text-decoration: none;
+      font-weight: 600; font-size: 15px;
+      box-shadow: 0 8px 24px rgba(13,148,136,.35);
+    }
+    a.badge img { width: 36px; height: 36px; border-radius: 8px; background: #fff; }
+    a.badge:hover { filter: brightness(1.05); }
+  </style>
+</head>
+<body>
+  <!-- Exemplu standalone; pe site-ul tău folosește snippet-ul din docs/pwa-embed.md -->
+  <a class="badge" href="https://programari.expo.app/install" rel="noopener">
+    <img src="/icons/icon-192.png" alt="" width="36" height="36" />
+    Instalează Programări
+  </a>
+</body>
+</html>
