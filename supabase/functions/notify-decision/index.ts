@@ -19,6 +19,7 @@ import {
   messageRejected,
   notifyClientChannels,
 } from '../_shared/notify.ts';
+import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 type AppointmentRow = {
   id: string;
@@ -139,23 +140,41 @@ Deno.serve(async (req) => {
       : messageRejected(businessName, whenLabel);
 
   let wantsDecision = true;
+  let wantsWhatsapp = true;
   if (live.client_user_id) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('notify_decision')
+      .select('notify_decision, notify_whatsapp')
       .eq('id', live.client_user_id)
       .maybeSingle();
     wantsDecision = profile?.notify_decision !== false;
+    wantsWhatsapp = profile?.notify_whatsapp !== false;
   }
 
   const results = wantsDecision
     ? await notifyClientChannels({
         email: live.client_email,
-        phone: live.client_phone,
+        phone: wantsWhatsapp ? live.client_phone : null,
         subject: copy.subject,
         text: copy.text,
       })
     : [{ ok: true, channel: 'email' as const, stub: true }];
+
+  // popup push catre client (aprobat/respins) — sound+priority high via shared helper
+  let pushSent = 0;
+  if (live.client_user_id && wantsDecision) {
+    try {
+      const { sent } = await sendExpoPushToUser(admin, live.client_user_id, {
+        title: copy.subject,
+        body: copy.text,
+        channelId: 'cereri_heads',
+        data: { screen: 'my-appointments', appointmentId: live.id },
+      });
+      pushSent = sent;
+    } catch (e) {
+      console.error('client decision push failed', e);
+    }
+  }
 
   const { error: updErr } = await admin
     .from('appointments')
@@ -171,5 +190,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'update_failed', results }, 500);
   }
 
-  return jsonResponse({ ok: true, status: live.status, results });
+  return jsonResponse({ ok: true, status: live.status, results, pushSent });
 });

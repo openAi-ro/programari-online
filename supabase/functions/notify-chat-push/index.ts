@@ -1,0 +1,21 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { handleCors, jsonResponse } from '../_shared/cors.ts';
+const EXPO='https://exp.host/--/api/v2/push/send';
+Deno.serve(async (req)=>{
+  const c=handleCors(req); if(c) return c;
+  const body = await req.json().catch(()=>({}));
+  const record = body.record ?? body;
+  if(!record?.conversation_id || !record?.sender_user_id) return jsonResponse({skipped:'missing'}, 200);
+  const admin=createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const { data: conv } = await admin.from('chat_conversations').select('business_id,client_user_id').eq('id', record.conversation_id).maybeSingle();
+  if(!conv) return jsonResponse({skipped:'no_conv'},200);
+  const { data: biz } = await admin.from('business_profiles').select('owner_user_id').eq('id', conv.business_id).maybeSingle();
+  const recipient = record.sender_user_id === conv.client_user_id ? biz?.owner_user_id : conv.client_user_id;
+  if(!recipient || recipient===record.sender_user_id) return jsonResponse({skipped:'no_recipient'},200);
+  const isClient = recipient===conv.client_user_id;
+  const { data: toks } = await admin.from('device_push_tokens').select('expo_push_token').eq('user_id', recipient);
+  if(!toks?.length) return jsonResponse({skipped:'no_tokens'},200);
+  const msgs = toks.map((t:any)=>({ to:t.expo_push_token, title:'Mesaj nou', body: String(record.body||'').slice(0,120), channelId:'chat_heads', data:{ screen:'chat', conversationId: record.conversation_id, businessId: conv.business_id, isClient }}));
+  await fetch(EXPO,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(msgs)});
+  return jsonResponse({ok:true, sent: msgs.length});
+});

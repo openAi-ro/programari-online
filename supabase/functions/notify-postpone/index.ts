@@ -12,6 +12,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { authorizeNotifyRequest } from '../_shared/auth-notify.ts';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { messagePostpone, notifyClientChannels } from '../_shared/notify.ts';
+import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 type Payload = {
   appointment_id?: string;
@@ -52,8 +53,8 @@ Deno.serve(async (req) => {
   if (!appointmentId) {
     return jsonResponse({ error: 'missing_appointment_id' }, 400);
   }
-  if (hours !== 1 && hours !== 2) {
-    return jsonResponse({ error: 'invalid_hours', detail: 'hours must be 1 or 2' }, 400);
+  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours < 1 || hours > 12) {
+    return jsonResponse({ error: 'invalid_hours', detail: 'hours must be 1-12' }, 400);
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -127,6 +128,21 @@ Deno.serve(async (req) => {
     subject: copy.subject,
     text: copy.text,
   });
+  // push popup client pentru amânare — sound+priority high via shared helper
+  let pushSent = 0;
+  try {
+    if (live.client_user_id) {
+      const { sent } = await sendExpoPushToUser(admin, live.client_user_id, {
+        title: copy.subject,
+        body: copy.text,
+        channelId: 'cereri_heads',
+        data: { screen: 'my-appointments', appointmentId: live.id },
+      });
+      pushSent = sent;
+    }
+  } catch (e) {
+    console.error('client postpone push failed', e);
+  }
 
   return jsonResponse({
     ok: true,
@@ -135,5 +151,6 @@ Deno.serve(async (req) => {
     start_at: newStart,
     end_at: newEnd,
     results,
+    pushSent,
   });
 });

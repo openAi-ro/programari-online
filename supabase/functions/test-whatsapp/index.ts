@@ -45,9 +45,19 @@ Deno.serve(async (req) => {
 
   const { data: profile } = await userClient
     .from('profiles')
-    .select('phone, email')
+    .select('phone, email, notify_whatsapp')
     .eq('id', user.id)
     .maybeSingle();
+
+  if (profile?.notify_whatsapp === false) {
+    return jsonResponse(
+      {
+        error: 'whatsapp_disabled',
+        hint: 'Activează caseta WhatsApp în Setări ca să trimiți mesaje pe acest număr.',
+      },
+      400
+    );
+  }
 
   const phone =
     normalizePhoneE164(profile?.phone) ?? normalizePhoneE164(user.phone);
