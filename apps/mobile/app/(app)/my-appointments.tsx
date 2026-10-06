@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
+import { ClientTabBar } from '@/components/ClientTabBar';
 import {
   Button,
   Callout,
@@ -24,13 +25,15 @@ import {
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { addAppointmentToCalendar } from '@/lib/ics';
 import {
-  hasCoordinates,
+  formatAddress,
+  hasLocation,
   locationFromBusiness,
-  openDrive,
+  openDriveChooser,
 } from '@/lib/location';
 import { useBack } from '@/lib/nav';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
-import { invokeRefundDeposit, mapPayError, startDepositCheckout } from '@/lib/payments';
+import { invokeRefundDeposit } from '@/lib/payments';
+import { ensureChatConversation, sendMessage } from '@/lib/chatRpc';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
@@ -61,7 +64,6 @@ export default function MyAppointmentsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
-  const [payBusyId, setPayBusyId] = useState<string | null>(null);
   const [reviewsByApt, setReviewsByApt] = useState<Record<string, Review>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
@@ -148,9 +150,17 @@ export default function MyAppointmentsScreen() {
         business_profiles: bizById[a.business_id] ?? null,
       }))
     );
-    const { data: revs } = await supabase.from('reviews').select('*');
+    const aptIds = list.map((a) => a.id);
     const map: Record<string, Review> = {};
-    for (const r of (revs ?? []) as Review[]) map[r.appointment_id] = r;
+    if (aptIds.length) {
+      const { data: revs } = await supabase
+        .from('reviews')
+        .select(
+          'id, business_id, appointment_id, client_user_id, staff_id, rating, comment, created_at'
+        )
+        .in('appointment_id', aptIds);
+      for (const r of (revs ?? []) as Review[]) map[r.appointment_id] = r;
+    }
     setReviewsByApt(map);
     setLoading(false);
   }, []);
@@ -204,16 +214,12 @@ export default function MyAppointmentsScreen() {
     await load();
   }
 
-  async function payDeposit(id: string) {
-    setError(null);
-    setPayBusyId(id);
-    const result = await startDepositCheckout(id);
-    setPayBusyId(null);
-    if (!result.ok) {
-      setError(mapPayError(result.error ?? 'checkout_failed'));
-      return;
-    }
-    await load();
+
+  async function sendQuickMessage(item: Row, text: string) {
+    const { conversation, error: cErr } = await ensureChatConversation(item.business_id);
+    if (cErr || !conversation) { setError(cErr ?? 'Nu s-a putut deschide chatul.'); return; }
+    const { error: mErr } = await sendMessage(conversation.id, text);
+    if (mErr) setError(mErr);
   }
 
   async function saveReview() {
@@ -255,7 +261,10 @@ export default function MyAppointmentsScreen() {
     );
   }
 
+  const pendingCount = rows.filter((r) => r.status === 'pending').length;
+
   return (
+    <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
     <Screen title="Programările mele" subtitle="Ce ai rezervat și ce urmează" onBack={back} scroll={false}>
       <FlatList
         data={shown}
@@ -320,6 +329,7 @@ export default function MyAppointmentsScreen() {
         }
         ListEmptyComponent={
           <EmptyState
+            icon="calendar-clear-outline"
             title={
               rows.length === 0
                 ? 'Nu ai programări încă'
@@ -329,8 +339,30 @@ export default function MyAppointmentsScreen() {
             }
             description={
               rows.length === 0
-                ? 'Scanează codul QR al unui business sau deschide un link de programare.'
+                ? 'Scanează QR-ul salonului sau folosește linkul / codul public de rezervare.'
                 : 'Schimbă filtrul ca să vezi celelalte programări.'
+            }
+            action={
+              rows.length === 0 ? (
+                <View style={{ gap: spacing.sm, alignItems: 'stretch', width: '100%' }}>
+                  <Button
+                    label="Scanează QR"
+                    icon="qr-code-outline"
+                    onPress={() => router.push('/(app)/scan' as never)}
+                  />
+                  <Text
+                    style={{
+                      color: t.colors.textMuted,
+                      fontSize: 13,
+                      textAlign: 'center',
+                      flexShrink: 1,
+                    }}
+                    numberOfLines={2}
+                  >
+                    Sau deschide un link public / introdu codul pe ecranul Acasă.
+                  </Text>
+                </View>
+              ) : undefined
             }
           />
         }
@@ -339,6 +371,16 @@ export default function MyAppointmentsScreen() {
             appointment={item}
             businessName={item.business_profiles?.name}
             localLabel={localLabel(item)}
+            cancelNoticeMinutes={item.business_profiles?.cancel_notice_minutes}
+            onShare={() => {
+              const biz = item.business_profiles?.name ?? 'salon';
+              const when = localLabel(item);
+              void Share.share({
+                message: `Programare la ${biz}: ${when}${
+                  item.service_name ? ` · ${item.service_name}` : ''
+                }`,
+              });
+            }}
             onCancel={() => cancelAppointment(item)}
             canCancel={canClientCancel(item, item.business_profiles)}
             canReschedule={
@@ -354,8 +396,6 @@ export default function MyAppointmentsScreen() {
             }}
             canConfirm={canConfirmAttendance(item)}
             onConfirmAttendance={() => confirmAttendance(item.id)}
-            onPayDeposit={() => void payDeposit(item.id)}
-            payBusy={payBusyId === item.id}
             onReview={
               canReview(item)
                 ? () => {
@@ -379,17 +419,27 @@ export default function MyAppointmentsScreen() {
             }
             onDrive={
               item.business_profiles &&
-              hasCoordinates(locationFromBusiness(item.business_profiles as BusinessProfile))
+              hasLocation(locationFromBusiness(item.business_profiles as BusinessProfile))
                 ? () =>
-                    void openDrive(
+                    void openDriveChooser(
                       locationFromBusiness(item.business_profiles as BusinessProfile)
                     )
                 : undefined
             }
+            driveAddress={
+              item.business_profiles
+                ? formatAddress(
+                    locationFromBusiness(item.business_profiles as BusinessProfile)
+                  ) ?? undefined
+                : undefined
+            }
+            onQuickMessage={(txt) => sendQuickMessage(item, txt)}
           />
         )}
       />
     </Screen>
+    <ClientTabBar badges={{ appointments: pendingCount }} />
+    </View>
   );
 }
 

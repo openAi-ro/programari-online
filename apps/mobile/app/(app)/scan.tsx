@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  hint: { flex: 1, fontSize: fontSize.sm, lineHeight: 18 },
+  hint: { flex: 1, minWidth: 0, fontSize: fontSize.sm, lineHeight: 18 },
   retry: {
     flexDirection: 'row',
     alignItems: 'center',
