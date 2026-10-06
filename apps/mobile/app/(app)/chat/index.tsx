@@ -1,0 +1,74 @@
+import { useCallback, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Callout, EmptyState, ListLoadingScreen, Screen, useTheme } from '@/components/ui';
+import { spacing } from '@/constants/theme';
+import { fetchLatestMessages, listConversations } from '@/lib/chatRpc';
+import { useBack } from '@/lib/nav';
+import { supabase } from '@/lib/supabase';
+import type { ChatConversation, ChatMessage } from '@/lib/types';
+
+export default function ClientChatListScreen() {
+  const t = useTheme();
+  const back = useBack();
+  const router = useRouter();
+  const [rows, setRows] = useState<ChatConversation[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [latest, setLatest] = useState<Record<string, ChatMessage | null>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setError(null);
+    const res = await listConversations();
+    if (res.error) { setLoading(false); setError(res.error); return; }
+    setRows(res.conversations);
+    const ids = res.conversations.map((c) => c.id);
+    const lat = await fetchLatestMessages(ids);
+    setLatest(lat.latest);
+    const bizIds: string[] = [];
+    for (const c of res.conversations) { if (bizIds.indexOf(c.business_id) < 0) bizIds.push(c.business_id); }
+    if (bizIds.length) {
+      const r = await supabase.from('business_profiles').select('id, name').in('id', bizIds);
+      const map: Record<string, string> = {};
+      for (const b of ((r.data ?? []) as Array<{ id: string; name: string }>)) map[b.id] = b.name;
+      setNames(map);
+    }
+    setLoading(false);
+  }, []);
+  useFocusEffect(useCallback(() => { setLoading(true); void load(); }, [load]));
+  if (loading && rows.length === 0) {
+    return <ListLoadingScreen title='Mesaje' subtitle='Chat cu business-urile' onBack={back} label='Se încarcă conversațiile…' />;
+  }
+  return (
+    <Screen title='Mesaje' subtitle='Chat cu business-urile' onBack={back}>
+      {error ? (
+        <Callout tone='danger' title='A apărut o eroare'>{error}</Callout>
+      ) : rows.length === 0 ? (
+        <EmptyState icon='chatbubbles-outline' title='Nicio conversație' description='Conversația apare după prima programare.' />
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => (
+            <Pressable onPress={() => router.push('/(app)/chat/' + item.id as never)} style={[styles.row, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
+              <View style={styles.flex}>
+                <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>{names[item.business_id] ?? 'Business'}</Text>
+                <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id]?.body ?? 'Deschide conversatia'}</Text>
+              </View>
+            </Pressable>
+          )}
+        />
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: { gap: spacing.sm },
+  row: { borderWidth: 1, borderRadius: 12, padding: 12 },
+  flex: { flex: 1, gap: 2 },
+  name: { fontSize: 15, fontWeight: '700' },
+  preview: { fontSize: 13 },
+});
+
