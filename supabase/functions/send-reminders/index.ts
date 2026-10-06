@@ -3,7 +3,7 @@
  *
  * Cron every 1–5 minutes:
  * 1) 24h before: approved, reminder_24h_sent=false, start_at in now+23.5h … now+24.5h
- * 2) 1h before: approved, reminder_sent=false, start_at in now+55m … now+65m
+ * 2) 30min before: approved, reminder_sent=false, start_at in now+25m .. now+35m.
  *
  * Invoke with service role (cron / scheduled function).
  */
@@ -14,6 +14,7 @@ import {
   messageReminder24h,
   notifyClientChannels,
 } from '../_shared/notify.ts';
+import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 type Admin = ReturnType<typeof createClient>;
 
@@ -35,7 +36,7 @@ async function processWindow(
     from: string;
     to: string;
     flag: 'reminder_sent' | 'reminder_24h_sent';
-    kind: '1h' | '24h';
+    kind: '30min' | '24h';
   }
 ): Promise<{ id: string; ok: boolean; detail?: string; kind: string }[]> {
   const { data: rows, error } = await admin
@@ -59,13 +60,15 @@ async function processWindow(
     ...new Set(list.map((r) => r.client_user_id).filter((v): v is string => !!v)),
   ];
   const notifyByUser: Record<string, boolean> = {};
+  const whatsappByUser: Record<string, boolean> = {};
   if (clientIds.length) {
     const { data: profiles } = await admin
       .from('profiles')
-      .select('id, notify_reminders')
+      .select('id, notify_reminders, notify_whatsapp')
       .in('id', clientIds);
     for (const p of profiles ?? []) {
       notifyByUser[p.id as string] = p.notify_reminders !== false;
+      whatsappByUser[p.id as string] = p.notify_whatsapp !== false;
     }
   }
 
@@ -101,12 +104,28 @@ async function processWindow(
         : messageReminder(businessName, timeLocal, timezone);
 
     try {
+      const wantsWhatsapp =
+        !appt.client_user_id || whatsappByUser[appt.client_user_id] !== false;
       await notifyClientChannels({
         email: appt.client_email,
-        phone: appt.client_phone,
+        phone: wantsWhatsapp ? appt.client_phone : null,
         subject: copy.subject,
         text: copy.text,
       });
+
+      // Best-effort client push (even if email/phone missing); do not fail reminder
+      if (appt.client_user_id) {
+        try {
+          await sendExpoPushToUser(admin, appt.client_user_id, {
+            title: copy.subject,
+            body: copy.text,
+            channelId: 'cereri_heads',
+            data: { screen: 'my-appointments', appointmentId: appt.id },
+          });
+        } catch (pushErr) {
+          console.error('reminder push failed', appt.id, pushErr);
+        }
+      }
 
       const { error: updErr } = await admin
         .from('appointments')
@@ -173,9 +192,9 @@ Deno.serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceKey);
   const now = Date.now();
 
-  const window1h = {
-    from: new Date(now + 55 * 60 * 1000).toISOString(),
-    to: new Date(now + 65 * 60 * 1000).toISOString(),
+  const window30min = {
+    from: new Date(now + 25 * 60 * 1000).toISOString(),
+    to: new Date(now + 35 * 60 * 1000).toISOString(),
   };
   const window24h = {
     from: new Date(now + 23.5 * 60 * 60 * 1000).toISOString(),
@@ -183,7 +202,7 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const [outcomes24h, outcomes1h] = await Promise.all([
+    const [outcomes24h, outcomes30min] = await Promise.all([
       processWindow(admin, {
         from: window24h.from,
         to: window24h.to,
@@ -191,18 +210,18 @@ Deno.serve(async (req) => {
         kind: '24h',
       }),
       processWindow(admin, {
-        from: window1h.from,
-        to: window1h.to,
+        from: window30min.from,
+        to: window30min.to,
         flag: 'reminder_sent',
-        kind: '1h',
+        kind: '30min',
       }),
     ]);
 
-    const outcomes = [...outcomes24h, ...outcomes1h];
+    const outcomes = [...outcomes24h, ...outcomes30min];
     return jsonResponse({
       ok: true,
       window_24h: window24h,
-      window_1h: window1h,
+      window_30min: window30min,
       processed: outcomes.length,
       outcomes,
     });

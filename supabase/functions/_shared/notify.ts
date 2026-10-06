@@ -80,6 +80,13 @@ export function whatsappUserHint(result: SendResult): string {
     return 'Acest număr nu are WhatsApp activ.';
   }
   if (
+    e.includes('131037') ||
+    e.includes('display name approval') ||
+    e.includes('needs display name')
+  ) {
+    return 'Nu am putut trimite codul: WhatsApp cere aprobarea numelui afișat al numărului de business. Approbă-l în WhatsApp Manager (Meta Business), apoi reîncearcă.';
+  }
+  if (
     e.includes('"code":190') ||
     e.includes('errorcod":190') ||
     (e.includes('oauth') && e.includes('expired')) ||
@@ -370,8 +377,8 @@ export function messageReminder(
   timeLocal: string,
   timezone: string
 ): { subject: string; text: string } {
-  const text = `Salut! Ai o programare la ${businessName} în 1 oră (${timeLocal}, ${timezone}).`;
-  return { subject: 'Reminder programare — 1 oră', text };
+  const text = `Salut! Ai o programare la ${businessName} în 30 de minute (${timeLocal}, ${timezone}).`;
+  return { subject: 'Reminder programare — 30 de minute', text };
 }
 
 export function messageReminder24h(
@@ -392,6 +399,15 @@ export function messagePostpone(
   const hoursLabel = hours === 1 ? '1 oră' : '2 ore';
   const text = `Programarea la ${businessName} se amână cu ${hoursLabel}. Noua oră: ${newTimeLocal} (${timezone}).`;
   return { subject: `Programare amânată cu ${hoursLabel}`, text };
+}
+
+export function messageMoved(
+  businessName: string,
+  newTimeLocal: string,
+  timezone: string
+): { subject: string; text: string } {
+  const text = `Programarea ta la ${businessName} a fost mutata. Noua ora: ${newTimeLocal} (${timezone}).`;
+  return { subject: 'Programare mutata', text };
 }
 
 export function messageTest(): { subject: string; text: string } {

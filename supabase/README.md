@@ -45,6 +45,7 @@ supabase functions deploy create-deposit-checkout
 supabase functions deploy refund-deposit
 supabase functions deploy stripe-webhook --no-verify-jwt
 supabase functions deploy test-whatsapp
+supabase functions deploy notify-moved
 supabase functions deploy auth-whatsapp-otp --no-verify-jwt
 supabase functions deploy auth-whatsapp-verify --no-verify-jwt
 ```
