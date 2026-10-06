@@ -27,13 +27,37 @@ export async function ensureMyProfile(): Promise<
     return { ok: false, error: 'not_authenticated' };
   }
 
-  const patch: { id: string; email?: string; phone?: string } = { id: user.id };
-  if (user.email) patch.email = user.email;
-  if (user.phone) patch.phone = user.phone;
+  // Nu folosim upsert parțial: pe unele setup-uri PostgREST poate atinge coloane
+  // omise. Citim profilul și scriem doar ce lipsește — nu ștergem phone salvat în Setări.
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id, email, phone')
+    .eq('id', user.id)
+    .maybeSingle();
 
-  const { error: upErr } = await supabase.from('profiles').upsert(patch, { onConflict: 'id' });
-  if (upErr) {
-    console.warn('ensureMyProfile upsert failed', upErr.message);
+  if (!existing) {
+    const { error: insErr } = await supabase.from('profiles').insert({
+      id: user.id,
+      email: user.email ?? null,
+      phone: user.phone ?? null,
+    });
+    if (insErr) {
+      console.warn('ensureMyProfile insert failed', insErr.message);
+    }
+    return { ok: true, userId: user.id };
+  }
+
+  const patch: { email?: string | null; phone?: string | null } = {};
+  if (!existing.email && user.email) patch.email = user.email;
+  if (!existing.phone && user.phone) patch.phone = user.phone;
+  if (Object.keys(patch).length > 0) {
+    const { error: upErr } = await supabase
+      .from('profiles')
+      .update(patch)
+      .eq('id', user.id);
+    if (upErr) {
+      console.warn('ensureMyProfile update failed', upErr.message);
+    }
   }
   return { ok: true, userId: user.id };
 }
@@ -83,6 +107,70 @@ export async function createAppointmentIfFree(opts: {
   return { appointment, error: null };
 }
 
+/** Rezervare ca invitat (fara cont) — apelabil si anonim (v35). */
+export async function createGuestAppointment(opts: {
+  businessId: string;
+  startAt: string;
+  endAt: string;
+  serviceId: string | null;
+  staffId: string | null;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('create_guest_appointment', {
+    p_business_id: opts.businessId,
+    p_start_at: opts.startAt,
+    p_end_at: opts.endAt,
+    p_service_id: opts.serviceId,
+    p_staff_id: opts.staffId,
+    p_client_name: opts.name,
+    p_client_phone: opts.phone,
+    p_client_email: opts.email,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
+}
+
+/** Serie saptamanala atomica 2..8 sedinte (v36). Intoarce randurile create. */
+export async function createRecurringAppointments(opts: {
+  businessId: string;
+  startAt: string;
+  endAt: string;
+  serviceId: string | null;
+  staffId: string | null;
+  repeatCount: number;
+}): Promise<{ appointments: Appointment[]; error: string | null }> {
+  const ensured = await ensureMyProfile();
+  if (!ensured.ok) {
+    return { appointments: [], error: ensured.error };
+  }
+  const { data, error } = await supabase.rpc('create_recurring_appointments', {
+    p_business_id: opts.businessId,
+    p_start_at: opts.startAt,
+    p_end_at: opts.endAt,
+    p_service_id: opts.serviceId,
+    p_staff_id: opts.staffId,
+    p_repeat_count: opts.repeatCount,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointments: [], error: text };
+  }
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as Appointment[];
+  if (rows.length === 0 || !rows[0]?.id) {
+    return { appointments: [], error: 'booking_empty_result' };
+  }
+  return { appointments: rows, error: null };
+}
+
 export async function listBusyRanges(opts: {
   businessId: string;
   fromIso: string;
@@ -103,6 +191,28 @@ export async function listBusyRanges(opts: {
     endUtc: row.end_at,
   }));
   return { busy, error: null };
+}
+
+/** Muta o programare pe alt slot — doar owner-ul business-ului (v34). */
+export async function moveAppointmentToSlot(opts: {
+  appointmentId: string;
+  startAt: string;
+  endAt: string;
+}): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('business_move_appointment', {
+    p_appointment_id: opts.appointmentId,
+    p_start_at: opts.startAt,
+    p_end_at: opts.endAt,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
 }
 
 export async function notifyAfterBooking(

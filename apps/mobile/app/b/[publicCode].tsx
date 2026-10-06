@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 
@@ -12,6 +12,7 @@ import {
   Button,
   Callout,
   ErrorState,
+  Field,
   Screen,
   SectionTitle,
   SkeletonScreen,
@@ -28,11 +29,12 @@ import {
   staffSchedule,
   toYmd,
 } from '@/lib/bookingRules';
-import { createAppointmentIfFree, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
+import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
-import { locationFromBusiness } from '@/lib/location';
+import { formatAddress, locationFromBusiness } from '@/lib/location';
 import { useBack } from '@/lib/nav';
 import { markWaitlistBooked } from '@/lib/notify-client';
+import { normalizeWalkinContact } from '@/lib/walkinRules';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
 import { localDayBoundsUtc } from '@/lib/timezone';
@@ -54,6 +56,10 @@ export default function PublicBookScreen() {
   const [rating, setRating] = useState<{ avg_rating: number | null; review_count: number } | null>(
     null
   );
+  const [reviewSnippets, setReviewSnippets] = useState<
+    { rating: number; comment: string }[]
+  >([]);
+  const [logoFailed, setLogoFailed] = useState(false);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
@@ -63,6 +69,9 @@ export default function PublicBookScreen() {
   const [waitlistBusy, setWaitlistBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
 
   const selectedService = useMemo(
     () => services.find((s) => s.id === serviceId) ?? null,
@@ -165,6 +174,18 @@ export default function PublicBookScreen() {
             }
           : null
       );
+      const { data: revRows } = await supabase.rpc('list_public_reviews', {
+        p_business_id: biz.id,
+        p_limit: 2,
+      });
+      if (Array.isArray(revRows)) {
+        setReviewSnippets(
+          revRows.map((r: { rating?: number; comment?: string }) => ({
+            rating: Number(r.rating ?? 0) || 0,
+            comment: typeof r.comment === 'string' ? r.comment : '',
+          }))
+        );
+      }
       setLoading(false);
     })();
   }, [code]);
@@ -275,6 +296,52 @@ export default function PublicBookScreen() {
     }
   }
 
+  async function handleGuestBook() {
+    if (!business || !selected) {
+      setError('Alege un slot.');
+      return;
+    }
+    const name = guestName.trim();
+    if (!name) {
+      setError('Scrie numele pentru rezervare.');
+      return;
+    }
+    const { contact, error: contactErr } = normalizeWalkinContact(guestPhone, guestEmail);
+    if (contactErr) {
+      setError(mapBookingRpcError(contactErr));
+      return;
+    }
+    setBooking(true);
+    setError(null);
+    setMessage(null);
+    const { appointment: created, error: err } = await createGuestAppointment({
+      businessId: business.id,
+      startAt: selected.startUtc,
+      endAt: selected.endUtc,
+      serviceId,
+      staffId,
+      name,
+      phone: contact.phone,
+      email: contact.email,
+    });
+    setBooking(false);
+    if (err) {
+      setError(mapBookingRpcError(err));
+      await loadSlots();
+      return;
+    }
+    setSelected(null);
+    setGuestName('');
+    setGuestPhone('');
+    setGuestEmail('');
+    await loadSlots();
+    setMessage(
+      created?.status === 'approved'
+        ? 'Programarea a fost confirmată.'
+        : 'Cererea a fost trimisă. Vei fi contactat pentru confirmare.'
+    );
+  }
+
   async function handleWaitlist() {
     if (!session) {
       goLogin();
@@ -329,11 +396,26 @@ export default function PublicBookScreen() {
           {error ? <Callout tone="danger">{error}</Callout> : null}
           {message ? <Callout tone="success">{message}</Callout> : null}
           {!session ? (
+            <>
+            <View style={{ gap: 12 }}>
+              <Field label="Numele tău" placeholder="Nume și prenume" value={guestName} onChangeText={setGuestName} />
+              <Field label="Telefon" placeholder="07…" keyboardType="phone-pad" value={guestPhone} onChangeText={setGuestPhone} />
+              <Field label="Email (opțional)" placeholder="nume@exemplu.ro" keyboardType="email-address" autoCapitalize="none" value={guestEmail} onChangeText={setGuestEmail} />
+              <Button
+                label={booking ? 'Se trimite…' : 'Rezervă ca invitat'}
+                icon="paper-plane-outline"
+                onPress={() => void handleGuestBook()}
+                loading={booking}
+                disabled={!selected}
+              />
+            </View>
+            <View style={{ height: 12 }} />
             <Button
-              label="Intră în cont ca să rezervi"
+              label="Am deja cont — intră în cont"
               icon="log-in-outline"
               onPress={goLogin}
             />
+            </>
           ) : (
             <>
               <Button
@@ -358,23 +440,52 @@ export default function PublicBookScreen() {
       }
     >
       <View style={[styles.summary, { backgroundColor: t.colors.accentSoft }]}>
-        <View style={[styles.summaryIcon, { backgroundColor: t.colors.accent }]}>
-          <Ionicons name="storefront" size={20} color={t.colors.onAccent} />
+        <View style={[styles.summaryIcon, { backgroundColor: t.colors.surface, overflow: 'hidden' }]}>
+          {business.logo_url && !logoFailed ? (
+            <Image
+              source={{ uri: business.logo_url }}
+              style={{ width: 40, height: 40, borderRadius: radius.md }}
+              onError={() => setLogoFailed(true)}
+            />
+          ) : (
+            <Ionicons name="storefront" size={20} color={t.colors.accent} />
+          )}
         </View>
         <View style={styles.flex}>
           <Text style={[styles.summaryName, { color: t.colors.accentSoftText }]}>
             {business.name}
           </Text>
-          {rating && rating.review_count > 0 ? (
-            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
-              {rating.avg_rating} ★ · {rating.review_count} recenzii
+          {formatAddress(locationFromBusiness(business)) ? (
+            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]} numberOfLines={2}>
+              {formatAddress(locationFromBusiness(business))}
             </Text>
           ) : null}
+          {rating && rating.review_count > 0 ? (
+            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
+              ★ {Number(rating.avg_rating).toFixed(1)} · {rating.review_count} recenzii
+            </Text>
+          ) : (
+            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
+              Fără recenzii încă
+            </Text>
+          )}
           <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
             {selectedService
               ? `${selectedService.name} · ${formatDuration(selectedService.duration_minutes)} · ${formatRon(selectedService.price)}`
               : `${durationMinutes} min · ${business.timezone}`}
           </Text>
+          {reviewSnippets.length > 0
+            ? reviewSnippets.slice(0, 2).map((r, i) => (
+                <Text
+                  key={i}
+                  style={[styles.summaryMeta, { color: t.colors.accentSoftText, opacity: 0.9 }]}
+                  numberOfLines={2}
+                >
+                  {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
+                  {r.comment?.trim() ? ` — ${r.comment.trim()}` : ''}
+                </Text>
+              ))
+            : null}
         </View>
         <Badge tone="accent">{slots.length} libere</Badge>
       </View>
@@ -395,7 +506,7 @@ export default function PublicBookScreen() {
 
       {staffList.length > 1 ? (
         <>
-          <SectionTitle>Specialist</SectionTitle>
+          <SectionTitle>1. Specialist</SectionTitle>
           <View style={styles.serviceList}>
             {staffList.map((s) => {
               const on = s.id === staffId;
@@ -426,7 +537,7 @@ export default function PublicBookScreen() {
 
       {services.length > 0 ? (
         <>
-          <SectionTitle>Serviciu</SectionTitle>
+          <SectionTitle>2. Serviciu</SectionTitle>
           <View style={styles.serviceList}>
             {services.map((s) => {
               const on = s.id === serviceId;
@@ -448,6 +559,14 @@ export default function PublicBookScreen() {
                   <Text style={[styles.serviceName, { color: on ? t.colors.onAccent : t.colors.text }]}>
                     {s.name}
                   </Text>
+                  {s.description ? (
+                    <Text
+                      style={[styles.serviceDesc, { color: on ? t.colors.onAccent : t.colors.textMuted }]}
+                      numberOfLines={3}
+                    >
+                      {s.description}
+                    </Text>
+                  ) : null}
                   <Text style={[styles.serviceMeta, { color: on ? t.colors.onAccent : t.colors.textMuted }]}>
                     {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
                   </Text>
@@ -458,6 +577,7 @@ export default function PublicBookScreen() {
         </>
       ) : null}
 
+      <SectionTitle>3. Dată</SectionTitle>
       <DatePickerField
         label="Data programării"
         value={dateLocal}
@@ -466,7 +586,7 @@ export default function PublicBookScreen() {
         maximumDate={maxDate}
       />
 
-      <SectionTitle>Ore libere</SectionTitle>
+      <SectionTitle>4. Oră</SectionTitle>
       {slotsLoading ? (
         <View style={styles.slotsLoading}>
           <ActivityIndicator color={t.colors.accent} />
@@ -514,6 +634,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   serviceName: { fontSize: fontSize.md, fontWeight: '700' },
+  serviceDesc: { fontSize: fontSize.sm, opacity: 0.9 },
   serviceMeta: { fontSize: fontSize.sm },
   slotsLoading: { paddingVertical: spacing['2xl'], alignItems: 'center' },
 });

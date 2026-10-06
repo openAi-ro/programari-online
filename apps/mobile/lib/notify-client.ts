@@ -23,10 +23,10 @@ export async function invokeDecisionNotify(
   return { ok: true, data };
 }
 
-/** Amână programarea cu 1h sau 2h și notifică clientul (WhatsApp/email). */
+/** Amână programarea cu 1-12h și notifică clientul (WhatsApp/email). */
 export async function invokePostpone(
   appointmentId: string,
-  hours: 1 | 2
+  hours: number
 ): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-postpone', {
     body: { appointment_id: appointmentId, hours },
@@ -137,6 +137,37 @@ export async function invokePendingPush(
   }
 
   return { ok: true, data: data as PendingPushResult };
+}
+
+/** Notifica clientul ca programarea a fost mutata pe alt slot (dupa business_move_appointment). */
+export async function invokeMoved(
+  appointmentId: string
+): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
+  const { data, error } = await supabase.functions.invoke('notify-moved', {
+    body: { appointment_id: appointmentId },
+  });
+
+  if (error) {
+    console.warn('notify-moved invoke failed', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  const payload = data as {
+    ok?: boolean;
+    error?: string;
+    start_at?: string;
+    end_at?: string;
+  };
+
+  if (payload?.error || payload?.ok === false) {
+    return {
+      ok: false,
+      error: payload.error ?? 'move_notify_failed',
+      data: payload,
+    };
+  }
+
+  return { ok: true, data: payload };
 }
 
 export async function markWaitlistBooked(opts: {

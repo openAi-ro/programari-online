@@ -20,6 +20,10 @@ export type Profile = {
   notify_reminders?: boolean;
   /** Mesaj la aprobare/respingere din partea business-ului. */
   notify_decision?: boolean;
+  /** Dacă false, telefonul rămâne contact fără mesaje WhatsApp. */
+  notify_whatsapp?: boolean;
+  /** Poza de profil (client/business) — URL public din storage. */
+  avatar_url?: string | null;
 };
 
 export type BusinessProfile = {
@@ -47,6 +51,12 @@ export type BusinessProfile = {
   maps_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** Logo firmă (separat de poza de profil). */
+  logo_url?: string | null;
+  /** Video de prezentare (URL public din storage) — afișat clienților la căutare. */
+  promo_video_url?: string | null;
+  /** Cheie categorie browse (BROWSE_CATEGORIES.key), ex. coafura. */
+  category?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +65,7 @@ export type Service = {
   id: string;
   business_id: string;
   name: string;
+  description?: string | null;
   duration_minutes: number;
   price: number;
   active: boolean;
@@ -66,12 +77,14 @@ export type Service = {
 export type Appointment = {
   id: string;
   business_id: string;
-  client_user_id: string;
+  /** Null pentru rezervarile ca invitat (fara cont). */
+  client_user_id: string | null;
   start_at: string;
   end_at: string;
   status: AppointmentStatus;
   client_email: string | null;
   client_phone: string | null;
+  guest_name?: string | null;
   reminder_sent: boolean;
   reminder_24h_sent?: boolean;
   decision_notified: boolean;
@@ -94,6 +107,7 @@ export type Staff = {
   id: string;
   business_id: string;
   name: string;
+  photo_url?: string | null;
   color: string;
   active: boolean;
   sort_order: number;
@@ -147,4 +161,20 @@ export type BusinessClientRow = {
   note: string;
   no_show_count: number;
   blocked: boolean;
+};
+
+export type ChatConversation = {
+  id: string;
+  business_id: string;
+  client_user_id: string;
+  last_message_at: string | null;
+  created_at: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  conversation_id: string;
+  sender_user_id: string;
+  body: string;
+  created_at: string;
 };

@@ -103,16 +103,11 @@ export function canMarkNoShow(
   return new Date(apt.start_at) <= now;
 }
 
+/** Deposit/avans UI removed — always null so cards never prompt for payment. */
 export function paymentLabel(
-  status: Appointment['payment_status'],
-  depositRon?: number | null
+  _status: Appointment['payment_status'],
+  _depositRon?: number | null
 ): string | null {
-  if (!status || status === 'none') return null;
-  const sum = depositRon && depositRon > 0 ? ` (${depositRon} lei)` : '';
-  if (status === 'unpaid') return `Avans de plătit${sum}`;
-  if (status === 'paid') return `Avans plătit${sum}`;
-  if (status === 'refunded') return 'Avans restituit';
-  if (status === 'waived') return 'Avans scutit';
   return null;
 }
 
@@ -122,6 +117,9 @@ export function mapBookingRpcError(message: string): string {
   }
   if (message.includes('contact_required')) {
     return 'Contul trebuie să aibă email sau telefon.';
+  }
+  if (message.includes('too_many_guest')) {
+    return 'Ai deja 3 programări active la acest business. Sună pentru detalii.';
   }
   if (message.includes('slot_taken')) {
     return 'Slotul tocmai a fost rezervat. Alege altul.';
@@ -170,6 +168,39 @@ export function mapBookingRpcError(message: string): string {
   }
   if (message.includes('staff_not_found')) {
     return 'Specialistul nu mai este disponibil.';
+  }
+  if (message.includes('not_business_owner')) {
+    return 'Doar owner-ul business-ului poate adăuga programări manuale.';
+  }
+  if (message.includes('walkin_contact_required')) {
+    return 'Adaugă un telefon sau un email pentru client.';
+  }
+  if (message.includes('walkin_slot_required')) {
+    return 'Alege un slot liber din calendar.';
+  }
+  if (message.includes('invalid_phone')) {
+    return 'Numărul de telefon nu pare valid.';
+  }
+  if (message.includes('invalid_email')) {
+    return 'Adresa de email nu pare validă.';
+  }
+  if (message.includes('invalid_range')) {
+    return 'Intervalul ales nu este valid.';
+  }
+  if (message.includes('cannot_move')) {
+    return 'Această programare nu mai poate fi mutată.';
+  }
+  if (message.includes('move_slot_required')) {
+    return 'Alege un slot liber pentru mutare.';
+  }
+  if (message.includes('move_in_past')) {
+    return 'Nu poți muta o programare în trecut.';
+  }
+  if (message.includes('move_same_slot')) {
+    return 'Alege alt slot decât cel curent.';
+  }
+  if (message.includes('move_notify_failed')) {
+    return 'Mutarea s-a salvat, dar notificarea clientului a eșuat.';
   }
   if (message.includes('cannot_review')) {
     return 'Poți lăsa recenzie după o vizită confirmată.';
