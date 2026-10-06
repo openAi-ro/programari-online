@@ -10,7 +10,15 @@ import { supabase } from '@/lib/supabase';
 /**
  * Ecranele de business sunt doar pentru conturile de business.
  * Un cont de client care ajunge aici printr-un link direct vede un mesaj, nu agenda.
+ *
+ * (tabs) = cele 5 meniuri primare.
+ * Sibling screens (calendar, setup, staff, waitlist, qr, services, chat) pe Stack —
+ * auto-descoperite (nu declara doar `(tabs)`).
  */
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
+
 export default function BusinessLayout() {
   const [mode, setMode] = useState<AppMode | null>(null);
 

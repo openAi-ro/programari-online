@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 
+import { StaffBadge } from '@/components/StaffBadge';
 import { WorkingHoursForm } from '@/components/WorkingHoursForm';
 import {
   Button,
@@ -23,6 +26,7 @@ import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
 
 type Draft = {
   name: string;
+  photoUrl: string;
   customHours: boolean;
   workingHours: WorkingHours;
   breakHours: BreakHours;
@@ -30,6 +34,7 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = {
   name: '',
+  photoUrl: '',
   customHours: false,
   workingHours: DEFAULT_WORKING_HOURS,
   breakHours: DEFAULT_BREAK_HOURS,
@@ -46,6 +51,7 @@ export default function BusinessStaffScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -106,10 +112,69 @@ export default function BusinessStaffScreen() {
     setEditingId(s.id);
     setDraft({
       name: s.name,
+      photoUrl: s.photo_url ?? '',
       customHours: Boolean(s.working_hours),
       workingHours: s.working_hours ?? DEFAULT_WORKING_HOURS,
       breakHours: s.break_hours ?? DEFAULT_BREAK_HOURS,
     });
+  }
+
+  async function uploadStaffPhoto(localUri: string): Promise<string> {
+    if (!businessId) throw new Error('Lipsește business-ul.');
+    const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
+    const path = `${businessId}/${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('staff-photos').upload(path, buffer, {
+      contentType,
+      upsert: true,
+    });
+    if (upErr) throw upErr;
+    const { data } = supabase.storage.from('staff-photos').getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function handlePhotoResult(
+    result: ImagePicker.ImagePickerResult
+  ): Promise<void> {
+    if (result.canceled || result.assets.length === 0) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      const url = await uploadStaffPhoto(result.assets[0].uri);
+      setDraft((d) => ({ ...d, photoUrl: url }));
+      setMessage('Poza a fost încărcată.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Nu am putut încărca poza.');
+    }
+    setPhotoBusy(false);
+  }
+
+  async function pickFromGallery(): Promise<void> {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setError('Permite accesul la galerie ca să alegi poza.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    await handlePhotoResult(result);
+  }
+
+  async function takePhoto(): Promise<void> {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      setError('Permite accesul la cameră ca să faci poza.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    await handlePhotoResult(result);
   }
 
   async function saveDraft() {
@@ -125,10 +190,12 @@ export default function BusinessStaffScreen() {
     setSaving(true);
     setError(null);
     setMessage(null);
+    const photoUrl = draft.photoUrl.trim() || null;
     if (editingId === 'new') {
       const { error: err } = await supabase.from('staff').insert({
         business_id: businessId,
         name,
+        photo_url: photoUrl,
         color: STAFF_COLORS[rows.length % STAFF_COLORS.length],
         sort_order: rows.length,
         active: true,
@@ -148,6 +215,7 @@ export default function BusinessStaffScreen() {
       .from('staff')
       .update({
         name,
+        photo_url: photoUrl,
         ...hours,
         updated_at: new Date().toISOString(),
       })
@@ -244,6 +312,49 @@ export default function BusinessStaffScreen() {
           />
           <View
             style={[
+              styles.photoRow,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
+            <StaffBadge
+              name={draft.name.trim() || 'Specialist'}
+              photoUrl={draft.photoUrl.trim() || null}
+              size={88}
+            />
+            {photoBusy ? (
+              <View style={styles.photoBusy}>
+                <ActivityIndicator />
+                <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
+                  Se încarcă poza…
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.photoBtns}>
+                <Button
+                  label="Alege din galerie"
+                  variant="secondary"
+                  icon="image-outline"
+                  onPress={() => void pickFromGallery()}
+                />
+                <Button
+                  label="Fă poză"
+                  variant="secondary"
+                  icon="camera-outline"
+                  onPress={() => void takePhoto()}
+                />
+                {draft.photoUrl.trim() ? (
+                  <Button
+                    label="Șterge poza"
+                    variant="secondary"
+                    icon="trash-outline"
+                    onPress={() => setDraft((d) => ({ ...d, photoUrl: '' }))}
+                  />
+                ) : null}
+              </View>
+            )}
+          </View>
+          <View
+            style={[
               styles.toggleRow,
               { backgroundColor: t.colors.surface, borderColor: t.colors.border },
             ]}
@@ -288,7 +399,7 @@ export default function BusinessStaffScreen() {
               },
             ]}
           >
-            <View style={[styles.dot, { backgroundColor: s.color }]} />
+            <StaffBadge name={s.name} photoUrl={s.photo_url} color={s.color} size={52} />
             <Pressable onPress={() => startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
               <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
@@ -313,6 +424,16 @@ export default function BusinessStaffScreen() {
 
 const styles = StyleSheet.create({
   footer: { gap: spacing.md },
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  photoBusy: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  photoBtns: { flex: 1, gap: spacing.sm },
   flex: { flex: 1, gap: 2 },
   toggleRow: {
     flexDirection: 'row',

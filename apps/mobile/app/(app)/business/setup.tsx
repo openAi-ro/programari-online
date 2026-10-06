@@ -22,7 +22,6 @@ import {
   DEFAULT_BREAK_HOURS,
   DEFAULT_BUFFER_MINUTES,
   DEFAULT_CANCEL_NOTICE_MINUTES,
-  DEFAULT_DEPOSIT_RON,
   DEFAULT_LOYALTY_EVERY,
   DEFAULT_MAX_ADVANCE_DAYS,
   DEFAULT_MIN_NOTICE_MINUTES,
@@ -30,7 +29,7 @@ import {
   DEFAULT_TIMEZONE,
   DEFAULT_WORKING_HOURS,
 } from '@/lib/defaults';
-import { buildMapsUrl, buildNativeMapsUrl, openMaps, reverseGeocodeRo } from '@/lib/location';
+import { reverseGeocodeRo } from '@/lib/location';
 import { useBack } from '@/lib/nav';
 import { generatePublicCode } from '@/lib/publicCode';
 import {
@@ -42,6 +41,12 @@ import {
   localitatiPentruJudet,
 } from '@/lib/roGeo';
 import { supabase } from '@/lib/supabase';
+import { withTimeout } from '@/lib/withTimeout';
+import {
+  BROWSE_CATEGORY_LABELS,
+  categoryKeyForLabel,
+  categoryLabelForKey,
+} from '@/lib/browseCategories';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
 
 /**
@@ -49,23 +54,46 @@ import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
  * silențios sau GPS-ul nu răspunde, promisiunea nu se închide niciodată și butonul
  * rămâne pe spinner. Îl limităm explicit.
  */
-const GEO_TIMEOUT_MS = 15000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, code: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(code)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      }
-    );
-  });
+function todayYmd(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
+
+function parseYmdLocal(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
+}
+
+function toYmdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Toate zilele YYYY-MM-DD între from și to (inclusiv), indiferent de ordine. */
+function eachYmdInclusive(from: string, to: string): string[] {
+  let a = parseYmdLocal(from);
+  let b = parseYmdLocal(to);
+  if (a.getTime() > b.getTime()) {
+    const t = a;
+    a = b;
+    b = t;
+  }
+  const out: string[] = [];
+  const cur = new Date(a);
+  while (cur.getTime() <= b.getTime()) {
+    out.push(toYmdLocal(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+const GEO_TIMEOUT_MS = 15000;
 
 /**
  * Coordonatele curente, cu timeout pe fiecare pas. Pe web folosim direct
@@ -122,6 +150,7 @@ export default function BusinessSetupScreen() {
   const [existingId, setExistingId] = useState<string | null>(null);
   const [publicCode, setPublicCode] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [duration, setDuration] = useState('60');
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
@@ -132,7 +161,6 @@ export default function BusinessSetupScreen() {
   const [cancelNoticeHours, setCancelNoticeHours] = useState(
     String(DEFAULT_CANCEL_NOTICE_MINUTES / 60)
   );
-  const [depositRon, setDepositRon] = useState(String(DEFAULT_DEPOSIT_RON));
   const [autoApprove, setAutoApprove] = useState(DEFAULT_AUTO_APPROVE_RETURNING);
   const [blockAfter, setBlockAfter] = useState(String(DEFAULT_NO_SHOW_BLOCK_AFTER));
   const [loyaltyEvery, setLoyaltyEvery] = useState(String(DEFAULT_LOYALTY_EVERY));
@@ -143,23 +171,43 @@ export default function BusinessSetupScreen() {
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
-  const [blockDateDraft, setBlockDateDraft] = useState(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  });
+  const [blockDateDraft, setBlockDateDraft] = useState(todayYmd);
+  const [blockRangeStart, setBlockRangeStart] = useState(todayYmd);
+  const [blockRangeEnd, setBlockRangeEnd] = useState(todayYmd);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    // Gardă anti-blocare: dacă interogările atârnă (fără net / DNS blocat),
+    // ecranul iese din loading cu mesaj în loc de schelet infinit.
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      cancelled = true;
+      setError('Nu am putut încărca datele. Verifică internetul și redeschide ecranul.');
+      setLoading(false);
+    }, 15000);
+    const done = () => {
+      clearTimeout(timer);
+      if (!cancelled) setLoading(false);
+    };
     (async () => {
+      try {
+        await loadBusiness();
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Nu am putut încărca datele.');
+        }
+      } finally {
+        done();
+      }
+    })();
+    async function loadBusiness() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      if (cancelled) return;
       if (!user) {
-        setLoading(false);
         return;
       }
       const { data } = await supabase
@@ -172,6 +220,7 @@ export default function BusinessSetupScreen() {
         setExistingId(b.id);
         setPublicCode(b.public_code);
         setName(b.name);
+        setCategory(typeof b.category === 'string' ? b.category : '');
         setTimezone(b.timezone || DEFAULT_TIMEZONE);
         setDuration(String(b.session_duration_minutes));
         setWorkingHours(b.working_hours);
@@ -182,7 +231,6 @@ export default function BusinessSetupScreen() {
         setCancelNoticeHours(
           String((b.cancel_notice_minutes ?? DEFAULT_CANCEL_NOTICE_MINUTES) / 60)
         );
-        setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
         setAutoApprove(Boolean(b.auto_approve_returning));
         setBlockAfter(String(b.no_show_block_after ?? DEFAULT_NO_SHOW_BLOCK_AFTER));
         setLoyaltyEvery(String(b.loyalty_every ?? DEFAULT_LOYALTY_EVERY));
@@ -197,8 +245,11 @@ export default function BusinessSetupScreen() {
         setLongitude(b.longitude != null ? String(b.longitude) : '');
         setBlockedDates(Array.isArray(b.blocked_dates) ? b.blocked_dates : []);
       }
-      setLoading(false);
-    })();
+    }
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   async function handleUseMyLocation() {
@@ -259,30 +310,6 @@ export default function BusinessSetupScreen() {
     }
   }
 
-  /** Deschide Google Maps centrat pe locația completată (coordonate GPS sau adresă). */
-  async function handleOpenMap() {
-    setError(null);
-    setMessage(null);
-    const lat = parseFloat(latitude.replace(',', '.'));
-    const lon = parseFloat(longitude.replace(',', '.'));
-    const loc = {
-      county: county || null,
-      city: city || null,
-      address: address || null,
-      mapsUrl: mapsUrl || null,
-      latitude: Number.isFinite(lat) ? lat : null,
-      longitude: Number.isFinite(lon) ? lon : null,
-    };
-    const url = buildMapsUrl(loc);
-    if (!url) {
-      setError('Nu există încă o locație. Apasă „Folosește locația mea” sau completează adresa.');
-      return;
-    }
-    const ok = await openMaps(url, buildNativeMapsUrl(loc));
-    if (!ok) {
-      setError('Nu am putut deschide harta. Verifică dacă ai o aplicație de hărți instalată.');
-    }
-  }
 
   async function handleSave() {
     setError(null);
@@ -321,13 +348,8 @@ export default function BusinessSetupScreen() {
       setError('Preavizul de anulare trebuie să fie între 0 și 168 de ore.');
       return;
     }
-    const deposit = Number(String(depositRon).replace(',', '.'));
     const blockN = parseInt(blockAfter, 10);
     const loyalty = parseInt(loyaltyEvery, 10);
-    if (!Number.isFinite(deposit) || deposit < 0 || deposit > 10000) {
-      setError('Avansul trebuie să fie între 0 și 10.000 lei.');
-      return;
-    }
     if (!Number.isFinite(blockN) || blockN < 0 || blockN > 20) {
       setError('Pragul de blocare trebuie să fie între 0 și 20 absențe.');
       return;
@@ -360,13 +382,14 @@ export default function BusinessSetupScreen() {
       return;
     }
 
+    // Nu forțăm deposit_ron: 0 la fiecare salvare — păstrăm valoarea din DB.
+    // La creare, DB default e 0 (migrarea v13).
     const rules = {
       min_notice_minutes: minNotice,
       buffer_minutes: buffer,
       max_advance_days: maxDays,
       cancel_notice_minutes: cancelNotice,
       blocked_dates: blockedDates,
-      deposit_ron: deposit,
       auto_approve_returning: autoApprove,
       no_show_block_after: blockN,
       loyalty_every: loyalty,
@@ -387,6 +410,7 @@ export default function BusinessSetupScreen() {
         .from('business_profiles')
         .update({
           name: trimmed,
+          category: category.trim() || null,
           timezone: timezone.trim(),
           session_duration_minutes: minutes,
           working_hours: workingHours,
@@ -417,6 +441,7 @@ export default function BusinessSetupScreen() {
         owner_user_id: user.id,
         name: trimmed,
         public_code: code,
+        category: category.trim() || null,
         timezone: timezone.trim(),
         session_duration_minutes: minutes,
         working_hours: workingHours,
@@ -522,6 +547,15 @@ export default function BusinessSetupScreen() {
         icon="storefront-outline"
         autoCapitalize="words"
       />
+      <PickerField
+        label="Categorie"
+        value={categoryLabelForKey(category)}
+        options={BROWSE_CATEGORY_LABELS}
+        onChange={(label) => setCategory(categoryKeyForLabel(label) ?? '')}
+        placeholder="Alege categoria"
+        icon="grid-outline"
+        hint="Apare în lista de categorii din Caută (client). Poți schimba oricând."
+      />
       <Field
         label="Durată ședință (minute)"
         value={duration}
@@ -542,6 +576,9 @@ export default function BusinessSetupScreen() {
       />
 
       <SectionTitle>Locație</SectionTitle>
+      <Callout tone="info" title="Adresa business">
+        Completează județul, localitatea și strada. Poți folosi „Locația mea” pentru GPS — fără hartă în app (mai ușor pe telefon).
+      </Callout>
       <PickerField
         label="Județ"
         value={county}
@@ -569,7 +606,17 @@ export default function BusinessSetupScreen() {
         onChangeText={setAddress}
         placeholder="Ex: Strada Franceză 12"
         icon="location-outline"
-        hint="Se completează automat când apeși „Folosește locația mea”, dar poți ajusta manual."
+      />
+      <Field
+        label="Link Google Maps (opțional)"
+        value={mapsUrl}
+        onChangeText={setMapsUrl}
+        placeholder="https://maps.google.com/…"
+        icon="map-outline"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        hint="Dacă clienții au un link Maps preferat (sau Waze). Altfel e suficient GPS-ul de mai jos."
       />
       <Button
         label={geoBusy ? 'Se preia locația…' : 'Folosește locația mea'}
@@ -578,48 +625,15 @@ export default function BusinessSetupScreen() {
         loading={geoBusy}
         onPress={handleUseMyLocation}
       />
-      <Text style={[styles.hint, { color: t.colors.textFaint }]}>
-        Ca la partajarea locației din WhatsApp: preia coordonatele GPS ale telefonului și
-        completează automat județul, localitatea și strada.
-      </Text>
-      <Button
-        label="Vezi locația pe hartă"
-        variant="secondary"
-        icon="map-outline"
-        onPress={handleOpenMap}
-      />
-      <Field
-        label="Link hartă (opțional)"
-        value={mapsUrl}
-        onChangeText={setMapsUrl}
-        placeholder="https://maps.app.goo.gl/…"
-        icon="navigate-outline"
-        autoCapitalize="none"
-        autoCorrect={false}
-        hint="Lasă gol pentru a genera automat un link Google Maps din adresă sau coordonate."
-      />
-      <View style={styles.breakTimes}>
-        <View style={styles.breakCol}>
-          <Field
-            label="Latitudine (opțional)"
-            value={latitude}
-            onChangeText={setLatitude}
-            placeholder="44.4268"
-            keyboardType="numbers-and-punctuation"
-            style={styles.breakInput}
-          />
-        </View>
-        <View style={styles.breakCol}>
-          <Field
-            label="Longitudine (opțional)"
-            value={longitude}
-            onChangeText={setLongitude}
-            placeholder="26.1025"
-            keyboardType="numbers-and-punctuation"
-            style={styles.breakInput}
-          />
-        </View>
-      </View>
+      {(latitude.trim() && longitude.trim()) ? (
+        <Text style={[styles.hint, { color: t.colors.textFaint }]}>
+          GPS salvat: {latitude}, {longitude}
+        </Text>
+      ) : (
+        <Text style={[styles.hint, { color: t.colors.textFaint }]}>
+          Opțional: „Folosește locația mea” salvează coordonatele pentru „Condu acum” la clienți.
+        </Text>
+      )}
 
       <WorkingHoursForm value={workingHours} onChange={setWorkingHours} />
 
@@ -705,16 +719,7 @@ export default function BusinessSetupScreen() {
         hint="Pentru programări deja confirmate. Cererea pending se poate anula oricând."
       />
 
-      <SectionTitle>Avans și disciplină</SectionTitle>
-      <Field
-        label="Avans la rezervare (lei)"
-        value={depositRon}
-        onChangeText={setDepositRon}
-        placeholder="0"
-        keyboardType="decimal-pad"
-        icon="cash-outline"
-        hint="0 = fără avans. 20–50 lei reduce absențele. Poți încasa cash/transfer sau cu Stripe."
-      />
+      <SectionTitle>Disciplină</SectionTitle>
       <View
         style={[
           styles.breakRow,
@@ -751,21 +756,83 @@ export default function BusinessSetupScreen() {
         placeholder="0"
         keyboardType="number-pad"
         icon="gift-outline"
-        hint="0 = oprit. 5 = a 5-a vizită confirmată e cadou (fără avans)."
+        hint="0 = oprit. 5 = a 5-a vizită confirmată e cadou."
       />
 
       <SectionTitle>Zile blocate (concediu / sărbători)</SectionTitle>
-      <DatePickerField label="Adaugă o zi închisă" value={blockDateDraft} onChange={setBlockDateDraft} />
-      <Button
-        label="Blochează data"
-        variant="secondary"
-        icon="lock-closed-outline"
+      <Text style={[styles.hint, { color: t.colors.textMuted }]}>
+        Blochează o singură zi sau un interval de concediu. Poți adăuga mai multe perioade; apasă pe o dată din listă ca să o deblochezi.
+      </Text>
+
+      <DatePickerField label="O zi" value={blockDateDraft} onChange={setBlockDateDraft} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Blochează o zi"
         onPress={() => {
           if (!blockedDates.includes(blockDateDraft)) {
             setBlockedDates([...blockedDates, blockDateDraft].sort());
+            setMessage(`Zi blocată: ${blockDateDraft}`);
+          } else {
+            setMessage(`Ziua ${blockDateDraft} e deja blocată.`);
+          }
+        }}
+        style={({ pressed }) => [
+          styles.blockBtn,
+          styles.blockBtnDay,
+          { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+        ]}
+      >
+        <Ionicons name="lock-closed-outline" size={18} color="#ffffff" />
+        <Text style={styles.blockBtnText} numberOfLines={1}>
+          Blochează o zi
+        </Text>
+      </Pressable>
+
+      <DatePickerField
+        label="Concediu — de la"
+        value={blockRangeStart}
+        onChange={(ymd) => {
+          setBlockRangeStart(ymd);
+          if (parseYmdLocal(ymd).getTime() > parseYmdLocal(blockRangeEnd).getTime()) {
+            setBlockRangeEnd(ymd);
           }
         }}
       />
+      <DatePickerField
+        label="Concediu — până la"
+        value={blockRangeEnd}
+        onChange={setBlockRangeEnd}
+        minimumDate={parseYmdLocal(blockRangeStart)}
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Blochează concediu"
+        onPress={() => {
+          const range = eachYmdInclusive(blockRangeStart, blockRangeEnd);
+          if (range.length === 0) return;
+          const merged = new Set(blockedDates);
+          for (const d of range) merged.add(d);
+          const next = [...merged].sort();
+          setBlockedDates(next);
+          const added = range.filter((d) => !blockedDates.includes(d)).length;
+          setMessage(
+            added > 0
+              ? `Concediu blocat: ${range[0]} → ${range[range.length - 1]} (${added} zile noi)`
+              : `Intervalul ${range[0]} → ${range[range.length - 1]} era deja blocat.`
+          );
+        }}
+        style={({ pressed }) => [
+          styles.blockBtn,
+          styles.blockBtnLeave,
+          { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+        ]}
+      >
+        <Ionicons name="calendar-outline" size={18} color="#ffffff" />
+        <Text style={styles.blockBtnText} numberOfLines={1}>
+          Blochează concediu
+        </Text>
+      </Pressable>
+
       {blockedDates.length > 0 ? (
         <View style={styles.chipWrap}>
           {blockedDates.map((d) => (
@@ -781,7 +848,9 @@ export default function BusinessSetupScreen() {
                 },
               ]}
             >
-              <Text style={[styles.chipText, { color: t.colors.text }]}>{d}</Text>
+              <Text style={[styles.chipText, { color: t.colors.text }]} numberOfLines={1}>
+                {d}
+              </Text>
               <Ionicons name="close" size={14} color={t.colors.textMuted} />
             </Pressable>
           ))}
@@ -831,4 +900,37 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: fontSize.sm, fontWeight: '600' },
   hint: { fontSize: fontSize.sm, lineHeight: 18 },
+  blockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    minHeight: 44,
+  },
+  blockBtnDay: {
+    backgroundColor: '#3B82F6',
+    shadowColor: '#60A5FA',
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  blockBtnLeave: {
+    backgroundColor: '#DB2777',
+    shadowColor: '#EC4899',
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  blockBtnText: {
+    color: '#ffffff',
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+
 });

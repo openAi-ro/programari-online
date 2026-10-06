@@ -17,6 +17,7 @@ import {
 } from '@/components/ui';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { getBookingPaths } from '@/lib/bookingLink';
+import { getInstallUrl } from '@/lib/installLink';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/types';
@@ -68,6 +69,7 @@ export default function BusinessQrScreen() {
 
   // QR public HTTPS — Instagram, WhatsApp, camera nativă, browser
   const qrValue = links?.webUrl ?? '';
+  const installUrl = getInstallUrl();
 
   async function handleShare() {
     if (!links || !business) return;
@@ -173,6 +175,15 @@ export default function BusinessQrScreen() {
       </View>
 
       <Card icon="link-outline" iconTone="neutral" title="Link public" hint={links.webUrl} />
+
+      <View style={[styles.qrCard, { backgroundColor: t.colors.surface, borderColor: t.colors.border }, t.shadows.md]}>
+        <Text style={[styles.qrHint, { color: t.colors.text, fontWeight: '700' }]}>Instalare aplicație (APK)</Text>
+        <View style={styles.qrInner}>
+          <QRCode value={installUrl} size={180} backgroundColor={palette.white} color={palette.ink950} />
+        </View>
+        <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>Scanează pentru a instala APK-ul. Link: {installUrl}</Text>
+        <Button label="Deschide link instalare" icon="download-outline" variant="secondary" onPress={() => void Share.share({ message: installUrl, url: installUrl })} />
+      </View>
 
       <Callout tone="accent" title="Pagină publică /b/…">
         Clienții rezervă din browser pe {links.webUrl}. Trebuie să fii autentificat ca să

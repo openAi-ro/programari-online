@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
@@ -11,6 +11,7 @@ import {
   SkeletonStatGrid,
   useTheme,
 } from '@/components/ui';
+import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatLei } from '@/lib/format';
 import { useBack } from '@/lib/nav';
@@ -33,6 +34,12 @@ type Report = {
 };
 
 export default function BusinessReportsScreen() {
+  useEffect(() => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.count('[TAB_MOUNT] business/reports');
+    }
+  }, []);
   const t = useTheme();
   const back = useBack();
   const [loading, setLoading] = useState(true);
@@ -53,16 +60,24 @@ export default function BusinessReportsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      void load();
-    }, [load])
+      const hasExistingData = !!report;
+      if (measureBeforeEnabled() || !hasExistingData) setLoading(true);
+      void load().then(() => {
+        markNavReady('reports', {
+          hasExistingData,
+          softRefresh: hasExistingData && !measureBeforeEnabled(),
+        });
+      });
+    }, [load, report])
   );
 
   if (loading && !report) {
     return (
-      <SkeletonScreen title="Rapoarte" onBack={back} blocks={2}>
-        <SkeletonStatGrid />
-      </SkeletonScreen>
+      <View style={{ flex: 1 }}>
+        <SkeletonScreen title="Rapoarte" onBack={back} blocks={2}>
+          <SkeletonStatGrid />
+        </SkeletonScreen>
+      </View>
     );
   }
 
@@ -84,7 +99,8 @@ export default function BusinessReportsScreen() {
     denom > 0 ? Math.round((Number(report.no_show) / denom) * 100) : 0;
 
   return (
-    <Screen title="Rapoarte" subtitle={`Ultimele ${report.days} zile`} onBack={back}>
+    <View style={{ flex: 1 }}>
+      <Screen title="Rapoarte" subtitle={`Ultimele ${report.days} zile`} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
       <View style={styles.grid}>
@@ -134,6 +150,7 @@ export default function BusinessReportsScreen() {
         </View>
       ))}
     </Screen>
+    </View>
   );
 }
 

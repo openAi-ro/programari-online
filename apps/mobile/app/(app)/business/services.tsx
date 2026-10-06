@@ -22,11 +22,12 @@ import type { Service } from '@/lib/types';
 
 type Draft = {
   name: string;
+  description: string;
   duration: string;
   price: string;
 };
 
-const EMPTY_DRAFT: Draft = { name: '', duration: '60', price: '0' };
+const EMPTY_DRAFT: Draft = { name: '', description: '', duration: '60', price: '0' };
 
 export default function BusinessServicesScreen() {
   const t = useTheme();
@@ -99,6 +100,7 @@ export default function BusinessServicesScreen() {
     setEditingId(s.id);
     setDraft({
       name: s.name,
+      description: s.description ?? '',
       duration: String(s.duration_minutes),
       price: String(s.price ?? 0),
     });
@@ -107,6 +109,7 @@ export default function BusinessServicesScreen() {
   async function saveDraft() {
     if (!businessId) return;
     const name = draft.name.trim();
+    const description = draft.description.trim();
     const duration = parseInt(draft.duration, 10);
     const price = Number(String(draft.price).replace(',', '.'));
     if (!name) {
@@ -128,6 +131,7 @@ export default function BusinessServicesScreen() {
       const { error: err } = await supabase.from('services').insert({
         business_id: businessId,
         name,
+        description: description || null,
         duration_minutes: duration,
         price,
         sort_order: rows.length,
@@ -147,6 +151,7 @@ export default function BusinessServicesScreen() {
       .from('services')
       .update({
         name,
+        description: description || null,
         duration_minutes: duration,
         price,
         updated_at: new Date().toISOString(),
@@ -243,6 +248,17 @@ export default function BusinessServicesScreen() {
             autoCapitalize="sentences"
           />
           <Field
+            label="Descriere importantă"
+            value={draft.description}
+            onChangeText={(description) => setDraft((d) => ({ ...d, description }))}
+            placeholder="Ex: ce include, ce să aducă clientul…"
+            icon="document-text-outline"
+            multiline
+            numberOfLines={3}
+            autoCapitalize="sentences"
+            hint="Vizibilă clienților când aleg serviciul."
+          />
+          <Field
             label="Durată (minute)"
             value={draft.duration}
             onChangeText={(duration) => setDraft((d) => ({ ...d, duration }))}
@@ -283,6 +299,11 @@ export default function BusinessServicesScreen() {
           >
             <Pressable onPress={() => startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
+              {s.description ? (
+                <Text style={[styles.rowDesc, { color: t.colors.textMuted }]} numberOfLines={2}>
+                  {s.description}
+                </Text>
+              ) : null}
               <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
                 {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
                 {s.active ? '' : ' · inactiv'}
@@ -317,6 +338,7 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, gap: 2 },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
+  rowDesc: { fontSize: fontSize.sm, marginTop: 2 },
   rowMeta: { fontSize: fontSize.sm },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });

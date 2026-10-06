@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import {
   Screen,
   useTheme,
 } from '@/components/ui';
+import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useBack } from '@/lib/nav';
 import { STATUS_META } from '@/lib/status';
@@ -21,6 +22,12 @@ import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
 
 export default function BusinessClientsScreen() {
+  useEffect(() => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.count('[TAB_MOUNT] business/clients');
+    }
+  }, []);
   const t = useTheme();
   const back = useBack();
   const router = useRouter();
@@ -60,9 +67,15 @@ export default function BusinessClientsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      void load();
-    }, [load])
+      const hasExistingData = rows.length > 0;
+      if (measureBeforeEnabled() || !hasExistingData) setLoading(true);
+      void load().then(() => {
+        markNavReady('clients', {
+          hasExistingData,
+          softRefresh: hasExistingData && !measureBeforeEnabled(),
+        });
+      });
+    }, [load, rows.length])
   );
 
   const shown = rows.filter((r) => {
@@ -135,17 +148,20 @@ export default function BusinessClientsScreen() {
 
   if (loading && rows.length === 0) {
     return (
-      <ListLoadingScreen
-        title="Clienți"
-        subtitle="Istoric, vizite, note"
-        onBack={back}
-        label="Se încarcă clienții…"
-      />
+      <View style={{ flex: 1 }}>
+        <ListLoadingScreen
+          title="Clienți"
+          subtitle="Istoric, vizite, note"
+          onBack={back}
+          label="Se încarcă clienții…"
+        />
+      </View>
     );
   }
 
   return (
-    <Screen title="Clienți" subtitle="Istoric, vizite, note" onBack={back}>
+    <View style={{ flex: 1 }}>
+      <Screen title="Clienți" subtitle="Istoric, vizite, note" onBack={back}>
       <Field
         label="Caută"
         value={query}
@@ -247,6 +263,7 @@ export default function BusinessClientsScreen() {
         })
       )}
     </Screen>
+    </View>
   );
 }
 
