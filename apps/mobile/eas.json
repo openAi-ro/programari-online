@@ -42,6 +42,11 @@
     "production": {
       "ios": {
         "ascAppId": "INLOCUIESTE-CU-APP-ID-DIN-APP-STORE-CONNECT"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   }

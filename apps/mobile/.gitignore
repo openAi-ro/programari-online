@@ -44,3 +44,7 @@ fcm-service-account*.json
 # generated native folders
 /ios
 /android
+
+# Google Play EAS submit (secret)
+google-play-service-account.json
+

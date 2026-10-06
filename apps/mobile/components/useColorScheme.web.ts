@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
 
+import {
+  getThemePreference,
+  getThemePreferenceSync,
+  subscribeThemePreference,
+  type ThemePreference,
+} from '@/lib/themePreference';
+
 type Scheme = 'light' | 'dark';
 
 function systemScheme(): Scheme {
@@ -8,20 +15,33 @@ function systemScheme(): Scheme {
 }
 
 /**
- * Pe web pornim de la 'light' (aceasta e și culoarea randată în HTML de +html.tsx),
- * apoi urmărim `prefers-color-scheme` după montare, ca să nu existe mismatch la hidratare.
+ * Pe web: preferința din Setări, altfel prefers-color-scheme.
  */
 export function useColorScheme(): Scheme {
-  const [scheme, setScheme] = useState<Scheme>('light');
+  const [pref, setPref] = useState<ThemePreference>(() => getThemePreferenceSync());
+  const [system, setSystem] = useState<Scheme>('light');
+
+  useEffect(() => {
+    let cancelled = false;
+    void getThemePreference().then((p) => {
+      if (!cancelled) setPref(p);
+    });
+    const unsub = subscribeThemePreference((p) => setPref(p));
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const query = window.matchMedia('(prefers-color-scheme: dark)');
-    const sync = () => setScheme(query.matches ? 'dark' : 'light');
+    const sync = () => setSystem(query.matches ? 'dark' : 'light');
     sync();
     query.addEventListener('change', sync);
     return () => query.removeEventListener('change', sync);
   }, []);
 
-  return scheme;
+  if (pref === 'light' || pref === 'dark') return pref;
+  return system;
 }

@@ -3,30 +3,47 @@ import { Platform } from 'react-native';
 export type Scheme = 'light' | 'dark';
 
 /**
- * Paleta brută. Nu se folosește direct în ecrane — se citește prin `useTheme()`,
- * care alege varianta potrivită schemei curente.
+ * Tema „Programări Aurora” — construită pe brandul din icon:
+ * calendar + QR pe gradient teal → sky, cu accent cald orange.
+ * Calmă (încredere pentru programări locale), clară pe light/dark,
+ * aliniată splash + adaptive icon.
  */
 export const palette = {
-  // Neutre
   white: '#ffffff',
-  ink950: '#0b1120',
-  ink900: '#111a2e',
-  ink800: '#1b2740',
-  ink700: '#2a3a58',
-  ink500: '#5b6b86',
-  ink400: '#8496b0',
-  ink300: '#c3cede',
-  ink200: '#e2e8f2',
-  ink100: '#eef2f8',
-  ink50: '#f6f8fc',
 
-  // Accent — indigo
-  accent700: '#3730a3',
-  accent600: '#4438ca',
-  accent500: '#5b4bf0',
-  accent400: '#7b6ef5',
-  accent100: '#e6e3fd',
-  accent50: '#f1effe',
+  // Neutre — slate cald (mai puțin „rece” decât ink pur)
+  ink950: '#0c1222',
+  ink900: '#121a2b',
+  ink800: '#1c273c',
+  ink700: '#2c3b55',
+  ink500: '#5a6b84',
+  ink400: '#8496ae',
+  ink300: '#c2cedd',
+  ink200: '#e1e8f1',
+  ink100: '#eef3f8',
+  ink50: '#f5f8fb',
+
+  // Accent principal — teal (stânga iconului)
+  accent700: '#0f766e',
+  accent600: '#0d9488',
+  accent500: '#14b8a6',
+  accent400: '#2dd4bf',
+  accent100: '#ccfbf1',
+  accent50: '#f0fdfa',
+
+  // Accent cald — colțul orange din icon (folosit rar: badge / highlight)
+  warm700: '#c2410c',
+  warm600: '#ea580c',
+  warm500: '#f97316',
+  warm100: '#ffedd5',
+  warm50: '#fff7ed',
+
+  // Sky — dreapta iconului / info
+  sky700: '#0369a1',
+  sky600: '#0284c7',
+  sky500: '#0ea5e9',
+  sky100: '#e0f2fe',
+  sky50: '#f0f9ff',
 
   // Semantice
   success700: '#15803d',
@@ -35,18 +52,14 @@ export const palette = {
   success50: '#f0fdf4',
 
   warning700: '#a35a06',
-  warning600: '#c2740a',
-  warning100: '#fdf0d5',
-  warning50: '#fefaf0',
+  warning600: '#d97706',
+  warning100: '#fef3c7',
+  warning50: '#fffbeb',
 
-  danger700: '#b42318',
+  danger700: '#b91c1c',
   danger600: '#dc2626',
-  danger100: '#fde5e3',
-  danger50: '#fef4f3',
-
-  info700: '#0e6f83',
-  info600: '#0e7f96',
-  info100: '#d9f2f8',
+  danger100: '#fee2e2',
+  danger50: '#fef2f2',
 } as const;
 
 export const spacing = {
@@ -58,7 +71,7 @@ export const spacing = {
   '2xl': 24,
   '3xl': 32,
   '4xl': 48,
-  /** Minimum pressable hit area (a11y). */
+  /** Minimum pressable hit area (a11y / Apple HIG). */
   touchTarget: 44,
 } as const;
 
@@ -67,6 +80,7 @@ export const radius = {
   md: 12,
   lg: 16,
   xl: 22,
+  '2xl': 28,
   pill: 999,
 } as const;
 
@@ -82,10 +96,6 @@ export const fontSize = {
 
 export type Shadow = ReturnType<typeof shadow>;
 
-/**
- * RN 0.86 acceptă `boxShadow` (sintaxă CSS) pe iOS, Android și web.
- * Pe Android păstrăm și `elevation`, care rămâne varianta cea mai sigură.
- */
 function shadow(css: string, androidElevation: number) {
   const base = { boxShadow: css };
   if (Platform.OS === 'android') {
@@ -96,14 +106,16 @@ function shadow(css: string, androidElevation: number) {
 
 export const shadows = {
   none: {},
-  sm: shadow('0 1px 2px rgba(11,17,32,0.06)', 1),
-  md: shadow('0 2px 8px rgba(11,17,32,0.08)', 3),
-  lg: shadow('0 10px 28px rgba(11,17,32,0.14)', 8),
-  accent: shadow('0 8px 20px rgba(91,75,240,0.32)', 6),
+  sm: shadow('0 1px 2px rgba(12,18,34,0.06)', 1),
+  md: shadow('0 2px 10px rgba(12,18,34,0.08)', 3),
+  lg: shadow('0 12px 28px rgba(12,18,34,0.14)', 8),
+  accent: shadow('0 8px 22px rgba(20,184,166,0.35)', 6),
 };
 
 export type Theme = {
   scheme: Scheme;
+  /** Numele temei — pentru debug / Setări. */
+  name: 'programari-aurora';
   colors: {
     bg: string;
     bgElevated: string;
@@ -120,6 +132,11 @@ export type Theme = {
     accentPressed: string;
     accentSoft: string;
     accentSoftText: string;
+
+    /** Orange din icon — CTA secundar / highlight. */
+    warm: string;
+    warmSoft: string;
+    warmSoftText: string;
 
     success: string;
     successSoft: string;
@@ -152,10 +169,14 @@ const light: Theme['colors'] = {
   textFaint: palette.ink400,
   onAccent: palette.white,
 
-  accent: palette.accent500,
-  accentPressed: palette.accent600,
+  accent: palette.accent600,
+  accentPressed: palette.accent700,
   accentSoft: palette.accent100,
   accentSoftText: palette.accent700,
+
+  warm: palette.warm500,
+  warmSoft: palette.warm100,
+  warmSoftText: palette.warm700,
 
   success: palette.success600,
   successSoft: palette.success100,
@@ -166,11 +187,11 @@ const light: Theme['colors'] = {
   danger: palette.danger600,
   dangerSoft: palette.danger100,
   dangerSoftText: palette.danger700,
-  info: palette.info600,
-  infoSoft: palette.info100,
-  infoSoftText: palette.info700,
+  info: palette.sky600,
+  infoSoft: palette.sky100,
+  infoSoftText: palette.sky700,
 
-  overlay: 'rgba(11,17,32,0.45)',
+  overlay: 'rgba(12,18,34,0.45)',
   skeleton: palette.ink200,
 };
 
@@ -179,24 +200,28 @@ const dark: Theme['colors'] = {
   bgElevated: palette.ink900,
   surface: palette.ink900,
   surfaceMuted: palette.ink800,
-  border: palette.ink800,
-  borderStrong: palette.ink700,
-  text: '#f2f5fa',
+  border: palette.ink700,
+  borderStrong: palette.ink500,
+  text: '#f1f5f9',
   textMuted: palette.ink400,
   textFaint: palette.ink500,
   onAccent: palette.white,
 
   accent: palette.accent400,
   accentPressed: palette.accent500,
-  accentSoft: 'rgba(123,110,245,0.18)',
-  accentSoftText: '#c6c0fb',
+  accentSoft: 'rgba(45,212,191,0.16)',
+  accentSoftText: '#99f6e4',
+
+  warm: '#fb923c',
+  warmSoft: 'rgba(249,115,22,0.16)',
+  warmSoftText: '#fdba74',
 
   success: '#4ade80',
   successSoft: 'rgba(74,222,128,0.16)',
   successSoftText: '#a7f3c4',
   warning: '#fbbf24',
   warningSoft: 'rgba(251,191,36,0.16)',
-  warningSoftText: '#fde3a7',
+  warningSoftText: '#fde68a',
   danger: '#f87171',
   dangerSoft: 'rgba(248,113,113,0.16)',
   dangerSoftText: '#fca5a5',
@@ -204,13 +229,14 @@ const dark: Theme['colors'] = {
   infoSoft: 'rgba(56,189,248,0.16)',
   infoSoftText: '#bae6fd',
 
-  overlay: 'rgba(0,0,0,0.6)',
+  overlay: 'rgba(0,0,0,0.62)',
   skeleton: palette.ink800,
 };
 
 export function buildTheme(scheme: Scheme): Theme {
   return {
     scheme,
+    name: 'programari-aurora',
     colors: scheme === 'dark' ? dark : light,
     shadows,
   };

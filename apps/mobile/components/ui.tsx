@@ -2,7 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Animated,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +24,27 @@ import type { ComponentProps } from 'react';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { buildTheme, fontSize, radius, spacing, type Theme } from '@/constants/theme';
+import { computeFooterPaddingBottom } from '@/lib/keyboardPad';
+
+/** Înălțimea tastaturii (0 când e ascunsă). Folosit pe Android, unde resize nu ridică footer-ul cu edge-to-edge. */
+function useKeyboardHeight(enabled: boolean): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!enabled) {
+      setHeight(0);
+      return;
+    }
+    const show = Keyboard.addListener('keyboardDidShow', (e) =>
+      setHeight(e.endCoordinates.height)
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [enabled]);
+  return enabled ? height : 0;
+}
 
 export function useTheme(): Theme {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
@@ -44,6 +69,11 @@ type ScreenProps = {
   /** Spațiu suplimentar jos, util când există un buton ancorat. */
   bottomInset?: number;
   footer?: React.ReactNode;
+  /**
+   * Ridică conținutul / footer-ul deasupra tastaturii (client + business).
+   * Implicit true. Pune false doar dacă ecranul își gestionează singur tastatura.
+   */
+  keyboardAvoid?: boolean;
 };
 
 export function Screen({
@@ -55,16 +85,25 @@ export function Screen({
   scroll = true,
   bottomInset = spacing['3xl'],
   footer,
+  keyboardAvoid = true,
 }: ScreenProps) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight(keyboardAvoid && Platform.OS === 'android');
+  const footerPaddingBottom = computeFooterPaddingBottom({
+    base: Math.max(insets.bottom, spacing.sm) + spacing.sm,
+    keyboardHeight,
+    platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+    keyboardAvoid,
+  });
 
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
       contentContainerStyle={[styles.scrollContent, styles.shell, { paddingBottom: bottomInset }]}
-      keyboardShouldPersistTaps="always"
-      keyboardDismissMode="none"
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      automaticallyAdjustKeyboardInsets={keyboardAvoid}
       removeClippedSubviews={false}
       showsVerticalScrollIndicator={false}
     >
@@ -74,8 +113,8 @@ export function Screen({
     <View style={[styles.flex, styles.shell, { paddingBottom: bottomInset }]}>{children}</View>
   );
 
-  return (
-    <View style={[styles.flex, { backgroundColor: t.colors.bg }]}>
+  const content = (
+    <>
       <View style={{ paddingTop: insets.top, backgroundColor: t.colors.bgElevated }}>
         {title || onBack ? (
           <View style={[styles.header, styles.shell]}>
@@ -111,14 +150,30 @@ export function Screen({
             {
               backgroundColor: t.colors.bgElevated,
               borderTopColor: t.colors.border,
-              paddingBottom: insets.bottom + spacing.md,
+              paddingBottom: footerPaddingBottom,
             },
           ]}
         >
           <View style={styles.shell}>{footer}</View>
         </View>
       ) : null}
-    </View>
+    </>
+  );
+
+  if (!keyboardAvoid) {
+    return <View style={[styles.flex, { backgroundColor: t.colors.bg }]}>{content}</View>;
+  }
+
+  // iOS: padding. Android: deja softwareKeyboardLayoutMode=resize în app.json —
+  // behavior „height" dublează ridicarea; lăsăm undefined și ne bazăm pe resize + insets.
+  return (
+    <KeyboardAvoidingView
+      style={[styles.flex, { backgroundColor: t.colors.bg }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+    >
+      {content}
+    </KeyboardAvoidingView>
   );
 }
 
@@ -177,6 +232,10 @@ type ButtonProps = {
   loading?: boolean;
   disabled?: boolean;
   fullWidth?: boolean;
+  /** Aliniere conținut icon+text. `start` = icon pe muchia stângă (casete client). */
+  contentAlign?: 'center' | 'start';
+  /** Linii pentru etichetă. Implicit 2; casetele client folosesc 1. */
+  labelNumberOfLines?: number;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -189,6 +248,8 @@ export function Button({
   loading = false,
   disabled = false,
   fullWidth = true,
+  contentAlign = 'center',
+  labelNumberOfLines = 2,
   style,
 }: ButtonProps) {
   const t = useTheme();
@@ -218,6 +279,7 @@ export function Button({
         styles.button,
         size === 'lg' ? styles.buttonLg : size === 'sm' ? styles.buttonSm : styles.buttonMd,
         fullWidth && styles.buttonFull,
+        contentAlign === 'start' ? styles.buttonCompactPad : null,
         {
           backgroundColor: c.bg,
           borderColor: c.border ?? 'transparent',
@@ -233,7 +295,13 @@ export function Button({
       {loading ? (
         <ActivityIndicator size="small" color={c.fg} />
       ) : (
-        <View style={styles.buttonRow}>
+        <View
+          style={[
+            styles.buttonRow,
+            contentAlign === 'start' ? styles.buttonRowStart : null,
+            contentAlign === 'start' ? styles.buttonRowCompact : null,
+          ]}
+        >
           {icon ? (
             <Ionicons name={icon} size={size === 'sm' ? 15 : 18} color={c.fg} />
           ) : null}
@@ -243,7 +311,12 @@ export function Button({
               size === 'lg' ? styles.buttonTextLg : null,
               size === 'sm' ? styles.buttonTextSm : null,
               { color: c.fg },
+              contentAlign === 'start' ? styles.buttonTextStart : null,
             ]}
+            numberOfLines={labelNumberOfLines}
+            ellipsizeMode="tail"
+            adjustsFontSizeToFit
+            minimumFontScale={labelNumberOfLines === 1 ? 0.7 : 0.75}
           >
             {label}
           </Text>
@@ -261,7 +334,7 @@ type CardProps = {
   children?: React.ReactNode;
   onPress?: () => void;
   icon?: IconName;
-  iconTone?: 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+  iconTone?: 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'warm';
   title?: string;
   hint?: string;
   chevron?: boolean;
@@ -286,6 +359,7 @@ export function Card({
     danger: t.colors.danger,
     info: t.colors.info,
     neutral: t.colors.textMuted,
+    warm: t.colors.warm,
   }[iconTone];
   const toneBg = {
     accent: t.colors.accentSoft,
@@ -294,6 +368,7 @@ export function Card({
     danger: t.colors.dangerSoft,
     info: t.colors.infoSoft,
     neutral: t.colors.surfaceMuted,
+    warm: t.colors.warmSoft,
   }[iconTone];
 
   const inner = (
@@ -305,10 +380,10 @@ export function Card({
       ) : null}
       <View style={styles.cardBody}>
         {title ? (
-          <Text style={[styles.cardTitle, { color: t.colors.text }]}>{title}</Text>
+          <Text style={[styles.cardTitle, { color: t.colors.text }]} numberOfLines={2}>{title}</Text>
         ) : null}
         {hint ? (
-          <Text style={[styles.cardHint, { color: t.colors.textMuted }]}>{hint}</Text>
+          <Text style={[styles.cardHint, { color: t.colors.textMuted }]} numberOfLines={3}>{hint}</Text>
         ) : null}
         {children}
       </View>
@@ -392,7 +467,7 @@ export function Callout({
   children,
   icon,
 }: {
-  tone?: 'info' | 'success' | 'warning' | 'danger' | 'accent';
+  tone?: 'info' | 'success' | 'warning' | 'danger' | 'accent' | 'warm';
   title?: string;
   children?: React.ReactNode;
   icon?: IconName;
@@ -404,6 +479,7 @@ export function Callout({
     warning: { bg: t.colors.warningSoft, fg: t.colors.warningSoftText, icon: 'alert-circle' as IconName },
     danger: { bg: t.colors.dangerSoft, fg: t.colors.dangerSoftText, icon: 'close-circle' as IconName },
     accent: { bg: t.colors.accentSoft, fg: t.colors.accentSoftText, icon: 'sparkles' as IconName },
+    warm: { bg: t.colors.warmSoft, fg: t.colors.warmSoftText, icon: 'flame' as IconName },
   }[tone];
 
   return (
@@ -432,9 +508,11 @@ type FieldProps = TextInputProps & {
   icon?: IconName;
 };
 
-export function Field({ label, hint, error, icon, style, ...inputProps }: FieldProps) {
+export function Field({ label, hint, error, icon, style, secureTextEntry, ...inputProps }: FieldProps) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
+  const isPassword = secureTextEntry === true;
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   return (
     <View style={styles.fieldWrap}>
@@ -463,6 +541,7 @@ export function Field({ label, hint, error, icon, style, ...inputProps }: FieldP
         ) : null}
         <TextInput
           {...inputProps}
+          secureTextEntry={isPassword ? !passwordVisible : secureTextEntry}
           blurOnSubmit={inputProps.blurOnSubmit ?? false}
           showSoftInputOnFocus={inputProps.showSoftInputOnFocus ?? true}
           underlineColorAndroid="transparent"
@@ -482,6 +561,21 @@ export function Field({ label, hint, error, icon, style, ...inputProps }: FieldP
             style,
           ]}
         />
+        {isPassword ? (
+          <Pressable
+            onPress={() => setPasswordVisible((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? 'Ascunde parola' : 'Arată parola'}
+            hitSlop={8}
+            style={styles.fieldEyeBtn}
+          >
+            <Ionicons
+              name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={focused ? t.colors.accent : t.colors.textFaint}
+            />
+          </Pressable>
+        ) : null}
       </View>
       {error ? (
         <Text style={[styles.fieldError, { color: t.colors.danger }]}>{error}</Text>
@@ -565,7 +659,7 @@ export function Badge({
   dot = false,
 }: {
   children: React.ReactNode;
-  tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
+  tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'warm';
   icon?: IconName;
   dot?: boolean;
 }) {
@@ -577,13 +671,20 @@ export function Badge({
     warning: { bg: t.colors.warningSoft, fg: t.colors.warningSoftText },
     danger: { bg: t.colors.dangerSoft, fg: t.colors.dangerSoftText },
     info: { bg: t.colors.infoSoft, fg: t.colors.infoSoftText },
+    warm: { bg: t.colors.warmSoft, fg: t.colors.warmSoftText },
   }[tone];
 
   return (
     <View style={[styles.badge, { backgroundColor: map.bg }]}>
       {dot ? <View style={[styles.badgeDot, { backgroundColor: map.fg }]} /> : null}
       {icon ? <Ionicons name={icon} size={12} color={map.fg} /> : null}
-      <Text style={[styles.badgeText, { color: map.fg }]}>{children}</Text>
+      <Text
+        style={[styles.badgeText, { color: map.fg }]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {children}
+      </Text>
     </View>
   );
 }
@@ -690,10 +791,13 @@ type AvatarSize = 'sm' | 'md' | 'lg';
 export function Avatar({
   initials,
   icon,
+  imageUrl,
   size = 'md',
 }: {
   initials?: string;
   icon?: IconName;
+  /** URL poză — cerc plin (cover). */
+  imageUrl?: string | null;
   size?: AvatarSize;
 }) {
   const t = useTheme();
@@ -701,6 +805,7 @@ export function Avatar({
   const textSize = size === 'sm' ? fontSize.xs : size === 'lg' ? fontSize.lg : fontSize.sm;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 22 : 18;
   const letter = (initials ?? '').trim().slice(0, 1).toUpperCase() || '?';
+  const showPhoto = Boolean(imageUrl);
 
   return (
     <View
@@ -710,11 +815,19 @@ export function Avatar({
           width: dim,
           height: dim,
           borderRadius: radius.pill,
-          backgroundColor: t.colors.accentSoft,
+          backgroundColor: showPhoto ? t.colors.surfaceMuted : t.colors.accentSoft,
+          overflow: 'hidden',
         },
       ]}
     >
-      {icon ? (
+      {showPhoto ? (
+        <Image
+          source={{ uri: imageUrl as string }}
+          style={{ width: dim, height: dim, borderRadius: radius.pill }}
+          resizeMode="cover"
+          accessibilityLabel="Poză profil"
+        />
+      ) : icon ? (
         <Ionicons name={icon} size={iconSize} color={t.colors.accentSoftText} />
       ) : (
         <Text style={[styles.avatarText, { color: t.colors.accentSoftText, fontSize: textSize }]}>
@@ -1016,7 +1129,7 @@ export function Banner({
   actionLabel,
   icon,
 }: {
-  tone?: 'accent' | 'success' | 'warning' | 'info';
+  tone?: 'accent' | 'success' | 'warning' | 'info' | 'warm';
   title: string;
   description?: string;
   onPress?: () => void;
@@ -1029,6 +1142,7 @@ export function Banner({
     success: { bg: t.colors.successSoft, fg: t.colors.successSoftText, border: t.colors.success },
     warning: { bg: t.colors.warningSoft, fg: t.colors.warningSoftText, border: t.colors.warning },
     info: { bg: t.colors.infoSoft, fg: t.colors.infoSoftText, border: t.colors.info },
+    warm: { bg: t.colors.warmSoft, fg: t.colors.warmSoftText, border: t.colors.warm },
   }[tone];
 
   return (
@@ -1080,8 +1194,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     minHeight: 52,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: spacing.sm },
-  headerTitles: { flex: 1 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, gap: spacing.sm },
+  headerTitles: { flex: 1, minWidth: 0 },
   headerTitle: { fontSize: fontSize.lg, fontWeight: '700', letterSpacing: -0.2 },
   headerSubtitle: { fontSize: fontSize.xs, marginTop: 1 },
   iconBadge: {
@@ -1104,6 +1218,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,
+    overflow: 'hidden',
+    maxWidth: '100%',
   },
   buttonSm: {
     paddingVertical: spacing.sm + 2,
@@ -1119,9 +1235,38 @@ const styles = StyleSheet.create({
   },
   buttonLg: { paddingVertical: 15, paddingHorizontal: spacing.xl, gap: spacing.sm, minHeight: 52 },
   buttonFull: { width: '100%' },
-  buttonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  buttonRowLayout: { flexDirection: 'row', alignItems: 'stretch', width: '100%' },
-  buttonText: { fontSize: fontSize.md, fontWeight: '600' },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    maxWidth: '100%',
+    minWidth: 0,
+  },
+  buttonRowStart: {
+    justifyContent: 'flex-start',
+    width: '100%',
+  },
+  buttonRowCompact: {
+    gap: 6,
+  },
+  buttonCompactPad: {
+    paddingHorizontal: spacing.sm + 2,
+  },
+  buttonTextStart: {
+    textAlign: 'left',
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  buttonRowLayout: { flexDirection: 'row', alignItems: 'stretch', width: '100%', flexWrap: 'wrap' },
+  buttonText: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: 'center',
+  },
   buttonTextSm: { fontSize: fontSize.sm, fontWeight: '700' },
   buttonTextLg: { fontSize: fontSize.lg },
   avatar: { alignItems: 'center', justifyContent: 'center' },
@@ -1135,7 +1280,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
   },
-  cardBody: { flex: 1, gap: 2 },
+  cardBody: { flex: 1, minWidth: 0, gap: 2 },
   cardIcon: {
     width: 40,
     height: 40,
@@ -1189,6 +1334,9 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     fontSize: fontSize.lg,
   },
+  fieldEyeBtn: {
+    padding: 4,
+  },
   fieldInputMultiline: { minHeight: 80, textAlignVertical: 'top' },
   fieldHint: { fontSize: fontSize.xs, lineHeight: 16 },
   fieldError: { fontSize: fontSize.xs, fontWeight: '600' },
@@ -1207,20 +1355,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  settingTitle: { fontSize: fontSize.md, fontWeight: '600' },
-  settingDesc: { fontSize: fontSize.sm, marginTop: 2, lineHeight: 18 },
+  settingTitle: { fontSize: fontSize.md, fontWeight: '600', flexShrink: 1, minWidth: 0 },
+  settingDesc: { fontSize: fontSize.sm, marginTop: 2, lineHeight: 18, flexShrink: 1, minWidth: 0 },
 
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    flexShrink: 1,
+    maxWidth: '100%',
     gap: 5,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
     borderRadius: radius.pill,
   },
-  badgeDot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontSize: fontSize.xs, fontWeight: '700', letterSpacing: 0.2 },
+  badgeDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  badgeText: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    flexShrink: 1,
+    minWidth: 0,
+  },
 
   toggleTrack: {
     width: 44,
@@ -1237,17 +1393,26 @@ const styles = StyleSheet.create({
 
   segmented: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     padding: 4,
     borderRadius: radius.md,
     gap: 4,
   },
   segmentedItem: {
     flex: 1,
+    flexBasis: '30%',
+    minWidth: 0,
     paddingVertical: spacing.sm + 1,
+    paddingHorizontal: spacing.xs,
     borderRadius: radius.sm,
     alignItems: 'center',
   },
-  segmentedText: { fontSize: fontSize.sm, fontWeight: '600' },
+  segmentedText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    flexShrink: 1,
+    textAlign: 'center',
+  },
 
   empty: { alignItems: 'center', paddingVertical: spacing['4xl'], paddingHorizontal: spacing.xl },
   emptyCompact: { paddingVertical: spacing.xl, paddingHorizontal: spacing.md },
