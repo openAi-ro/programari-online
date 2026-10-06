@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+﻿import { useCallback, useMemo, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -7,18 +7,26 @@ import { DatePickerField } from '@/components/DatePickerField';
 import {
   Badge,
   Button,
+  ButtonRow,
   Callout,
   EmptyState,
+  Field,
   Screen,
+  SectionTitle,
   SkeletonScreen,
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { STATUS_META } from '@/lib/status';
 import { useBack } from '@/lib/nav';
+import { mapBookingRpcError } from '@/lib/bookingRules';
+import { listBusyRanges } from '@/lib/bookingRpc';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
+import { generateFreeSlots } from '@/lib/slots';
 import { supabase } from '@/lib/supabase';
-import type { Appointment, BusinessProfile } from '@/lib/types';
+import { createWalkinAppointment } from '@/lib/walkin';
+import { normalizeWalkinContact, validateWalkinInput } from '@/lib/walkinRules';
+import type { Appointment, BusinessProfile, FreeSlot, Service } from '@/lib/types';
 
 function toYmd(d: Date): string {
   const y = d.getFullYear();
@@ -39,6 +47,18 @@ export default function BusinessCalendarScreen() {
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
   const [staffList, setStaffList] = useState<{ id: string; name: string; color: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [walkinOpen, setWalkinOpen] = useState(false);
+  const [services, setServices] = useState<Service[]>([]);
+  const [walkinServiceId, setWalkinServiceId] = useState<string | null>(null);
+  const [walkinStaffId, setWalkinStaffId] = useState<string | null>(null);
+  const [walkinSlots, setWalkinSlots] = useState<FreeSlot[]>([]);
+  const [walkinSlotsLoading, setWalkinSlotsLoading] = useState(false);
+  const [walkinSlot, setWalkinSlot] = useState<FreeSlot | null>(null);
+  const [walkinPhone, setWalkinPhone] = useState('');
+  const [walkinEmail, setWalkinEmail] = useState('');
+  const [walkinSaving, setWalkinSaving] = useState(false);
+  const [walkinError, setWalkinError] = useState<string | null>(null);
+  const [walkinOk, setWalkinOk] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -126,6 +146,115 @@ export default function BusinessCalendarScreen() {
     setBusiness({ ...business, blocked_dates: next });
   }
 
+  const walkinDuration = useMemo(() => {
+    const svc = services.find((s) => s.id === walkinServiceId);
+    return svc?.duration_minutes ?? business?.session_duration_minutes ?? 30;
+  }, [services, walkinServiceId, business]);
+
+  async function openWalkin() {
+    if (!business) return;
+    setWalkinError(null);
+    setWalkinOk(null);
+    setWalkinSlot(null);
+    setWalkinOpen(true);
+    setWalkinSlotsLoading(true);
+    const { data: svcRows } = await supabase
+      .from('services')
+      .select('*')
+      .eq('business_id', business.id)
+      .eq('active', true)
+      .order('sort_order', { ascending: true });
+    const list = (svcRows ?? []) as Service[];
+    setServices(list);
+    if (!walkinServiceId && list.length > 0) setWalkinServiceId(list[0].id);
+    if (!walkinStaffId) {
+      setWalkinStaffId(staffFilter !== 'all' ? staffFilter : (staffList[0]?.id ?? null));
+    }
+    await reloadWalkinSlots(
+      (walkinServiceId ?? list[0]?.id ?? null),
+      (staffFilter !== 'all' ? staffFilter : (walkinStaffId ?? staffList[0]?.id ?? null)),
+      list
+    );
+  }
+
+  async function reloadWalkinSlots(
+    serviceId: string | null,
+    staffId: string | null,
+    svcList: Service[] = services
+  ) {
+    if (!business) return;
+    setWalkinSlotsLoading(true);
+    setWalkinSlot(null);
+    const svc = svcList.find((s) => s.id === serviceId);
+    const duration = svc?.duration_minutes ?? business.session_duration_minutes;
+    const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
+    const { busy, error: busyErr } = await listBusyRanges({
+      businessId: business.id,
+      fromIso: startUtc.toISOString(),
+      toIso: endUtc.toISOString(),
+      staffId,
+    });
+    if (busyErr) {
+      setWalkinError(busyErr);
+      setWalkinSlots([]);
+      setWalkinSlotsLoading(false);
+      return;
+    }
+    const free = generateFreeSlots({
+      dateLocal,
+      timezone: business.timezone,
+      sessionDurationMinutes: duration,
+      workingHours: business.working_hours,
+      breakHours: business.break_hours,
+      busy,
+      bufferMinutes: business.buffer_minutes ?? 0,
+      blockedDates: business.blocked_dates ?? [],
+      notBeforeUtc: new Date(),
+    });
+    setWalkinSlots(free);
+    setWalkinSlotsLoading(false);
+  }
+
+  async function saveWalkin() {
+    if (!business || !walkinSlot) {
+      setWalkinError('Alege un slot liber din calendar.');
+      return;
+    }
+    const { contact, error: contactErr } = normalizeWalkinContact(walkinPhone, walkinEmail);
+    const invalid = validateWalkinInput({
+      slotStartUtc: walkinSlot.startUtc,
+      slotEndUtc: walkinSlot.endUtc,
+      contactError: contactErr,
+    });
+    if (invalid) {
+      setWalkinError(mapBookingRpcError(invalid));
+      return;
+    }
+    setWalkinSaving(true);
+    setWalkinError(null);
+    const { error: err } = await createWalkinAppointment({
+      businessId: business.id,
+      startAt: walkinSlot.startUtc,
+      endAt: walkinSlot.endUtc,
+      serviceId: walkinServiceId,
+      staffId: walkinStaffId,
+      phone: contact.phone,
+      email: contact.email,
+    });
+    setWalkinSaving(false);
+    if (err) {
+      setWalkinError(mapBookingRpcError(err));
+      return;
+    }
+    const label = formatInTimeZone(new Date(walkinSlot.startUtc), business.timezone, 'HH:mm');
+    setWalkinOk(`Programare adăugată la ${label}.`);
+    setWalkinSlot(null);
+    setWalkinPhone('');
+    setWalkinEmail('');
+    await load();
+    await reloadWalkinSlots(walkinServiceId, walkinStaffId);
+  }
+
   if (loading && !business) {
     return <SkeletonScreen title="Calendar" onBack={back} blocks={5} label="Se încarcă agenda…" />;
   }
@@ -158,10 +287,15 @@ export default function BusinessCalendarScreen() {
             onPress={() => void toggleBlockDay()}
           />
           <Button
+            label="Adaugă programare (walk-in)"
+            icon="add-circle-outline"
+            onPress={() => void openWalkin()}
+          />
+          <Button
             label="Vezi cererile"
             variant="secondary"
             icon="hourglass-outline"
-            onPress={() => router.push('/(app)/business/requests')}
+            onPress={() => router.push('/(app)/business/(tabs)/requests')}
           />
         </View>
       }
@@ -245,7 +379,7 @@ export default function BusinessCalendarScreen() {
           return (
             <Pressable
               key={a.id}
-              onPress={() => router.push('/(app)/business/requests')}
+              onPress={() => router.push('/(app)/business/(tabs)/requests')}
               style={({ pressed }) => [
                 styles.item,
                 {
@@ -269,8 +403,6 @@ export default function BusinessCalendarScreen() {
                 </View>
                 {a.no_show ? (
                   <Text style={[styles.contact, { color: t.colors.danger }]}>Nu s-a prezentat</Text>
-                ) : a.payment_status === 'unpaid' ? (
-                  <Text style={[styles.contact, { color: t.colors.warning }]}>Avans neplătit</Text>
                 ) : null}
                 {contact ? (
                   <View style={styles.contactRow}>
@@ -285,6 +417,185 @@ export default function BusinessCalendarScreen() {
           );
         })
       )}
+      <Modal
+        visible={walkinOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => !walkinSaving && setWalkinOpen(false)}
+        statusBarTranslucent
+      >
+        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+          <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
+            <View style={styles.modalHead}>
+              <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
+                Programare manuala · {dateLocal}
+              </Text>
+              <Pressable
+                onPress={() => !walkinSaving && setWalkinOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Închide"
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={22} color={t.colors.textMuted} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
+              {walkinError ? <Callout tone="danger">{walkinError}</Callout> : null}
+              {walkinOk ? <Callout tone="success">{walkinOk}</Callout> : null}
+              {services.length > 0 ? (
+                <>
+                  <SectionTitle>Serviciu · {walkinDuration} min</SectionTitle>
+                  <View style={styles.filters}>
+                    {services.map((s) => {
+                      const on = walkinServiceId === s.id;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          onPress={() => {
+                            setWalkinServiceId(s.id);
+                            void reloadWalkinSlots(s.id, walkinStaffId);
+                          }}
+                          style={[
+                            styles.chip,
+                            {
+                              backgroundColor: on ? t.colors.accent : t.colors.surface,
+                              borderColor: t.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              color: on ? t.colors.onAccent : t.colors.text,
+                              fontWeight: '700',
+                              fontSize: fontSize.sm,
+                            }}
+                          >
+                            {s.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+              {staffList.length > 0 ? (
+                <>
+                  <SectionTitle>Specialist</SectionTitle>
+                  <View style={styles.filters}>
+                    {staffList.map((s) => {
+                      const on = walkinStaffId === s.id;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          onPress={() => {
+                            setWalkinStaffId(s.id);
+                            void reloadWalkinSlots(walkinServiceId, s.id);
+                          }}
+                          style={[
+                            styles.chip,
+                            {
+                              backgroundColor: on ? t.colors.accent : t.colors.surface,
+                              borderColor: t.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              color: on ? t.colors.onAccent : t.colors.text,
+                              fontWeight: '700',
+                              fontSize: fontSize.sm,
+                            }}
+                          >
+                            {s.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+              <SectionTitle>Slot liber</SectionTitle>
+              {walkinSlotsLoading ? (
+                <Text style={{ color: t.colors.textMuted }}>Se calculează sloturile…</Text>
+              ) : walkinSlots.length === 0 ? (
+                <Text style={{ color: t.colors.textMuted }}>
+                  Nu mai sunt sloturi libere in {dateLocal}. Schimbă serviciul sau ziua.
+                </Text>
+              ) : (
+                <View style={styles.slotGrid}>
+                  {walkinSlots.map((slot) => {
+                    const on = walkinSlot?.startUtc === slot.startUtc;
+                    return (
+                      <Pressable
+                        key={slot.startUtc}
+                        onPress={() => setWalkinSlot(slot)}
+                        style={[
+                          styles.slot,
+                          {
+                            backgroundColor: on ? t.colors.accent : t.colors.surface,
+                            borderColor: on ? t.colors.accent : t.colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: on ? t.colors.onAccent : t.colors.text,
+                            fontWeight: '700',
+                            fontSize: fontSize.sm,
+                          }}
+                        >
+                          {slot.labelLocal}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+              <SectionTitle>Contact client</SectionTitle>
+              <Field
+                label="Telefon"
+                placeholder="07…"
+                keyboardType="phone-pad"
+                value={walkinPhone}
+                onChangeText={setWalkinPhone}
+              />
+              <Field
+                label="Email (opțional)"
+                placeholder="client@exemplu.ro"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={walkinEmail}
+                onChangeText={setWalkinEmail}
+              />
+              <Text style={[styles.walkinHint, { color: t.colors.textFaint }]}>
+                Minim un contact. Programarea se salvează direct confirmată, fără avans.
+              </Text>
+            </ScrollView>
+            <ButtonRow>
+              <View style={styles.actionFlex}>
+                <Button
+                  label="Închide"
+                  variant="secondary"
+                  size="sm"
+                  disabled={walkinSaving}
+                  onPress={() => setWalkinOpen(false)}
+                />
+              </View>
+              <View style={styles.actionFlex}>
+                <Button
+                  label="Salvează"
+                  icon="checkmark"
+                  variant="primary"
+                  size="sm"
+                  loading={walkinSaving}
+                  disabled={!walkinSlot || walkinSaving}
+                  onPress={() => void saveWalkin()}
+                />
+              </View>
+            </ButtonRow>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -325,4 +636,31 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
   },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: spacing.md,
+  },
+  modalCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  modalTitle: { flex: 1, fontSize: fontSize.lg, fontWeight: '800' },
+  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  slot: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  walkinHint: { fontSize: fontSize.xs, marginTop: spacing.xs },
+  actionFlex: { flex: 1 },
 });
