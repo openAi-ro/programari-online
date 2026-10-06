@@ -4,12 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import {
-  buildDriveUrl,
   buildMapsUrl,
-  buildNativeDriveUrl,
   buildNativeMapsUrl,
   formatAddress,
   hasCoordinates,
+  openDriveChooser,
   openMaps,
   type BusinessLocation,
 } from '@/lib/location';
@@ -30,9 +29,7 @@ export function LocationCard({ location, compact = false }: Props) {
   const address = formatAddress(location);
   const mapsUrl = buildMapsUrl(location);
   const nativeMapsUrl = buildNativeMapsUrl(location);
-  const driveUrl = buildDriveUrl(location);
-  const nativeDriveUrl = buildNativeDriveUrl(location);
-  const canDrive = hasCoordinates(location) && Boolean(driveUrl);
+  const canDrive = hasCoordinates(location);
 
   if (!address && !mapsUrl && !canDrive) return null;
 
@@ -70,7 +67,7 @@ export function LocationCard({ location, compact = false }: Props) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Condu acum"
-          onPress={() => void openMaps(driveUrl, nativeDriveUrl)}
+          onPress={() => void openDriveChooser(location)}
           style={({ pressed }) => [
             styles.action,
             {

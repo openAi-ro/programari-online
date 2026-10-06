@@ -1,4 +1,4 @@
-import { Linking, Platform } from 'react-native';
+import { Linking, Platform, Share } from 'react-native';
 
 import type { BusinessProfile } from '@/lib/types';
 
@@ -133,10 +133,107 @@ export function buildNativeMapsUrl(location: BusinessLocation): string | null {
   return null;
 }
 
-/** Deschide navigarea turn-by-turn dacă business-ul are coordonate. */
+/** Apple Maps directions URL (iOS share / web fallback). */
+export function buildAppleMapsUrl(location: BusinessLocation): string | null {
+  if (!hasCoordinates(location)) return null;
+  const { latitude, longitude } = location;
+  return `http://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`;
+}
+
+/**
+ * Intent `geo:` pe Android — sistemul afișează chooser-ul cu aplicațiile de navigație instalate
+ * (Maps, Waze, etc.), nu o listă custom din app.
+ */
+function buildAndroidGeoDriveUrl(location: BusinessLocation): string | null {
+  if (!hasCoordinates(location)) return null;
+  const { latitude, longitude } = location;
+  const label = encodeURIComponent(formatAddress(location) ?? `${latitude},${longitude}`);
+  return `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
+}
+
+/** HTTPS directions — fallback Android / web când geo: nu e disponibil. */
+function buildHttpsDriveUrl(location: BusinessLocation): string | null {
+  return (
+    buildDriveUrl(location) ??
+    (hasCoordinates(location)
+      ? `https://maps.google.com/maps?daddr=${location.latitude},${location.longitude}`
+      : buildMapsUrl(location))
+  );
+}
+
+/** Deschide navigarea prin meniul nativ al telefonului (nu banner custom Waze/Google). */
 export async function openDrive(location: BusinessLocation): Promise<boolean> {
-  if (!hasCoordinates(location)) return false;
-  return openMaps(buildDriveUrl(location), buildNativeDriveUrl(location));
+  return openDriveChooser(location);
+}
+
+/**
+ * „Condu acum”: meniul nativ al OS-ului (share / intent maps), nu listă custom Waze+Google.
+ * - iOS: Share.share cu URL Apple Maps directions → sheet-ul de sistem (Open in / apps).
+ * - Android: Linking.openURL(geo:…) → app chooser; fallback Share / HTTPS.
+ * - Web: navigator.share dacă există, altfel tab nou cu Google Maps.
+ */
+export async function openDriveChooser(location: BusinessLocation): Promise<boolean> {
+  if (!hasLocation(location)) return false;
+
+  const addressLabel = formatAddress(location) ?? 'Navighează către business';
+  const httpsUrl = buildHttpsDriveUrl(location);
+  const appleUrl = buildAppleMapsUrl(location);
+  const geoUrl = buildAndroidGeoDriveUrl(location);
+
+  if (Platform.OS === 'ios') {
+    const shareUrl = appleUrl ?? httpsUrl;
+    if (!shareUrl) return false;
+    try {
+      await Share.share({
+        url: shareUrl,
+        message: addressLabel,
+      });
+      return true;
+    } catch {
+      return openMaps(httpsUrl, appleUrl);
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    if (geoUrl) {
+      try {
+        await Linking.openURL(geoUrl);
+        return true;
+      } catch {
+        // Continuă cu Share / HTTPS.
+      }
+    }
+    if (httpsUrl) {
+      try {
+        await Share.share({
+          message: `${addressLabel}\n${httpsUrl}`,
+          title: 'Condu acum',
+        });
+        return true;
+      } catch {
+        return openMaps(httpsUrl);
+      }
+    }
+    return false;
+  }
+
+  // Web: share nativ dacă e disponibil, altfel tab nou — fără banner fake cu 2 app-uri.
+  const webNav = typeof navigator !== 'undefined' ? (navigator as Navigator & {
+    share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+  }) : null;
+  if (webNav?.share && httpsUrl) {
+    try {
+      await webNav.share({
+        title: 'Condu acum',
+        text: addressLabel,
+        url: httpsUrl,
+      });
+      return true;
+    } catch {
+      // Anulat de utilizator sau unsupported — deschidem tab.
+    }
+  }
+  return openMaps(httpsUrl ?? appleUrl);
 }
 
 /**
