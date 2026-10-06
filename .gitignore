@@ -1,4 +1,4 @@
-﻿# env
+# env
 .env
 **/.env
 apps/mobile/.env
@@ -8,3 +8,50 @@ key.txt
 cont test.txt
 node_modules/
 .superpowers/
+
+# Agent / IDE tooling
+.agents/
+.cursor/
+SKILL.md
+
+# Deploy / CLI scratch logs
+.eas-*
+.firebase/
+.firebase-*
+.supabase-*
+expo-web.err
+expo-web.log
+**/expo-web.verify.*
+
+# Muse / local binaries & shortcuts
+.muse*
+muse-bin-*.exe
+*.exe
+*.lnk
+
+# Measure / nav bench (local DEV harness, not product)
+.measure-nav/
+apps/mobile/app/dev-nav-bench.tsx
+apps/mobile/lib/navTiming.ts
+apps/mobile/probe-live.mjs
+apps/mobile/verify_*.py
+apps/mobile/verify-screenshots/
+apps/mobile/scripts/measure-*.mjs
+apps/mobile/scripts/patch-*.mjs
+apps/mobile/scripts/repro-*.js
+apps/mobile/scripts/verify-*.js
+apps/mobile/scripts/write-*-layout.js
+
+# Build / test / e2e scratch output
+*-out.txt
+tsc-*.txt
+e2e-out*
+apps/mobile/test-out.txt
+
+# SQL one-off probes (underscore-prefixed scratch)
+scripts/_*.sql
+
+# Misc local junk
+*.bak
+trajectory-*.json
+/favicon.png
