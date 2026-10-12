@@ -18,6 +18,7 @@ import {
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { getBookingPaths } from '@/lib/bookingLink';
 import { getInstallUrl } from '@/lib/installLink';
+import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/types';
@@ -25,6 +26,7 @@ import type { BusinessProfile } from '@/lib/types';
 export default function BusinessQrScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export default function BusinessQrScreen() {
       } = await supabase.auth.getUser();
       if (!user) {
         setLoading(false);
-        setError('Nu ești autentificat.');
+        setError(trKey('req.notAuthed'));
         return;
       }
       const { data, error: err } = await supabase
@@ -49,7 +51,7 @@ export default function BusinessQrScreen() {
       if (err) {
         setError(err.message);
       } else if (!data) {
-        setError('Configurează mai întâi business-ul.');
+        setError(trKey('qr.setupFirst'));
       } else {
         setBusiness(data as BusinessProfile);
       }
@@ -74,7 +76,7 @@ export default function BusinessQrScreen() {
   async function handleShare() {
     if (!links || !business) return;
     await Share.share({
-      message: `Rezervă la ${business.name}\n${links.webUrl}`,
+      message: `${trKey('qr.shareMsg').replace('{name}', business.name)}\n${links.webUrl}`,
       url: links.webUrl,
     });
   }
@@ -92,19 +94,19 @@ export default function BusinessQrScreen() {
   }
 
   if (loading) {
-    return <SkeletonScreen title="Cod QR" onBack={back} blocks={3} label="Se pregătește codul QR…" />;
+    return <SkeletonScreen title={tr('qr.title')} onBack={back} blocks={3} label={tr('qr.preparing')} />;
   }
 
   if (error || !business || !links) {
     return (
-      <Screen title="Cod QR" onBack={back}>
+      <Screen title={tr('qr.title')} onBack={back}>
         <EmptyState
           icon="alert-circle-outline"
-          title="Nu există încă un cod QR"
-          description={error ?? 'Business negăsit.'}
+          title={tr('qr.noQr')}
+          description={error ?? tr('qr.bizMissing')}
           action={
             <Button
-              label="Configurează business"
+              label={tr('qr.setupBiz')}
               icon="settings-outline"
               onPress={() => router.replace('/(app)/business/setup' as never)}
             />
@@ -115,7 +117,7 @@ export default function BusinessQrScreen() {
   }
 
   return (
-    <Screen title="Cod QR" subtitle={business.name} onBack={back}>
+    <Screen title={tr('qr.title')} subtitle={business.name} onBack={back}>
       <View
         style={[
           styles.qrCard,
@@ -127,11 +129,11 @@ export default function BusinessQrScreen() {
           <QRCode value={qrValue} size={216} backgroundColor={palette.white} color={palette.ink950} />
         </View>
         <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>
-          Clienții scanează și deschid pagina publică de rezervare, fără să instaleze app-ul.
+          {tr('qr.hint')}
         </Text>
       </View>
 
-      <SectionTitle>Cod public</SectionTitle>
+      <SectionTitle>{tr('qr.publicCode')}</SectionTitle>
       <View
         style={[
           styles.codeBox,
@@ -144,19 +146,18 @@ export default function BusinessQrScreen() {
       </View>
 
       <Button
-        label="Deschide programarea acum"
+        label={tr('qr.openNow')}
         icon="calendar-outline"
         onPress={openBookingInApp}
       />
       <Text style={[styles.help, { color: t.colors.textMuted }]}>
-        Pe același telefon nu e nevoie de cameră: apeși butonul de mai sus, apoi alegi
-        data și ora liberă.
+        {tr('qr.samePhone')}
       </Text>
 
       <View style={styles.actionsRow}>
         <View style={styles.action}>
           <Button
-            label="Partajează"
+            label={tr('qr.share')}
             variant="secondary"
             size="md"
             icon="share-social-outline"
@@ -165,7 +166,7 @@ export default function BusinessQrScreen() {
         </View>
         <View style={styles.action}>
           <Button
-            label={copied ? 'Copiat' : 'Copiază link'}
+            label={copied ? tr('qr.copied') : tr('qr.copyLink')}
             variant="secondary"
             size="md"
             icon={copied ? 'checkmark' : 'copy-outline'}
@@ -174,27 +175,23 @@ export default function BusinessQrScreen() {
         </View>
       </View>
 
-      <Card icon="link-outline" iconTone="neutral" title="Link public" hint={links.webUrl} />
+      <Card icon="link-outline" iconTone="neutral" title={tr('qr.publicLink')} hint={links.webUrl} />
 
       <View style={[styles.qrCard, { backgroundColor: t.colors.surface, borderColor: t.colors.border }, t.shadows.md]}>
-        <Text style={[styles.qrHint, { color: t.colors.text, fontWeight: '700' }]}>Instalare aplicație (APK)</Text>
+        <Text style={[styles.qrHint, { color: t.colors.text, fontWeight: '700' }]}>{tr('qr.installApk')}</Text>
         <View style={styles.qrInner}>
           <QRCode value={installUrl} size={180} backgroundColor={palette.white} color={palette.ink950} />
         </View>
-        <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>Scanează pentru a instala APK-ul. Link: {installUrl}</Text>
-        <Button label="Deschide link instalare" icon="download-outline" variant="secondary" onPress={() => void Share.share({ message: installUrl, url: installUrl })} />
+        <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>{tr('qr.scanInstall').replace('{url}', installUrl)}</Text>
+        <Button label={tr('qr.openInstall')} icon="download-outline" variant="secondary" onPress={() => void Share.share({ message: installUrl, url: installUrl })} />
       </View>
 
-      <Callout tone="accent" title="Pagină publică /b/…">
-        Clienții rezervă din browser pe {links.webUrl}. Trebuie să fii autentificat ca să
-        trimiți cererea; vizualizarea orelor libere e deschisă oricui. Linkul din QR e
-        mereu public (nu localhost), ca să se deschidă de pe telefon.
+      <Callout tone="accent" title={tr('qr.publicPage')}>
+        {tr('qr.publicBody').replace('{url}', links.webUrl)}
       </Callout>
 
-      <Callout tone="warning" title="Expo Go pe telefon">
-        Camera nativă deschide linkul HTTPS. Dacă rulezi doar Expo Go local, poți totuși
-        să folosești „Deschide programarea acum” pe același telefon, sau Scanează QR
-        din app pe un al doilea telefon.
+      <Callout tone="warning" title={tr('qr.expoTitle')}>
+        {tr('qr.expoBody').replace('{openNow}', tr('qr.openNow'))}
       </Callout>
 
       <View style={{ height: insets.bottom + spacing.md }} />

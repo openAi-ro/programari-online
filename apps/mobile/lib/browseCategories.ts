@@ -1,5 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
+import { trKey, type TrKey } from './i18n';
+
 /**
  * Client browse ("Caută") — 14 business/service categories.
  * Preferă `business_profiles.category` (= key). Fallback: searchTerms pe nume/cod.
@@ -7,6 +9,7 @@ import type { ImageSourcePropType } from 'react-native';
 export type BrowseCategory = {
   key: string;
   label: string;
+  labelKey: TrKey;
   /** Terms matched against business name / public_code (RO) when category e null. */
   searchTerms: string[];
   image: ImageSourcePropType;
@@ -16,84 +19,98 @@ export const BROWSE_CATEGORIES: BrowseCategory[] = [
   {
     key: 'coafura',
     label: 'Coafură',
+    labelKey: 'cat.coafura',
     searchTerms: ['coafur', 'hairstyl', 'salon', 'par', 'hair'],
     image: require('../assets/images/categories/coafura.jpg'),
   },
   {
     key: 'frizerie',
     label: 'Frizerie',
+    labelKey: 'cat.frizerie',
     searchTerms: ['frizer', 'barber', 'barbier'],
     image: require('../assets/images/categories/frizerie.jpg'),
   },
   {
     key: 'cosmetica',
     label: 'Cosmetică',
+    labelKey: 'cat.cosmetica',
     searchTerms: ['cosmetic', 'skin', 'facial', 'ten'],
     image: require('../assets/images/categories/cosmetica.jpg'),
   },
   {
     key: 'makeup',
     label: 'Makeup',
+    labelKey: 'cat.makeup',
     searchTerms: ['makeup', 'make-up', 'machiaj'],
     image: require('../assets/images/categories/makeup.jpg'),
   },
   {
     key: 'epilare',
     label: 'Epilare definitivă',
+    labelKey: 'cat.epilare',
     searchTerms: ['epilar', 'laser', 'ipl'],
     image: require('../assets/images/categories/epilare.jpg'),
   },
   {
     key: 'sprancene',
     label: 'Îngrijire sprâncene',
+    labelKey: 'cat.sprancene',
     searchTerms: ['sprancen', 'brows', 'henna', 'microblad'],
     image: require('../assets/images/categories/sprancene.jpg'),
   },
   {
     key: 'unghii',
     label: 'Unghii cu gel',
+    labelKey: 'cat.unghii',
     searchTerms: ['unghii', 'manichiur', 'gel', 'nail'],
     image: require('../assets/images/categories/unghii.jpg'),
   },
   {
     key: 'medical',
     label: 'Cabinete medicale',
+    labelKey: 'cat.medical',
     searchTerms: ['medical', 'medic', 'clinic', 'cabinet medical', 'doctor'],
     image: require('../assets/images/categories/medical.jpg'),
   },
   {
     key: 'stomatologie',
     label: 'Cabinete stomatologice',
+    labelKey: 'cat.stomatologie',
     searchTerms: ['stomatolog', 'dentar', 'dentist', 'oral'],
     image: require('../assets/images/categories/stoma.jpg'),
   },
   {
     key: 'masaj',
     label: 'Masaj / spa',
+    labelKey: 'cat.masaj',
     searchTerms: ['masaj', 'spa', 'relaxare', 'wellness'],
     image: require('../assets/images/categories/masaj.jpg'),
   },
   {
     key: 'fitness',
     label: 'Fitness',
+    labelKey: 'cat.fitness',
     searchTerms: ['fitness', 'antrenament', 'personal training', 'gym', 'sala'],
     image: require('../assets/images/categories/fitness.jpg'),
   },
   {
     key: 'psihologie',
     label: 'Psihologie / terapie',
+    labelKey: 'cat.psihologie',
     searchTerms: ['psiholog', 'terapie', 'terapeut', 'counsel'],
     image: require('../assets/images/categories/psihologie.jpg'),
   },
   {
     key: 'veterinar',
     label: 'Veterinar',
+    labelKey: 'cat.veterinar',
     searchTerms: ['veterinar', 'vet ', 'pet', 'animale'],
     image: require('../assets/images/categories/veterinar.jpg'),
   },
   {
     key: 'auto',
     label: 'Auto service',
+    labelKey: 'cat.auto',
     searchTerms: ['auto', 'detailing', 'spalatorie', 'service auto', 'vulcanizare'],
     image: require('../assets/images/categories/auto.jpg'),
   },
@@ -101,9 +118,15 @@ export const BROWSE_CATEGORIES: BrowseCategory[] = [
 
 export const BROWSE_CATEGORY_LABELS: string[] = BROWSE_CATEGORIES.map((c) => c.label);
 
+/** Eticheta categoriei în limba curentă (pentru UI). */
+export function categoryLabel(cat: BrowseCategory): string {
+  return trKey(cat.labelKey);
+}
+
 export function categoryLabelForKey(key: string | null | undefined): string {
   if (!key) return '';
-  return BROWSE_CATEGORIES.find((c) => c.key === key)?.label ?? '';
+  const cat = BROWSE_CATEGORIES.find((c) => c.key === key);
+  return cat ? categoryLabel(cat) : '';
 }
 
 export function categoryKeyForLabel(label: string): string | null {

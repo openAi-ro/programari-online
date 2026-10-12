@@ -29,17 +29,16 @@ import {
 import {
   BROWSE_CATEGORIES,
   businessMatchesCategory,
+  categoryLabel,
   type BrowseCategory,
 } from '@/lib/browseCategories';
 import { useBack } from '@/lib/nav';
+import { trKey, useT } from '@/lib/i18n';
 import {
   JUDETE,
   localitatiPentruJudet,
   normalizeRo,
 } from '@/lib/roGeo';
-
-const ALL_COUNTIES = 'Toate județele';
-const ALL_LOCALITIES = 'Toate localitățile';
 
 function CategoryTile({
   cat,
@@ -53,11 +52,13 @@ function CategoryTile({
   onPress: () => void;
 }) {
   const t = useTheme();
+  const tr = useT();
+  const catName = categoryLabel(cat);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Categorie ${cat.label}, ${count} business-uri`}
+      accessibilityLabel={tr('browse.catA11y', { label: catName, count })}
       accessibilityState={{ selected }}
       style={({ pressed }) => [
         styles.catTile,
@@ -97,7 +98,7 @@ function CategoryTile({
           style={[styles.catLabel, { color: '#ffffff' }]}
           numberOfLines={2}
         >
-          {cat.label}
+          {catName}
         </Text>
       </View>
     </Pressable>
@@ -112,11 +113,12 @@ function CategoryGrid({
   onSelect: (cat: BrowseCategory) => void;
 }) {
   const t = useTheme();
+  const tr = useT();
   return (
     <View style={styles.catSection}>
-      <Text style={[styles.catSectionTitle, { color: t.colors.text }]}>Categorii</Text>
+      <Text style={[styles.catSectionTitle, { color: t.colors.text }]}>{tr('browse.categories')}</Text>
       <Text style={[styles.catSectionHint, { color: t.colors.textMuted }]}>
-        Alege o categorie — deschide lista de business-uri
+        {tr('browse.pickCategory')}
       </Text>
       <View style={styles.catGrid}>
         {BROWSE_CATEGORIES.map((cat) => (
@@ -139,6 +141,7 @@ function CategoryGrid({
  */
 export default function BrowseScreen() {
   const t = useTheme();
+  const tr = useT();
   const back = useBack();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -149,13 +152,15 @@ export default function BrowseScreen() {
   const [selectedLocality, setSelectedLocality] = useState<string | null>(null);
 
   // Nomenclator complet RO (nu doar județele din business-urile încărcate).
-  const countyOptions = useMemo(() => [ALL_COUNTIES, ...JUDETE], []);
+  const allCounties = trKey('browse.allCounties');
+  const allLocalities = trKey('browse.allLocalities');
+  const countyOptions = useMemo(() => [allCounties, ...JUDETE], [allCounties]);
   const localityOptions = useMemo(
     () =>
       selectedCounty
-        ? [ALL_LOCALITIES, ...localitatiPentruJudet(selectedCounty)]
-        : [ALL_LOCALITIES],
-    [selectedCounty]
+        ? [allLocalities, ...localitatiPentruJudet(selectedCounty)]
+        : [allLocalities],
+    [selectedCounty, allLocalities]
   );
 
   const matchesFilters = useCallback(
@@ -237,22 +242,22 @@ export default function BrowseScreen() {
   );
 
   const onCountyChange = useCallback((next: string) => {
-    const county = next === ALL_COUNTIES ? null : next;
+    const county = next === trKey('browse.allCounties') ? null : next;
     setSelectedCounty(county);
     setSelectedLocality(null);
   }, []);
 
   const onLocalityChange = useCallback((next: string) => {
-    setSelectedLocality(next === ALL_LOCALITIES ? null : next);
+    setSelectedLocality(next === trKey('browse.allLocalities') ? null : next);
   }, []);
 
   if (loading && rows.length === 0 && !error) {
     return (
       <ListLoadingScreen
-        title="Caută business"
-        subtitle="Alege o categorie"
+        title={tr('fav.searchBiz')}
+        subtitle={tr('browse.chooseCategory')}
         onBack={back}
-        label="Se încarcă…"
+        label={tr('common.loading')}
       />
     );
   }
@@ -260,8 +265,8 @@ export default function BrowseScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <Screen
-        title="Caută business"
-        subtitle="Alege o categorie — sau filtrează după nume, județ și localitate"
+        title={tr('fav.searchBiz')}
+        subtitle={tr('browse.browseSub')}
         onBack={back}
         scroll={false}
       >
@@ -271,47 +276,47 @@ export default function BrowseScreen() {
         >
           <View style={{ gap: spacing.md }}>
             <Field
-              label="Caută business"
+              label={tr('fav.searchBiz')}
               icon="search-outline"
               value={q}
               onChangeText={setQ}
-              placeholder="Nume sau cod public (ex. Salon Ana / salon12)"
+              placeholder={tr('browse.searchPlaceholder')}
               autoCapitalize="none"
               returnKeyType="search"
               onSubmitEditing={onSearch}
             />
 
             <PickerField
-              label="Județ"
-              value={selectedCounty ?? ALL_COUNTIES}
+              label={tr('browse.county')}
+              value={selectedCounty ?? allCounties}
               options={countyOptions}
               onChange={onCountyChange}
-              placeholder="Alege județul"
+              placeholder={tr('browse.pickCounty')}
               icon="map-outline"
-              hint="Toate județele din România"
+              hint={tr('browse.allCountiesRo')}
             />
 
             <PickerField
-              label="Localitate"
-              value={selectedLocality ?? ALL_LOCALITIES}
+              label={tr('browse.locality')}
+              value={selectedLocality ?? allLocalities}
               options={localityOptions}
               onChange={onLocalityChange}
               placeholder={
-                selectedCounty ? 'Alege localitatea' : 'Alege mai întâi județul'
+                selectedCounty ? tr('browse.pickLocality') : tr('browse.pickCountyFirst')
               }
               icon="business-outline"
               disabled={!selectedCounty}
               hint={
                 selectedCounty
                   ? undefined
-                  : 'Lista localităților apare după ce alegi județul.'
+                  : tr('browse.localityHint')
               }
             />
 
             <View style={styles.actions}>
-              <Button label="Caută" icon="search-outline" onPress={onSearch} size="sm" />
+              <Button label={tr('tabs.search')} icon="search-outline" onPress={onSearch} size="sm" />
               <Button
-                label="Aproape de mine"
+                label={tr('browse.nearMe')}
                 icon="navigate-outline"
                 variant="secondary"
                 size="sm"
@@ -334,12 +339,12 @@ export default function BrowseScreen() {
             {hasActiveFilters ? (
               <View style={styles.catSection}>
                 <Text style={[styles.catSectionTitle, { color: t.colors.text }]}>
-                  Rezultate ({searchResults.length})
+                  {tr('browse.results', { n: searchResults.length })}
                 </Text>
                 <Text style={[styles.catSectionHint, { color: t.colors.textMuted }]}>
                   {searchResults.length === 0
-                    ? 'Niciun business pentru filtrele alese — apasă o categorie sau șterge filtrele.'
-                    : 'Apasă un rând pentru rezervare. Detaliile complete sunt pe ecranul de rezervare.'}
+                    ? tr('browse.noResultsFilters')
+                    : tr('browse.tapRow')}
                 </Text>
                 {searchResults.slice(0, 20).map((r) => (
                   <SalonRow
@@ -351,11 +356,11 @@ export default function BrowseScreen() {
                 ))}
                 {searchResults.length > 20 ? (
                   <Text style={[styles.catSectionHint, { color: t.colors.textMuted }]}>
-                    Primele 20 din {searchResults.length} — restrânge căutarea sau alege o categorie.
+                    {tr('browse.first20', { n: searchResults.length })}
                   </Text>
                 ) : null}
                 <Button
-                  label="Șterge filtrele"
+                  label={tr('browse.clearFilters')}
                   icon="close-outline"
                   variant="secondary"
                   size="sm"
@@ -369,8 +374,8 @@ export default function BrowseScreen() {
             ) : null}
 
             {error ? (
-              <Callout tone="warning" title="Listă parțială">
-                {`Nu am putut încărca tot (${error}). Folosește QR sau codul public de pe Acasă.`}
+              <Callout tone="warning" title={tr('browse.partialList')}>
+                {tr('browse.partialDesc', { error: error ?? '' })}
               </Callout>
             ) : null}
           </View>

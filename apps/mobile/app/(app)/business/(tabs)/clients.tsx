@@ -12,10 +12,11 @@ import {
   Screen,
   useTheme,
 } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useBack } from '@/lib/nav';
-import { STATUS_META } from '@/lib/status';
+import { statusLabel } from '@/lib/status';
 import { mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
@@ -30,6 +31,7 @@ export default function BusinessClientsScreen() {
   }, []);
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const router = useRouter();
   const [rows, setRows] = useState<BusinessClientRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,10 +152,10 @@ export default function BusinessClientsScreen() {
     return (
       <View style={{ flex: 1 }}>
         <ListLoadingScreen
-          title="Clienți"
-          subtitle="Istoric, vizite, note"
+          title={tr('cli.title')}
+          subtitle={tr('cli.subtitle')}
           onBack={back}
-          label="Se încarcă clienții…"
+          label={tr('cli.loading')}
         />
       </View>
     );
@@ -161,20 +163,20 @@ export default function BusinessClientsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen title="Clienți" subtitle="Istoric, vizite, note" onBack={back}>
+      <Screen title={tr('cli.title')} subtitle={tr('cli.subtitle')} onBack={back}>
       <Field
-        label="Caută"
+        label={tr('cli.search')}
         value={query}
         onChangeText={setQuery}
-        placeholder="Nume, telefon, email"
+        placeholder={tr('cli.searchPh')}
         icon="search-outline"
       />
       {error ? <Callout tone="danger">{error}</Callout> : null}
       {shown.length === 0 ? (
         <EmptyState
           icon="people-outline"
-          title="Niciun client încă"
-          description="Clienții apar aici după prima programare."
+          title={tr('cli.empty')}
+          description={tr('cli.emptyDesc')}
         />
       ) : (
         shown.map((row) => {
@@ -196,12 +198,12 @@ export default function BusinessClientsScreen() {
                     {row.display_name || row.contact}
                   </Text>
                   <Text style={[styles.meta, { color: t.colors.textMuted }]}>
-                    {row.contact} · {row.visit_count} vizite · ultima {last}
-                    {row.upcoming_count > 0 ? ` · ${row.upcoming_count} viitoare` : ''}
-                    {row.no_show_count > 0 ? ` · ${row.no_show_count} absențe` : ''}
-                    {row.blocked ? ' · BLOCAT' : ''}
+                    {row.contact} · {row.visit_count} {tr('cli.visits')} · {tr('cli.last')} {last}
+                    {row.upcoming_count > 0 ? ` · ${row.upcoming_count} ${tr('cli.upcoming')}` : ''}
+                    {row.no_show_count > 0 ? ` · ${row.no_show_count} ${tr('cli.noShows')}` : ''}
+                    {row.blocked ? ` · ${tr('cli.blocked')}` : ''}
                     {visitsUntilFree(Number(row.visit_count), loyaltyEvery)
-                      ? ` · cadou în ${visitsUntilFree(Number(row.visit_count), loyaltyEvery)} vizite`
+                      ? ` · ${tr('cli.giftIn').replace('{count}', String(visitsUntilFree(Number(row.visit_count), loyaltyEvery)))}`
                       : ''}
                   </Text>
                 </View>
@@ -214,10 +216,10 @@ export default function BusinessClientsScreen() {
               {open ? (
                 <View style={styles.detail}>
                   <Field
-                    label="Notă internă"
+                    label={tr('cli.note')}
                     value={note}
                     onChangeText={setNote}
-                    placeholder="Preferințe, alergii…"
+                    placeholder={tr('cli.notePh')}
                     multiline
                   />
                   <Pressable
@@ -229,32 +231,32 @@ export default function BusinessClientsScreen() {
                     ]}
                   >
                     <Text style={[styles.saveNoteText, { color: t.colors.accentSoftText }]}>
-                      {noteBusy ? 'Se salvează…' : 'Salvează nota'}
+                      {noteBusy ? tr('cli.saving') : tr('cli.saveNote')}
                     </Text>
                   </Pressable>
                   {history.map((a) => (
                     <Text key={a.id} style={[styles.hist, { color: t.colors.textMuted }]}>
                       {formatInTimeZone(new Date(a.start_at), 'Europe/Bucharest', 'dd.MM.yyyy HH:mm')}
                       {' · '}
-                      {a.service_name ?? 'Ședință'}
+                      {a.service_name ?? tr('cli.session')}
                       {' · '}
-                      {a.no_show ? 'Nu s-a prezentat' : STATUS_META[a.status]?.label ?? a.status}
+                      {a.no_show ? tr('cli.noShow') : statusLabel(a.status)}
                     </Text>
                   ))}
                   {blockAfter > 0 && row.no_show_count >= blockAfter && !row.blocked ? (
-                    <Callout tone="warning" title="Absențe repetate">
-                      Clientul are {row.no_show_count} no-show-uri. Poți să-l blochezi.
+                    <Callout tone="warning" title={tr('cli.repeatTitle')}>
+                      {tr('cli.repeatBody').replace('{count}', String(row.no_show_count))}
                     </Callout>
                   ) : null}
                   <Button
-                    label={row.blocked ? 'Deblochează clientul' : 'Blochează clientul'}
+                    label={row.blocked ? tr('cli.unblock') : tr('cli.block')}
                     variant={row.blocked ? 'secondary' : 'danger'}
                     size="sm"
                     icon={row.blocked ? 'lock-open-outline' : 'ban-outline'}
                     onPress={() => void toggleBlock(row)}
                   />
                   <Pressable onPress={() => router.push('/(app)/business/calendar' as never)}>
-                    <Text style={[styles.link, { color: t.colors.accent }]}>Deschide calendarul</Text>
+                    <Text style={[styles.link, { color: t.colors.accent }]}>{tr('cli.openCalendar')}</Text>
                   </Pressable>
                 </View>
               ) : null}

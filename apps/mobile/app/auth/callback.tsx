@@ -12,6 +12,7 @@ import {
   mapAuthError,
 } from '@/lib/auth';
 import { takeAuthCallbackUrl } from '@/lib/auth-link';
+import { trKey } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -19,7 +20,7 @@ import { supabase } from '@/lib/supabase';
  * Emails always point at the public https URL, then we hand off to the app.
  */
 export default function AuthCallbackScreen() {
-  const [status, setStatus] = useState('Se activează contul…');
+  const [status, setStatus] = useState(() => trKey('auth.cbActivating'));
   const [error, setError] = useState<string | null>(null);
   const [activated, setActivated] = useState(false);
 
@@ -47,7 +48,7 @@ export default function AuthCallbackScreen() {
 
         if (result.error && !result.session) {
           setError(mapAuthError({ message: result.error } as Error) ?? result.error);
-          setStatus('Nu am putut activa contul din acest link.');
+          setStatus(trKey('auth.cbCannotActivate'));
           return;
         }
 
@@ -57,7 +58,7 @@ export default function AuthCallbackScreen() {
           );
           await persistAccountKind(kind);
           if (result.recovery) {
-            setStatus('Link de resetare confirmat. Redirecționare…');
+            setStatus(trKey('auth.cbResetConfirmed'));
             router.replace('/(auth)/reset-password');
             return;
           }
@@ -66,21 +67,21 @@ export default function AuthCallbackScreen() {
             const nativeUrl = getNativeAuthCallbackUrl(toParse);
             void Linking.openURL(nativeUrl).catch(() => undefined);
             setActivated(true);
-            setStatus('Cont activat.');
+            setStatus(trKey('auth.cbAccountActivated'));
             return;
           }
 
-          setStatus('Cont activat. Redirecționare…');
+          setStatus(trKey('auth.cbActivatedRedirect'));
           router.replace('/(app)/home');
           return;
         }
 
-        setStatus('Nu s-a putut deschide sesiunea din link.');
-        setError('Deschide din nou linkul din cel mai recent email, sau revino la login.');
+        setStatus(trKey('auth.cbNoSession'));
+        setError(trKey('auth.cbReopenLink'));
       } catch (e) {
         if (!cancelled) {
-          setStatus('Eroare la activare.');
-          setError(e instanceof Error ? e.message : 'Eroare necunoscută.');
+          setStatus(trKey('auth.cbActivationError'));
+          setError(e instanceof Error ? e.message : trKey('auth.cbUnknownError'));
         }
       }
     })();
@@ -92,12 +93,12 @@ export default function AuthCallbackScreen() {
 
   if (error) {
     return (
-      <Screen title="Activare cont">
+      <Screen title={trKey('auth.cbTitle')}>
         <Callout tone="danger" title={status}>
           {error}
         </Callout>
         <Button
-          label="Înapoi la login"
+          label={trKey('auth.cbBackToLogin')}
           onPress={() => router.replace('/(auth)/login')}
           icon="log-in-outline"
         />
@@ -107,13 +108,13 @@ export default function AuthCallbackScreen() {
 
   if (activated) {
     return (
-      <Screen title="Activare cont">
+      <Screen title={trKey('auth.cbTitle')}>
         <Callout tone="success" title={status}>
-          Contul e activ. Dacă aplicația nu s-a deschis automat, deschide-o pe telefon și apasă
-          „Intră în cont” cu aceeași adresă și parolă.
+          {trKey('auth.cbActivatedBody')}
+          
         </Callout>
         <Button
-          label="Deschide aplicația"
+          label={trKey('auth.cbOpenApp')}
           icon="phone-portrait-outline"
           onPress={() => {
             const href =
@@ -124,7 +125,7 @@ export default function AuthCallbackScreen() {
           }}
         />
         <Button
-          label="Continuă pe web"
+          label={trKey('auth.cbContinueWeb')}
           variant="ghost"
           icon="globe-outline"
           onPress={() => router.replace('/(app)/home')}

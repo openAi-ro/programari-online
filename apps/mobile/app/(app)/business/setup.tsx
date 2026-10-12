@@ -43,10 +43,11 @@ import {
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/withTimeout';
 import {
-  BROWSE_CATEGORY_LABELS,
-  categoryKeyForLabel,
+  BROWSE_CATEGORIES,
+  categoryLabel,
   categoryLabelForKey,
 } from '@/lib/browseCategories';
+import { trKey, useT } from '@/lib/i18n';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
 
 /**
@@ -143,6 +144,7 @@ async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
 export default function BusinessSetupScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -184,7 +186,7 @@ export default function BusinessSetupScreen() {
     const timer = setTimeout(() => {
       if (cancelled) return;
       cancelled = true;
-      setError('Nu am putut încărca datele. Verifică internetul și redeschide ecranul.');
+      setError(trKey('setup.loadFail'));
       setLoading(false);
     }, 15000);
     const done = () => {
@@ -196,7 +198,7 @@ export default function BusinessSetupScreen() {
         await loadBusiness();
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Nu am putut încărca datele.');
+          setError(e instanceof Error ? e.message : trKey('setup.loadFailShort'));
         }
       } finally {
         done();
@@ -272,7 +274,7 @@ export default function BusinessSetupScreen() {
         geo = null;
       }
       if (!geo) {
-        setMessage('Coordonate preluate. Completează județul, localitatea și strada.');
+        setMessage(trKey('setup.coordsOnly'));
         return;
       }
 
@@ -285,25 +287,21 @@ export default function BusinessSetupScreen() {
       if (localitate) setCity(localitate);
       if (geo.strada) setAddress(geo.strada);
 
-      setMessage(`Locație preluată: ${adresaCompleta(judet, localitate, geo.strada)}`);
+      setMessage(trKey('setup.locTaken', { addr: adresaCompleta(judet, localitate, geo.strada) }));
     } catch (e) {
       const code = e instanceof Error ? e.message : '';
       if (code === 'permission_denied') {
         setError(
-          Platform.OS === 'web'
-            ? 'Browserul a blocat accesul la locație. Permite locația din setările site-ului sau completează adresa manual.'
-            : 'Accesul la locație a fost refuzat. Îl poți activa din setările telefonului.'
+          Platform.OS === 'web' ? trKey('setup.geoPermWeb') : trKey('setup.geoPermNative')
         );
       } else if (code === 'location_timeout' || code === 'permission_timeout') {
         setError(
-          Platform.OS === 'web'
-            ? 'Browserul nu a răspuns la cererea de locație. Verifică permisiunea pentru locație sau completează adresa manual.'
-            : 'Nu am primit coordonatele la timp. Verifică dacă GPS-ul e pornit și permisiunea e acordată.'
+          Platform.OS === 'web' ? trKey('setup.geoTimeoutWeb') : trKey('setup.geoTimeoutNative')
         );
       } else if (code === 'location_unavailable') {
-        setError('Dispozitivul nu oferă servicii de locație. Completează adresa manual.');
+        setError(trKey('setup.geoUnavailable'));
       } else {
-        setError('Nu am putut prelua locația. Încearcă din nou sau completează adresa manual.');
+        setError(trKey('setup.geoFail'));
       }
     } finally {
       setGeoBusy(false);
@@ -316,16 +314,16 @@ export default function BusinessSetupScreen() {
     setMessage(null);
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Introdu numele business-ului.');
+      setError(trKey('setup.nameRequired'));
       return;
     }
     const minutes = parseInt(duration, 10);
     if (!Number.isFinite(minutes) || minutes < 5 || minutes > 480) {
-      setError('Durata trebuie să fie între 5 și 480 minute.');
+      setError(trKey('svc.badDuration'));
       return;
     }
     if (!timezone.trim()) {
-      setError('Timezone-ul este obligatoriu.');
+      setError(trKey('setup.tzRequired'));
       return;
     }
     const minNotice = Math.round(Number(String(minNoticeHours).replace(',', '.')) * 60);
@@ -333,52 +331,52 @@ export default function BusinessSetupScreen() {
     const maxDays = parseInt(maxAdvanceDays, 10);
     const cancelNotice = Math.round(Number(String(cancelNoticeHours).replace(',', '.')) * 60);
     if (!Number.isFinite(minNotice) || minNotice < 0 || minNotice > 10080) {
-      setError('Preavizul minim trebuie să fie între 0 și 168 de ore.');
+      setError(trKey('setup.badMinNotice'));
       return;
     }
     if (!Number.isFinite(buffer) || buffer < 0 || buffer > 240) {
-      setError('Buffer-ul trebuie să fie între 0 și 240 minute.');
+      setError(trKey('setup.badBuffer'));
       return;
     }
     if (!Number.isFinite(maxDays) || maxDays < 1 || maxDays > 365) {
-      setError('Avansul maxim trebuie să fie între 1 și 365 de zile.');
+      setError(trKey('setup.badMaxDays'));
       return;
     }
     if (!Number.isFinite(cancelNotice) || cancelNotice < 0 || cancelNotice > 10080) {
-      setError('Preavizul de anulare trebuie să fie între 0 și 168 de ore.');
+      setError(trKey('setup.badCancelNotice'));
       return;
     }
     const blockN = parseInt(blockAfter, 10);
     const loyalty = parseInt(loyaltyEvery, 10);
     if (!Number.isFinite(blockN) || blockN < 0 || blockN > 20) {
-      setError('Pragul de blocare trebuie să fie între 0 și 20 absențe.');
+      setError(trKey('setup.badBlock'));
       return;
     }
     if (!Number.isFinite(loyalty) || loyalty < 0 || loyalty > 50) {
-      setError('Loialitatea trebuie să fie 0 (oprit) sau între 2 și 50 vizite.');
+      setError(trKey('setup.badLoyalty'));
       return;
     }
     if (loyalty === 1) {
-      setError('Loialitatea minimă e 2 vizite, sau 0 ca să o oprești.');
+      setError(trKey('setup.loyaltyMin'));
       return;
     }
     if (county.trim() && !city.trim()) {
-      setError('Alege localitatea din județul selectat.');
+      setError(trKey('setup.pickCity'));
       return;
     }
 
     const lat = latitude.trim() === '' ? null : Number(String(latitude).replace(',', '.'));
     const lon = longitude.trim() === '' ? null : Number(String(longitude).replace(',', '.'));
     if ((lat === null) !== (lon === null)) {
-      setError('Completează ambele coordonate sau niciuna.');
+      setError(trKey('setup.bothCoords'));
       return;
     }
     if (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) {
-      setError('Latitudinea trebuie să fie între -90 și 90.');
+      setError(trKey('setup.badLat'));
       return;
     }
     if (lon !== null && (!Number.isFinite(lon) || lon < -180 || lon > 180)) {
-      setError('Longitudinea trebuie să fie între -180 și 180.');
+      setError(trKey('setup.badLon'));
       return;
     }
 
@@ -401,7 +399,7 @@ export default function BusinessSetupScreen() {
     } = await supabase.auth.getUser();
     if (!user) {
       setSaving(false);
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return;
     }
 
@@ -430,7 +428,7 @@ export default function BusinessSetupScreen() {
         setError(err.message);
         return;
       }
-      setMessage('Business actualizat.');
+      setMessage(trKey('setup.updated'));
       return;
     }
 
@@ -464,7 +462,7 @@ export default function BusinessSetupScreen() {
     const b = data as BusinessProfile;
     setExistingId(b.id);
     setPublicCode(b.public_code);
-    setMessage('Business creat. Poți genera QR din meniu.');
+    setMessage(trKey('setup.created'));
     const { data: existingServices } = await supabase
       .from('services')
       .select('id')
@@ -473,7 +471,7 @@ export default function BusinessSetupScreen() {
     if (!existingServices?.length) {
       await supabase.from('services').insert({
         business_id: b.id,
-        name: 'Ședință',
+        name: trKey('cli.session'),
         duration_minutes: minutes,
         price: 0,
         sort_order: 0,
@@ -497,40 +495,40 @@ export default function BusinessSetupScreen() {
   if (loading) {
     return (
       <SkeletonScreen
-        title="Configurare business"
+        title={tr('setup.title')}
         onBack={back}
         blocks={5}
-        label="Se încarcă configurarea…"
+        label={tr('setup.loading')}
       />
     );
   }
 
   return (
     <Screen
-      title="Configurare business"
-      subtitle={existingId ? 'Editează programul și durata' : 'Creează primul tău business'}
+      title={tr('setup.title')}
+      subtitle={existingId ? tr('setup.editSub') : tr('setup.createSub')}
       onBack={back}
       footer={
         <View style={styles.footer}>
           {error ? (
-            <Callout tone="danger" title="Verifică datele">
+            <Callout tone="danger" title={tr('setup.checkData')}>
               {error}
             </Callout>
           ) : null}
           {message ? (
-            <Callout tone="success" title="Gata">
+            <Callout tone="success" title={tr('common.done')}>
               {message}
             </Callout>
           ) : null}
           <Button
-            label={saving ? 'Se salvează…' : existingId ? 'Salvează modificările' : 'Creează business'}
+            label={saving ? tr('cli.saving') : existingId ? tr('setup.saveChanges') : tr('setup.createBiz')}
             icon="checkmark"
             loading={saving}
             onPress={handleSave}
           />
           {publicCode ? (
             <Button
-              label="Vezi codul QR"
+              label={tr('setup.viewQr')}
               variant="secondary"
               icon="qr-code-outline"
               onPress={() => router.push('/(app)/business/qr' as never)}
@@ -540,7 +538,7 @@ export default function BusinessSetupScreen() {
       }
     >
       <Field
-        label="Nume business"
+        label={tr('setup.bizName')}
         value={name}
         onChangeText={setName}
         placeholder="Cabinet / Salon / Barbershop"
@@ -548,22 +546,24 @@ export default function BusinessSetupScreen() {
         autoCapitalize="words"
       />
       <PickerField
-        label="Categorie"
+        label={tr('setup.category')}
         value={categoryLabelForKey(category)}
-        options={BROWSE_CATEGORY_LABELS}
-        onChange={(label) => setCategory(categoryKeyForLabel(label) ?? '')}
-        placeholder="Alege categoria"
+        options={BROWSE_CATEGORIES.map(categoryLabel)}
+        onChange={(label) =>
+          setCategory(BROWSE_CATEGORIES.find((c) => categoryLabel(c) === label)?.key ?? '')
+        }
+        placeholder={tr('setup.pickCategory')}
         icon="grid-outline"
-        hint="Apare în lista de categorii din Caută (client). Poți schimba oricând."
+        hint={tr('setup.categoryHint')}
       />
       <Field
-        label="Durată ședință (minute)"
+        label={tr('setup.sessionDur')}
         value={duration}
         onChangeText={setDuration}
         placeholder="60"
         keyboardType="number-pad"
         icon="time-outline"
-        hint="Între 5 și 480 de minute. Folosită ca implicită dacă un serviciu nu e ales."
+        hint={tr('setup.sessionHint')}
       />
       <Field
         label="Timezone (IANA)"
@@ -572,43 +572,43 @@ export default function BusinessSetupScreen() {
         placeholder="Europe/Bucharest"
         icon="globe-outline"
         autoCapitalize="none"
-        hint="Programul de lucru se afișează clienților în fusul orar ales."
+        hint={tr('setup.tzHint')}
       />
 
-      <SectionTitle>Locație</SectionTitle>
-      <Callout tone="info" title="Adresa business">
-        Completează județul, localitatea și strada. Poți folosi „Locația mea” pentru GPS — fără hartă în app (mai ușor pe telefon).
+      <SectionTitle>{tr('setup.location')}</SectionTitle>
+      <Callout tone="info" title={tr('setup.bizAddress')}>
+        {tr('setup.addrHint', { myLoc: tr('setup.useMyLoc') })}
       </Callout>
       <PickerField
-        label="Județ"
+        label={tr('setup.county')}
         value={county}
         options={JUDETE}
         onChange={(next) => {
           setCounty(next);
           if (city && !localitatiPentruJudet(next).includes(city)) setCity('');
         }}
-        placeholder="Alege județul"
+        placeholder={tr('setup.pickCounty')}
         icon="map-outline"
       />
       <PickerField
-        label="Oraș / comună"
+        label={tr('setup.city')}
         value={city}
         options={localitatiPentruJudet(county)}
         onChange={setCity}
-        placeholder={county ? 'Alege localitatea' : 'Alege mai întâi județul'}
+        placeholder={county ? tr('setup.pickLocality') : tr('setup.pickCountyFirst')}
         icon="business-outline"
         disabled={!county}
-        hint={county ? undefined : 'Lista localităților se încarcă după ce alegi județul.'}
+        hint={county ? undefined : tr('setup.localityHint')}
       />
       <Field
-        label="Stradă și număr"
+        label={tr('setup.street')}
         value={address}
         onChangeText={setAddress}
-        placeholder="Ex: Strada Franceză 12"
+        placeholder={tr('setup.streetPh')}
         icon="location-outline"
       />
       <Field
-        label="Link Google Maps (opțional)"
+        label={tr('setup.mapsLink')}
         value={mapsUrl}
         onChangeText={setMapsUrl}
         placeholder="https://maps.google.com/…"
@@ -616,10 +616,10 @@ export default function BusinessSetupScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
-        hint="Dacă clienții au un link Maps preferat (sau Waze). Altfel e suficient GPS-ul de mai jos."
+        hint={tr('setup.mapsHint')}
       />
       <Button
-        label={geoBusy ? 'Se preia locația…' : 'Folosește locația mea'}
+        label={geoBusy ? tr('setup.geoBusy') : tr('setup.useMyLoc')}
         variant="secondary"
         icon="locate-outline"
         loading={geoBusy}
@@ -627,11 +627,11 @@ export default function BusinessSetupScreen() {
       />
       {(latitude.trim() && longitude.trim()) ? (
         <Text style={[styles.hint, { color: t.colors.textFaint }]}>
-          GPS salvat: {latitude}, {longitude}
+          {tr('setup.gpsSaved', { coords: `${latitude}, ${longitude}` })}
         </Text>
       ) : (
         <Text style={[styles.hint, { color: t.colors.textFaint }]}>
-          Opțional: „Folosește locația mea” salvează coordonatele pentru „Condu acum” la clienți.
+          {tr('setup.gpsHint', { myLoc: tr('setup.useMyLoc') })}
         </Text>
       )}
 
@@ -644,22 +644,22 @@ export default function BusinessSetupScreen() {
         ]}
       >
         <View style={styles.breakTitles}>
-          <Text style={[styles.breakTitle, { color: t.colors.text }]}>Pauză opțională</Text>
+          <Text style={[styles.breakTitle, { color: t.colors.text }]}>{tr('setup.breakTitle')}</Text>
           <Text style={[styles.breakSub, { color: t.colors.textMuted }]}>
-            Nu se pot programa clienți în acest interval
+            {tr('setup.breakHint')}
           </Text>
         </View>
         <Toggle
           value={breakHours.enabled}
           onValueChange={(enabled) => setBreakHours({ ...breakHours, enabled })}
-          accessibilityLabel="Pauză opțională"
+          accessibilityLabel={tr('setup.breakTitle')}
         />
       </View>
       {breakHours.enabled ? (
         <View style={styles.breakTimes}>
           <View style={styles.breakCol}>
             <Field
-              label="Pauză de la"
+              label={tr('setup.breakFrom')}
               value={breakHours.start}
               onChangeText={(start) => setBreakHours({ ...breakHours, start })}
               placeholder="13:00"
@@ -670,7 +670,7 @@ export default function BusinessSetupScreen() {
           </View>
           <View style={styles.breakCol}>
             <Field
-              label="Până la"
+              label={tr('setup.breakTo')}
               value={breakHours.end}
               onChangeText={(end) => setBreakHours({ ...breakHours, end })}
               placeholder="14:00"
@@ -682,27 +682,27 @@ export default function BusinessSetupScreen() {
         </View>
       ) : null}
 
-      <SectionTitle>Reguli de rezervare</SectionTitle>
+      <SectionTitle>{tr('setup.rules')}</SectionTitle>
       <Field
-        label="Preaviz minim (ore)"
+        label={tr('setup.minNotice')}
         value={minNoticeHours}
         onChangeText={setMinNoticeHours}
         placeholder="2"
         keyboardType="decimal-pad"
         icon="hourglass-outline"
-        hint="Clienții nu pot rezerva un slot mai aproape de atât."
+        hint={tr('setup.minNoticeHint')}
       />
       <Field
-        label="Buffer între ședințe (minute)"
+        label={tr('setup.buffer')}
         value={bufferMinutes}
         onChangeText={setBufferMinutes}
         placeholder="0"
         keyboardType="number-pad"
         icon="pause-outline"
-        hint="Pauză automată după fiecare programare (pregătire, curățenie)."
+        hint={tr('setup.bufferHint')}
       />
       <Field
-        label="Rezervare maximă în avans (zile)"
+        label={tr('setup.maxDays')}
         value={maxAdvanceDays}
         onChangeText={setMaxAdvanceDays}
         placeholder="90"
@@ -710,16 +710,16 @@ export default function BusinessSetupScreen() {
         icon="calendar-outline"
       />
       <Field
-        label="Anulare / reprogramare cu cel puțin (ore)"
+        label={tr('setup.cancelNotice')}
         value={cancelNoticeHours}
         onChangeText={setCancelNoticeHours}
         placeholder="2"
         keyboardType="decimal-pad"
         icon="close-circle-outline"
-        hint="Pentru programări deja confirmate. Cererea pending se poate anula oricând."
+        hint={tr('setup.cancelHint')}
       />
 
-      <SectionTitle>Disciplină</SectionTitle>
+      <SectionTitle>{tr('setup.discipline')}</SectionTitle>
       <View
         style={[
           styles.breakRow,
@@ -728,52 +728,52 @@ export default function BusinessSetupScreen() {
       >
         <View style={styles.breakTitles}>
           <Text style={[styles.breakTitle, { color: t.colors.text }]}>
-            Auto-aprobare clienți recurenți
+            {tr('setup.autoApprove')}
           </Text>
           <Text style={[styles.breakSub, { color: t.colors.textMuted }]}>
-            Prima vizită rămâne pending. De la a doua, programarea e confirmată automat.
+            {tr('setup.autoHint')}
           </Text>
         </View>
         <Toggle
           value={autoApprove}
           onValueChange={setAutoApprove}
-          accessibilityLabel="Auto-aprobare clienți recurenți"
+          accessibilityLabel={tr('setup.autoApprove')}
         />
       </View>
       <Field
-        label="Sugerează blocare după (absențe)"
+        label={tr('setup.blockAfter')}
         value={blockAfter}
         onChangeText={setBlockAfter}
         placeholder="2"
         keyboardType="number-pad"
         icon="ban-outline"
-        hint="0 = fără prag. Poți bloca oricând un client din lista Clienți."
+        hint={tr('setup.blockHint', { clients: tr('cli.title') })}
       />
       <Field
-        label="A N-a ședință gratuită"
+        label={tr('setup.loyalty')}
         value={loyaltyEvery}
         onChangeText={setLoyaltyEvery}
         placeholder="0"
         keyboardType="number-pad"
         icon="gift-outline"
-        hint="0 = oprit. 5 = a 5-a vizită confirmată e cadou."
+        hint={tr('setup.loyaltyHint')}
       />
 
-      <SectionTitle>Zile blocate (concediu / sărbători)</SectionTitle>
+      <SectionTitle>{tr('setup.blockedTitle')}</SectionTitle>
       <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-        Blochează o singură zi sau un interval de concediu. Poți adăuga mai multe perioade; apasă pe o dată din listă ca să o deblochezi.
+        {tr('setup.blockedHint')}
       </Text>
 
-      <DatePickerField label="O zi" value={blockDateDraft} onChange={setBlockDateDraft} />
+      <DatePickerField label={tr('setup.oneDay')} value={blockDateDraft} onChange={setBlockDateDraft} />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Blochează o zi"
+        accessibilityLabel={tr('setup.blockDayBtn')}
         onPress={() => {
           if (!blockedDates.includes(blockDateDraft)) {
             setBlockedDates([...blockedDates, blockDateDraft].sort());
-            setMessage(`Zi blocată: ${blockDateDraft}`);
+            setMessage(tr('setup.dayBlocked', { date: blockDateDraft }));
           } else {
-            setMessage(`Ziua ${blockDateDraft} e deja blocată.`);
+            setMessage(tr('setup.dayAlreadyBlocked', { date: blockDateDraft }));
           }
         }}
         style={({ pressed }) => [
@@ -784,12 +784,12 @@ export default function BusinessSetupScreen() {
       >
         <Ionicons name="lock-closed-outline" size={18} color="#ffffff" />
         <Text style={styles.blockBtnText} numberOfLines={1}>
-          Blochează o zi
+          {tr('setup.blockDayBtn')}
         </Text>
       </Pressable>
 
       <DatePickerField
-        label="Concediu — de la"
+        label={tr('setup.leaveFrom')}
         value={blockRangeStart}
         onChange={(ymd) => {
           setBlockRangeStart(ymd);
@@ -799,14 +799,14 @@ export default function BusinessSetupScreen() {
         }}
       />
       <DatePickerField
-        label="Concediu — până la"
+        label={tr('setup.leaveTo')}
         value={blockRangeEnd}
         onChange={setBlockRangeEnd}
         minimumDate={parseYmdLocal(blockRangeStart)}
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Blochează concediu"
+        accessibilityLabel={tr('setup.blockLeaveBtn')}
         onPress={() => {
           const range = eachYmdInclusive(blockRangeStart, blockRangeEnd);
           if (range.length === 0) return;
@@ -817,8 +817,12 @@ export default function BusinessSetupScreen() {
           const added = range.filter((d) => !blockedDates.includes(d)).length;
           setMessage(
             added > 0
-              ? `Concediu blocat: ${range[0]} → ${range[range.length - 1]} (${added} zile noi)`
-              : `Intervalul ${range[0]} → ${range[range.length - 1]} era deja blocat.`
+              ? tr('setup.leaveBlocked', {
+                  from: range[0],
+                  to: range[range.length - 1],
+                  count: added,
+                })
+              : tr('setup.rangeBlocked', { from: range[0], to: range[range.length - 1] })
           );
         }}
         style={({ pressed }) => [
@@ -829,7 +833,7 @@ export default function BusinessSetupScreen() {
       >
         <Ionicons name="calendar-outline" size={18} color="#ffffff" />
         <Text style={styles.blockBtnText} numberOfLines={1}>
-          Blochează concediu
+          {tr('setup.blockLeaveBtn')}
         </Text>
       </Pressable>
 
@@ -857,13 +861,13 @@ export default function BusinessSetupScreen() {
         </View>
       ) : (
         <Text style={[styles.hint, { color: t.colors.textFaint }]}>
-          Nicio zi blocată. Poți închide și din Calendar, pe ziua selectată.
+          {tr('setup.noBlocked', { cal: tr('cal.title') })}
         </Text>
       )}
 
       {publicCode ? (
-        <Callout tone="accent" title={`Cod public: ${publicCode}`}>
-          Codul acesta intră în linkul de programare și în codul QR.
+        <Callout tone="accent" title={tr('setup.pubCode', { code: publicCode ?? '' })}>
+          {tr('setup.pubCodeHint')}
         </Callout>
       ) : null}
     </Screen>

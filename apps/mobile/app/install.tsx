@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 
 import { Button, Screen, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import {
   getAndroidInstallUrl,
@@ -37,6 +38,7 @@ function firstParam(v: string | string[] | undefined): string | null {
 /** Pagină publică: PWA pe ecran + QR Android (APK) + QR iOS (PWA Safari). Fără cont. */
 export default function InstallScreen() {
   const t = useTheme();
+  const tr = useT();
   const params = useLocalSearchParams<{ platform?: string | string[] }>();
   const platformHint = (firstParam(params.platform) || '').toLowerCase();
 
@@ -101,7 +103,7 @@ export default function InstallScreen() {
   }, [deferred]);
 
   return (
-    <Screen title="Instalează Programări" subtitle="Pe ecran · Android · iPhone">
+    <Screen title={tr('inst.title')} subtitle={tr('inst.subtitle')}>
       {/* A - PWA pe dispozitivul curent */}
       <View
         style={[
@@ -109,33 +111,31 @@ export default function InstallScreen() {
           { backgroundColor: t.colors.surface, borderColor: t.colors.border },
         ]}
       >
-        <Text style={[styles.sectionTitle, { color: t.colors.text }]}>Instalează pe ecran</Text>
+        <Text style={[styles.sectionTitle, { color: t.colors.text }]}>{tr('inst.onScreen')}</Text>
         <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-          Adaugă Programări pe ecranul de start din Chrome (Android / PC) sau Safari (iPhone) —
-          fără Magazin Play / App Store. Funcționează ca o aplicație, pe HTTPS.
+          {tr('inst.pwaHint')}
         </Text>
 
         {installed ? (
           <Text style={[styles.ok, { color: palette.accent700 }]}>
-            Aplicația este deja instalată pe acest dispozitiv.
+            {tr('inst.installed')}
           </Text>
         ) : deferred ? (
           <Button
-            label={pwaBusy ? 'Se deschide…' : 'Instalează pe ecran'}
+            label={pwaBusy ? tr('inst.opening') : tr('inst.onScreen')}
             icon="phone-portrait-outline"
             onPress={() => void onInstallPwa()}
           />
         ) : (
           <View style={styles.steps}>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              Android (Chrome): meniu ⋮ → „Adaugă pe ecranul de start” / „Instalează aplicația”.
+              {tr('inst.stepAndroid')}
             </Text>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              iPhone (Safari): buton Partajează → „Pe ecranul Home”.
+              {tr('inst.stepIphone')}
             </Text>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              Windows (Chrome): pictograma Instalare din bara de adrese, sau meniu → „Instalează
-              Programări…”.
+              {tr('inst.stepWindows')}
             </Text>
           </View>
         )}
@@ -153,7 +153,7 @@ export default function InstallScreen() {
         ]}
       >
         <Text style={[styles.sectionTitle, { color: t.colors.text }]}>
-          Descarcă aplicația Android
+          {tr('inst.android')}
         </Text>
         <View style={styles.qrInner}>
           <QRCode
@@ -163,14 +163,12 @@ export default function InstallScreen() {
             color={palette.ink950}
           />
         </View>
-        <Text style={[styles.qrCaption, { color: t.colors.text }]}>Scanează pentru Android</Text>
+        <Text style={[styles.qrCaption, { color: t.colors.text }]}>{tr('inst.scanAndroid')}</Text>
         <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-          {androidDirect
-            ? 'Scanează QR-ul sau apasă butonul, descarcă fișierul APK și deschide-l ca să instalezi. După instalare, creează un cont.'
-            : 'Scanează QR-ul pe telefonul Android sau apasă butonul, descarcă fișierul și deschide-l ca să instalezi. După instalare, creează un cont.'}
+          {androidDirect ? tr('inst.apkDirect') : tr('inst.apkStore')}
         </Text>
         <Button
-          label={androidDirect ? 'Descarcă fișierul APK' : 'Descarcă aplicația Android'}
+          label={androidDirect ? tr('inst.dlApk') : tr('inst.dlAndroid')}
           icon="logo-android"
           onPress={() => void Linking.openURL(androidUrl)}
         />
@@ -188,35 +186,33 @@ export default function InstallScreen() {
         ]}
       >
         <Text style={[styles.sectionTitle, { color: t.colors.text }]}>
-          Descarcă aplicația iOS
+          {tr('inst.ios')}
         </Text>
         <View style={styles.qrInner}>
           <QRCode value={iosUrl} size={200} backgroundColor={palette.white} color={palette.ink950} />
         </View>
-        <Text style={[styles.qrCaption, { color: t.colors.text }]}>Scanează pentru iPhone</Text>
+        <Text style={[styles.qrCaption, { color: t.colors.text }]}>{tr('inst.scanIphone')}</Text>
         <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-          Pe iPhone nu există APK. QR-ul deschide ecranul de login în Safari. Acolo: Partajează
-          → „Pe ecranul Home” / „Add to Home Screen”. Nu adăuga pe Home pagina de instalare —
-          adaugă ecranul de login, ca să pornească aplicația.
+          {tr('inst.iosHint')}
         </Text>
         {highlightIos ? (
           <View style={styles.steps}>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              1. Șterge de pe Home iconița veche cu „P” (ține apăsat → Șterge bookmark).
+              {tr('inst.ios1')}
             </Text>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              2. Deschide linkul în Safari (nu Chrome). Trebuie să vezi login-ul Programări.
+              {tr('inst.ios2')}
             </Text>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              3. Partajează (pătrat cu săgeată) → „Pe ecranul Home” → Adaugă. Nume: Programări.
+              {tr('inst.ios3')}
             </Text>
             <Text style={[styles.step, { color: t.colors.text }]}>
-              4. Deschide iconița nouă de pe Home — trebuie să apară login/acasa, nu această pagină.
+              {tr('inst.ios4')}
             </Text>
           </View>
         ) : null}
         <Button
-          label="Deschide login în Safari"
+          label={tr('inst.openLogin')}
           icon="logo-apple"
           onPress={() => void Linking.openURL(iosUrl)}
         />

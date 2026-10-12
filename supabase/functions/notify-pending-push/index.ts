@@ -20,6 +20,7 @@ import {
   messageRescheduledRequest,
   notifyClientChannels,
 } from '../_shared/notify.ts';
+import { notifyLocale, parseNotifyLang } from '../_shared/notify.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -44,12 +45,13 @@ type WebhookPayload = {
   client_phone?: string | null;
   start_at?: string;
   reason?: string | null;
+  lang?: string;
 };
 
-function formatWhen(iso: string | undefined, timezone: string): string | undefined {
+function formatWhen(iso: string | undefined, timezone: string, lang: 'ro' | 'en'): string | undefined {
   if (!iso) return undefined;
   try {
-    return new Intl.DateTimeFormat('ro-RO', {
+    return new Intl.DateTimeFormat(notifyLocale(lang), {
       timeZone: timezone,
       dateStyle: 'medium',
       timeStyle: 'short',
@@ -199,25 +201,31 @@ Deno.serve(async (req) => {
 
   const contact =
     record.client_email || record.client_phone || 'Client';
+  const { data: ownerProfile } = await admin
+    .from('profiles')
+    .select('email, phone, language')
+    .eq('id', business.owner_user_id)
+    .maybeSingle();
+  const lang = parseNotifyLang((ownerProfile as { language?: string } | null)?.language ?? payload.lang);
   const rescheduled = payload.reason === 'rescheduled';
   const autoApproved = record.status === 'approved' && !rescheduled;
-  const startLocal = formatWhen(record.start_at, business.timezone ?? 'Europe/Bucharest');
+  const startLocal = formatWhen(record.start_at, business.timezone ?? 'Europe/Bucharest', lang);
   const pushTitle = rescheduled
-    ? 'Programare mutată'
+    ? (lang === 'en' ? 'Booking moved' : 'Programare mutată')
     : autoApproved
-      ? 'Programare auto-aprobată'
-      : 'Cerere nouă de programare';
+      ? (lang === 'en' ? 'Auto-approved booking' : 'Programare auto-aprobată')
+      : (lang === 'en' ? 'New booking request' : 'Cerere nouă de programare');
   const bodyText = rescheduled
     ? startLocal
-      ? `${contact} a mutat programarea (${startLocal}). Deschide Calendarul.`
-      : `${contact} a mutat programarea. Deschide Calendarul.`
+      ? (lang === 'en' ? `${contact} moved the booking (${startLocal}). Open the Calendar.` : `${contact} a mutat programarea (${startLocal}). Deschide Calendarul.`)
+      : (lang === 'en' ? `${contact} moved the booking. Open the Calendar.` : `${contact} a mutat programarea. Deschide Calendarul.`)
     : autoApproved
       ? startLocal
-        ? `Programare auto-aprobată de la ${contact} (${startLocal}).`
-        : `Programare auto-aprobată de la ${contact}.`
+        ? (lang === 'en' ? `Auto-approved booking from ${contact} (${startLocal}).` : `Programare auto-aprobată de la ${contact} (${startLocal}).`)
+        : (lang === 'en' ? `Auto-approved booking from ${contact}.` : `Programare auto-aprobată de la ${contact}.`)
       : startLocal
-        ? `Ai o cerere pending de la ${contact} (${startLocal}). Deschide Cereri pentru a răspunde.`
-        : `Ai o cerere pending de la ${contact}. Deschide Cereri pentru a răspunde.`;
+        ? (lang === 'en' ? `You have a pending request from ${contact} (${startLocal}). Open Requests to reply.` : `Ai o cerere pending de la ${contact} (${startLocal}). Deschide Cereri pentru a răspunde.`)
+        : (lang === 'en' ? `You have a pending request from ${contact}. Open Requests to reply.` : `Ai o cerere pending de la ${contact}. Deschide Cereri pentru a răspunde.`);
 
   // --- Expo push ---
   let sentPush = 0;
@@ -315,16 +323,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  // --- Owner WhatsApp / email (even when no push tokens) ---
-  const { data: ownerProfile } = await admin
-    .from('profiles')
-    .select('email, phone')
-    .eq('id', business.owner_user_id)
-    .maybeSingle();
+  // --- Owner WhatsApp / email (profile loaded above; even when no push tokens) ---
 
   const msg = rescheduled
-    ? messageRescheduledRequest(business.name, contact, startLocal)
-    : messageNewPendingRequest(business.name, contact, startLocal);
+    ? messageRescheduledRequest(business.name, contact, startLocal, lang)
+    : messageNewPendingRequest(business.name, contact, startLocal, lang);
   let sentWhatsapp = false;
   let sentEmail = false;
   let ownerReason: string | null = null;

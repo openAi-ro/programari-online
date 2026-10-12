@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { radius } from '@/constants/theme';
+import { trKey, useLanguage } from '@/lib/i18n';
 
 type Props = {
   latitude: number | null;
@@ -29,7 +30,7 @@ function buildHtml(lat: number, lng: number, hasPin: boolean): string {
   </style>
 </head>
 <body>
-  <div class="hint">Apasă pe hartă ca să pui pinul. Trage pinul ca să-l muți. Se salvează în app, nu pe Google Maps.</div>
+  <div class="hint">${trKey('map.osmHint').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -93,6 +94,7 @@ function parsePinMessage(raw: string): { latitude: number; longitude: number } |
 }
 
 function WebOsmMap({ latitude, longitude, onPick, height }: Props) {
+  const { lang } = useLanguage();
   const hasPin =
     latitude != null &&
     longitude != null &&
@@ -102,7 +104,8 @@ function WebOsmMap({ latitude, longitude, onPick, height }: Props) {
   const lng = hasPin ? longitude! : 26.1025;
   const html = useMemo(
     () => buildHtml(lat, lng, hasPin),
-    [hasPin, Number(lat.toFixed(5)), Number(lng.toFixed(5))]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasPin, Number(lat.toFixed(5)), Number(lng.toFixed(5)), lang]
   );
 
   useEffect(() => {
@@ -119,7 +122,7 @@ function WebOsmMap({ latitude, longitude, onPick, height }: Props) {
     <View style={[styles.wrap, { height }]}>
       {/* eslint-disable-next-line react/no-danger */}
       <iframe
-        title="Hartă locație business"
+        title={trKey('map.osmIframe')}
         srcDoc={html}
         style={{ border: 'none', width: '100%', height: '100%' }}
       />
@@ -137,6 +140,7 @@ export function OsmMapPicker(props: Props) {
   }
 
   const { latitude, longitude, onPick, height = 260 } = props;
+  const { lang } = useLanguage();
   const webRef = useRef<WebView>(null);
   const hasPin =
     latitude != null &&
@@ -147,7 +151,8 @@ export function OsmMapPicker(props: Props) {
   const lng = hasPin ? longitude! : 26.1025;
   const html = useMemo(
     () => buildHtml(lat, lng, hasPin),
-    [hasPin, Number(lat.toFixed(5)), Number(lng.toFixed(5))]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasPin, Number(lat.toFixed(5)), Number(lng.toFixed(5)), lang]
   );
 
   function onMessage(event: WebViewMessageEvent) {

@@ -3,6 +3,7 @@ import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { normalizeRo } from '@/lib/roGeo';
 
@@ -25,13 +26,15 @@ export function PickerField({
   value,
   options,
   onChange,
-  placeholder = 'Alege…',
+  placeholder,
   hint,
   icon,
   disabled = false,
 }: Props) {
   const t = useTheme();
+  const tr = useT();
   const [open, setOpen] = useState(false);
+  const shownPlaceholder = placeholder ?? tr('pick.choose');
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -69,7 +72,7 @@ export function PickerField({
           style={[styles.value, { color: value ? t.colors.text : t.colors.textFaint }]}
           numberOfLines={1}
         >
-          {value || placeholder}
+          {value || shownPlaceholder}
         </Text>
         <Ionicons name="chevron-down" size={16} color={t.colors.textFaint} />
       </Pressable>
@@ -89,7 +92,7 @@ export function PickerField({
               <Pressable
                 onPress={close}
                 accessibilityRole="button"
-                accessibilityLabel="Închide"
+                accessibilityLabel={tr('common.close')}
                 hitSlop={8}
               >
                 <Ionicons name="close" size={22} color={t.colors.textMuted} />
@@ -106,7 +109,7 @@ export function PickerField({
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Caută…"
+                placeholder={tr('pick.search')}
                 placeholderTextColor={t.colors.textFaint}
                 autoCorrect={false}
                 style={[styles.searchInput, { color: t.colors.text }]}
@@ -121,7 +124,7 @@ export function PickerField({
               style={styles.list}
               ListEmptyComponent={
                 <Text style={[styles.empty, { color: t.colors.textMuted }]}>
-                  Niciun rezultat pentru „{query}”.
+                  {tr('pick.noResults', { query })}
                 </Text>
               }
               renderItem={({ item }) => {

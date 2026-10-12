@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { setAppMode, type AppMode } from './appMode';
+import { trKey } from './i18n';
 
 export function parseAccountKind(value: string | null | undefined): AppMode {
   return value === 'business' ? 'business' : 'client';
@@ -47,7 +48,7 @@ export async function persistAccountKind(kind: AppMode): Promise<void> {
 
 /**
  * After login: the account must match the door they used (client vs business).
- * On mismatch, sign out and return a Romanian error.
+ * On mismatch, sign out and return a localized error.
  */
 export async function assertAccountKind(
   expected: AppMode
@@ -56,7 +57,7 @@ export async function assertAccountKind(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { ok: false, error: 'Trebuie să fii autentificat.' };
+    return { ok: false, error: trKey('auth.errMustSignIn') };
   }
 
   const { data: profile } = await supabase
@@ -72,8 +73,8 @@ export async function assertAccountKind(
       ok: false,
       error:
         actual === 'business'
-          ? 'Acest cont e de business. Întoarce-te și alege „Cont business”.'
-          : 'Acest cont e de client. Întoarce-te și alege „Cont client”.',
+          ? trKey('auth.errNeedBusiness')
+          : trKey('auth.errNeedClient'),
     };
   }
 

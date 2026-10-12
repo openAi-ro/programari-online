@@ -29,6 +29,7 @@ import {
 } from '@/lib/discover';
 import { isOpenNow } from '@/lib/browseList';
 import { useBack } from '@/lib/nav';
+import { useT } from '@/lib/i18n';
 
 /**
  * Aproape de mine — listă sortată după distanță (fara Google Maps greu pe web).
@@ -36,6 +37,7 @@ import { useBack } from '@/lib/nav';
  */
 export default function NearMeScreen() {
   const t = useTheme();
+  const tr = useT();
   const back = useBack();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -83,10 +85,10 @@ export default function NearMeScreen() {
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
-        title="Aproape de mine"
-        subtitle="Sortat după distanță"
+        title={tr('browse.nearMe')}
+        subtitle={tr('near.sortedByDist')}
         onBack={back}
-        label="Determinăm locația…"
+        label={tr('near.locating')}
       />
     );
   }
@@ -96,13 +98,13 @@ export default function NearMeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <Screen
-        title="Aproape de mine"
+        title={tr('browse.nearMe')}
         subtitle={
           coords
             ? withGeo > 0
-              ? `${withGeo} saloane cu distanță`
-              : 'Locație OK — saloanele fără GPS apar alfabetic'
-            : 'Fără locație — listă alfabetică'
+              ? tr('near.countGeo', { n: withGeo })
+              : tr('near.okNoGps')
+            : tr('near.noLocAlpha')
         }
         onBack={back}
         scroll={false}
@@ -114,24 +116,24 @@ export default function NearMeScreen() {
           ListHeaderComponent={
             <View style={{ gap: spacing.md }}>
               {locError ? (
-                <Callout tone="warning" title="Locație indisponibilă">
+                <Callout tone="warning" title={tr('cat.locUnavailable')}>
                   {locError}
                 </Callout>
               ) : null}
               {listError ? (
-                <Callout tone="danger" title="Eroare listă">
+                <Callout tone="danger" title={tr('near.listError')}>
                   {listError}
                 </Callout>
               ) : null}
               <View style={styles.actions}>
                 <Button
-                  label="Reîncearcă locația"
+                  label={tr('near.retryLoc')}
                   icon="locate-outline"
                   size="sm"
                   onPress={() => void load()}
                 />
                 <Button
-                  label="Caută după oraș"
+                  label={tr('near.searchCity')}
                   icon="search-outline"
                   variant="secondary"
                   size="sm"
@@ -139,7 +141,7 @@ export default function NearMeScreen() {
                 />
                 {coords ? (
                   <Button
-                    label="Deschide harta"
+                    label={tr('near.openMap')}
                     icon="map-outline"
                     variant="secondary"
                     size="sm"
@@ -152,11 +154,11 @@ export default function NearMeScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="navigate-outline"
-              title="Niciun salon găsit"
-              description="Încearcă căutarea după oraș sau scanează QR-ul."
+              title={tr('near.empty')}
+              description={tr('near.emptyDesc')}
               action={
                 <Button
-                  label="Caută business"
+                  label={tr('fav.searchBiz')}
                   icon="search-outline"
                   onPress={() => router.push('/(app)/browse' as never)}
                 />

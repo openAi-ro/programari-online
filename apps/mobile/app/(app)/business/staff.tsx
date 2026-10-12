@@ -20,6 +20,7 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { DEFAULT_BREAK_HOURS, DEFAULT_WORKING_HOURS, STAFF_COLORS } from '@/lib/defaults';
+import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
@@ -43,6 +44,7 @@ const EMPTY_DRAFT: Draft = {
 export default function BusinessStaffScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function BusinessStaffScreen() {
     } = await supabase.auth.getUser();
     if (!user) {
       setLoading(false);
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return;
     }
     const { data: biz, error: bErr } = await supabase
@@ -120,7 +122,7 @@ export default function BusinessStaffScreen() {
   }
 
   async function uploadStaffPhoto(localUri: string): Promise<string> {
-    if (!businessId) throw new Error('Lipsește business-ul.');
+    if (!businessId) throw new Error(trKey('team.bizMissing'));
     const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
     const path = `${businessId}/${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from('staff-photos').upload(path, buffer, {
@@ -141,9 +143,9 @@ export default function BusinessStaffScreen() {
     try {
       const url = await uploadStaffPhoto(result.assets[0].uri);
       setDraft((d) => ({ ...d, photoUrl: url }));
-      setMessage('Poza a fost încărcată.');
+      setMessage(trKey('team.photoUp'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut încărca poza.');
+      setError(e instanceof Error ? e.message : trKey('team.photoFail'));
     }
     setPhotoBusy(false);
   }
@@ -151,7 +153,7 @@ export default function BusinessStaffScreen() {
   async function pickFromGallery(): Promise<void> {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la galerie ca să alegi poza.');
+      setError(trKey('team.galleryPerm'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -166,7 +168,7 @@ export default function BusinessStaffScreen() {
   async function takePhoto(): Promise<void> {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la cameră ca să faci poza.');
+      setError(trKey('team.cameraPerm'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -181,7 +183,7 @@ export default function BusinessStaffScreen() {
     if (!businessId) return;
     const name = draft.name.trim();
     if (!name) {
-      setError('Introdu numele specialistului.');
+      setError(trKey('team.nameRequired'));
       return;
     }
     const hours = draft.customHours
@@ -207,7 +209,7 @@ export default function BusinessStaffScreen() {
         return;
       }
       setEditingId(null);
-      setMessage('Specialist adăugat.');
+      setMessage(trKey('team.added'));
       await load();
       return;
     }
@@ -226,7 +228,7 @@ export default function BusinessStaffScreen() {
       return;
     }
     setEditingId(null);
-    setMessage('Specialist actualizat.');
+    setMessage(trKey('team.updated'));
     await load();
   }
 
@@ -246,21 +248,21 @@ export default function BusinessStaffScreen() {
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
-        title="Echipă"
-        subtitle="Cine lucrează și când"
+        title={tr('team.title')}
+        subtitle={tr('team.subtitle')}
         onBack={back}
-        label="Se încarcă echipa…"
+        label={tr('team.loading')}
       />
     );
   }
 
   if (!businessId) {
     return (
-      <Screen title="Echipă" onBack={back}>
+      <Screen title={tr('team.title')} onBack={back}>
         <EmptyState
           icon="people-outline"
-          title="Configurează mai întâi business-ul"
-          description="Apoi poți adăuga specialiști, fiecare cu program propriu."
+          title={tr('team.setupFirst')}
+          description={tr('team.setupFirstDesc')}
         />
       </Screen>
     );
@@ -268,21 +270,21 @@ export default function BusinessStaffScreen() {
 
   return (
     <Screen
-      title="Echipă"
-      subtitle="Cine lucrează și când"
+      title={tr('team.title')}
+      subtitle={tr('team.subtitle')}
       onBack={back}
       footer={
         editingId ? (
           <View style={styles.footer}>
             {error ? <Callout tone="danger">{error}</Callout> : null}
             <Button
-              label={saving ? 'Se salvează…' : editingId === 'new' ? 'Adaugă' : 'Salvează'}
+              label={saving ? tr('cli.saving') : editingId === 'new' ? tr('team.addShort') : tr('common.save')}
               icon="checkmark"
               loading={saving}
               onPress={() => void saveDraft()}
             />
             <Button
-              label="Renunță"
+              label={tr('svc.discard')}
               variant="secondary"
               onPress={() => {
                 setEditingId(null);
@@ -294,19 +296,19 @@ export default function BusinessStaffScreen() {
           <View style={styles.footer}>
             {error ? <Callout tone="danger">{error}</Callout> : null}
             {message ? <Callout tone="success">{message}</Callout> : null}
-            <Button label="Adaugă specialist" icon="add" onPress={startNew} />
+            <Button label={tr('team.add')} icon="add" onPress={startNew} />
           </View>
         )
       }
     >
       {editingId ? (
         <>
-          <SectionTitle>{editingId === 'new' ? 'Specialist nou' : 'Editează'}</SectionTitle>
+          <SectionTitle>{editingId === 'new' ? tr('team.newOne') : tr('common.edit')}</SectionTitle>
           <Field
-            label="Nume"
+            label={tr('svc.name')}
             value={draft.name}
             onChangeText={(name) => setDraft((d) => ({ ...d, name }))}
-            placeholder="Ana, Mihai…"
+            placeholder={tr('team.namePh')}
             icon="person-outline"
             autoCapitalize="words"
           />
@@ -317,7 +319,7 @@ export default function BusinessStaffScreen() {
             ]}
           >
             <StaffBadge
-              name={draft.name.trim() || 'Specialist'}
+              name={draft.name.trim() || tr('team.specialist')}
               photoUrl={draft.photoUrl.trim() || null}
               size={88}
             />
@@ -325,26 +327,26 @@ export default function BusinessStaffScreen() {
               <View style={styles.photoBusy}>
                 <ActivityIndicator />
                 <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
-                  Se încarcă poza…
+                  {tr('team.photoLoading')}
                 </Text>
               </View>
             ) : (
               <View style={styles.photoBtns}>
                 <Button
-                  label="Alege din galerie"
+                  label={tr('team.fromGallery')}
                   variant="secondary"
                   icon="image-outline"
                   onPress={() => void pickFromGallery()}
                 />
                 <Button
-                  label="Fă poză"
+                  label={tr('team.takePhoto')}
                   variant="secondary"
                   icon="camera-outline"
                   onPress={() => void takePhoto()}
                 />
                 {draft.photoUrl.trim() ? (
                   <Button
-                    label="Șterge poza"
+                    label={tr('team.delPhoto')}
                     variant="secondary"
                     icon="trash-outline"
                     onPress={() => setDraft((d) => ({ ...d, photoUrl: '' }))}
@@ -360,15 +362,15 @@ export default function BusinessStaffScreen() {
             ]}
           >
             <View style={styles.flex}>
-              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>Program propriu</Text>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>{tr('team.customHours')}</Text>
               <Text style={[styles.toggleSub, { color: t.colors.textMuted }]}>
-                Dacă e oprit, folosește programul business-ului.
+                {tr('team.customHint')}
               </Text>
             </View>
             <Toggle
               value={draft.customHours}
               onValueChange={(customHours) => setDraft((d) => ({ ...d, customHours }))}
-              accessibilityLabel="Program propriu"
+              accessibilityLabel={tr('team.customHours')}
             />
           </View>
           {draft.customHours ? (
@@ -383,8 +385,8 @@ export default function BusinessStaffScreen() {
       {rows.length === 0 && !editingId ? (
         <EmptyState
           icon="people-outline"
-          title="Niciun specialist"
-          description="Adaugă echipa ca clienții să aleagă la cine se programează."
+          title={tr('team.empty')}
+          description={tr('team.emptyDesc')}
         />
       ) : (
         rows.map((s) => (
@@ -403,14 +405,14 @@ export default function BusinessStaffScreen() {
             <Pressable onPress={() => startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
               <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
-                {s.working_hours ? 'Program propriu' : 'Programul business-ului'}
-                {s.active ? '' : ' · inactiv'}
+                {s.working_hours ? tr('team.customHours') : tr('team.bizHours')}
+                {s.active ? '' : ` · ${tr('svc.inactive')}`}
               </Text>
             </Pressable>
             <Toggle
               value={s.active}
               onValueChange={() => void toggleActive(s)}
-              accessibilityLabel={s.active ? 'Dezactivează' : 'Activează'}
+              accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
             />
             <Pressable onPress={() => startEdit(s)} hitSlop={8}>
               <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />

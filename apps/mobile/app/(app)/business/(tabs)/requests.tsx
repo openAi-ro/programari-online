@@ -15,6 +15,7 @@ import {
   Segmented,
   useTheme,
 } from '@/components/ui';
+import { trKey, useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useBack } from '@/lib/nav';
@@ -42,6 +43,7 @@ export default function BusinessRequestsScreen() {
   }, []);
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'pending' | 'all'>('all');
@@ -73,7 +75,7 @@ export default function BusinessRequestsScreen() {
     } = await supabase.auth.getUser();
     if (!user) {
       setLoading(false);
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return;
     }
 
@@ -191,10 +193,10 @@ export default function BusinessRequestsScreen() {
           !seenIdsRef.current.has(row.id)
         ) {
           seenIdsRef.current.add(row.id);
-          const contact = row.client_email || row.client_phone || 'Client nou';
+          const contact = row.client_email || row.client_phone || trKey('req.newClient');
           void presentLocalBookingNotification({
-            title: 'Cerere nouă de programare',
-            body: `Ai o cerere de la ${contact}. Deschide Cereri pentru a răspunde.`,
+            title: trKey('req.notifTitle'),
+            body: trKey('req.notifBody').replace('{contact}', contact),
             appointmentId: row.id,
             businessId: row.business_id,
           });
@@ -260,11 +262,11 @@ export default function BusinessRequestsScreen() {
     try {
       const result = await invokePostpone(id, hours);
       if (!result.ok) {
-        setError(result.error ?? 'Amânarea a eșuat.');
+        setError(result.error ?? trKey('req.postponeFailed'));
         return;
       }
-      const hoursLabel = `${hours} ${hours === 1 ? 'oră' : 'ore'}`;
-      setSuccess(`Programarea a fost amânată cu ${hoursLabel}. Clientul a fost notificat.`);
+      const hoursLabel = `${hours} ${hours === 1 ? trKey('req.hourOne') : trKey('req.hours')}`;
+      setSuccess(trKey('req.postponedBy').replace('{label}', hoursLabel));
       notifyWaitlistForRow(rows.find((r) => r.id === id));
       await load();
     } finally {
@@ -319,7 +321,7 @@ export default function BusinessRequestsScreen() {
   function openMove(apt: Row) {
     const biz = bizForMove(apt);
     if (!biz) {
-      setError('Business-ul acestei programări nu a fost încărcat.');
+      setError(trKey('req.bizNotLoaded'));
       return;
     }
     setError(null);
@@ -365,7 +367,7 @@ export default function BusinessRequestsScreen() {
     if (!notify.ok) {
       setError(mapBookingRpcError('move_notify_failed'));
     } else {
-      setSuccess(`Programarea a fost mutată pe ${label}. Clientul a fost notificat.`);
+      setSuccess(trKey('req.movedTo').replace('{label}', label));
     }
     notifyWaitlistForRow(rows.find((r) => r.id === moveApt.id));
     await load();
@@ -393,9 +395,9 @@ export default function BusinessRequestsScreen() {
 
   async function sendQuickMessage(appointment: Appointment, text: string) {
     const { conversation, error: cErr } = await ensureChatConversation(appointment.business_id);
-    if (cErr || !conversation) { setError(cErr ?? 'Nu s-a putut deschide chatul.'); return; }
+    if (cErr || !conversation) { setError(cErr ?? trKey('req.chatOpenFailed')); return; }
     const { error: mErr } = await sendMessage(conversation.id, text);
-    if (mErr) setError(mErr); else setSuccess('Mesaj trimis.');
+    if (mErr) setError(mErr); else setSuccess(trKey('req.msgSent'));
   }
 
   async function deleteAppointment(id: string) {
@@ -406,7 +408,7 @@ export default function BusinessRequestsScreen() {
       setError(err.message);
       return;
     }
-    setSuccess('Programarea și chaturile legate au fost șterse.');
+    setSuccess(trKey('req.deleted'));
     await load();
   }
 
@@ -423,10 +425,10 @@ export default function BusinessRequestsScreen() {
     return (
       <View style={{ flex: 1 }}>
         <ListLoadingScreen
-          title="Cereri programări"
-          subtitle="Cereri noi și istoric"
+          title={tr('req.title')}
+          subtitle={tr('req.subtitle')}
           onBack={back}
-          label="Se încarcă cererile…"
+          label={tr('req.loading')}
         />
       </View>
     );
@@ -434,7 +436,7 @@ export default function BusinessRequestsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen title="Cereri programări" subtitle="Cereri noi și istoric" onBack={back} scroll={false}>
+      <Screen title={tr('req.title')} subtitle={tr('req.subtitle')} onBack={back} scroll={false}>
       <FlatList
         data={rows}
         keyExtractor={(item) => item.id}
@@ -454,24 +456,24 @@ export default function BusinessRequestsScreen() {
               value={filter}
               onChange={setFilter}
               options={[
-                { value: 'pending', label: 'În așteptare' },
-                { value: 'all', label: 'Toate' },
+                { value: 'pending', label: tr('req.pending') },
+                { value: 'all', label: tr('req.all') },
               ]}
             />
             {pendingRows.length > 0 ? (
-              <Callout tone="warm" title="Cereri care așteaptă răspuns">
+              <Callout tone="warm" title={tr('req.awaitingTitle')}>
                 {pendingRows.length === 1
-                  ? 'Ai 1 cerere în așteptare. Aprobă, respinge sau amână.'
-                  : `Ai ${pendingRows.length} cereri în așteptare. Aprobă, respinge sau amână.`}
+                  ? tr('req.awaitingOne')
+                  : tr('req.awaitingMany').replace('{count}', String(pendingRows.length))}
               </Callout>
             ) : null}
             {error ? (
-              <Callout tone="danger" title="A apărut o eroare">
+              <Callout tone="danger" title={tr('common.errorTitle')}>
                 {error}
               </Callout>
             ) : null}
             {success ? (
-              <Callout tone="success" title="Gata">
+              <Callout tone="success" title={tr('common.done')}>
                 {success}
               </Callout>
             ) : null}
@@ -481,12 +483,12 @@ export default function BusinessRequestsScreen() {
           <EmptyState
             icon={filter === 'pending' ? 'hourglass-outline' : 'calendar-clear-outline'}
             title={
-              filter === 'pending' ? 'Nicio cerere în așteptare' : 'Nu există programări'
+              filter === 'pending' ? tr('req.emptyPending') : tr('req.emptyAll')
             }
             description={
               filter === 'pending'
-                ? 'Nicio cerere pending. Deschide „Toate” ca să vezi programările confirmate.'
-                : 'Clienții tăi vor apărea în această listă după prima programare.'
+                ? tr('req.emptyPendingDesc')
+                : tr('req.emptyAllDesc')
             }
           />
         }
@@ -518,12 +520,12 @@ export default function BusinessRequestsScreen() {
           <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
             <View style={styles.modalHead}>
               <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
-                Mută pe alt slot
+                {tr('req.moveTitle')}
               </Text>
               <Pressable
                 onPress={() => !moveSaving && setMoveApt(null)}
                 accessibilityRole="button"
-                accessibilityLabel="Închide"
+                accessibilityLabel={tr('common.close')}
                 hitSlop={8}
               >
                 <Text style={{ color: t.colors.textMuted, fontSize: fontSize.lg }}>✕</Text>
@@ -532,7 +534,7 @@ export default function BusinessRequestsScreen() {
             <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
               {moveError ? <Callout tone="danger">{moveError}</Callout> : null}
               <DatePickerField
-                label="Ziua nouă"
+                label={tr('req.newDay')}
                 value={moveDate}
                 onChange={(ymd) => {
                   setMoveDate(ymd);
@@ -542,12 +544,12 @@ export default function BusinessRequestsScreen() {
                   }
                 }}
               />
-              <SectionTitle>Slot liber</SectionTitle>
+              <SectionTitle>{tr('req.freeSlot')}</SectionTitle>
               {moveLoading ? (
-                <Text style={{ color: t.colors.textMuted }}>Se calculează sloturile…</Text>
+                <Text style={{ color: t.colors.textMuted }}>{tr('req.calcSlots')}</Text>
               ) : moveSlots.length === 0 ? (
                 <Text style={{ color: t.colors.textMuted }}>
-                  Nu mai sunt sloturi libere în {moveDate}. Alege altă zi.
+                  {tr('req.noSlotsDay').replace('{date}', moveDate)}
                 </Text>
               ) : (
                 <View style={styles.slotGrid}>
@@ -583,7 +585,7 @@ export default function BusinessRequestsScreen() {
             <ButtonRow>
               <View style={styles.actionFlex}>
                 <Button
-                  label="Închide"
+                  label={tr('common.close')}
                   variant="secondary"
                   size="sm"
                   disabled={moveSaving}
@@ -592,7 +594,7 @@ export default function BusinessRequestsScreen() {
               </View>
               <View style={styles.actionFlex}>
                 <Button
-                  label="Mută"
+                  label={tr('req.move')}
                   icon="checkmark"
                   variant="primary"
                   size="sm"

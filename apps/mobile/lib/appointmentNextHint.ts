@@ -1,7 +1,8 @@
+import { trKey } from './i18n';
 import type { AppointmentStatus } from '@/lib/types';
 
 /**
- * One-line Romanian next-step hint for appointment cards / Home next card.
+ * One-line next-step hint for appointment cards / Home next card.
  * Keep short — UI uses numberOfLines={2} + flexShrink.
  */
 export function appointmentNextHint(
@@ -13,28 +14,28 @@ export function appointmentNextHint(
     canReschedule?: boolean;
   }
 ): string {
-  if (opts?.noShow) return 'Nu te-ai prezentat — poți rezerva din nou';
+  if (opts?.noShow) return trKey('hint.noShow');
 
   if (
     (status === 'pending' || status === 'approved') &&
     (opts?.canCancel || opts?.canReschedule)
   ) {
-    if (status === 'pending') return 'Așteaptă confirmarea — poți anula sau reprograma';
-    return 'Poți reprograma sau anula';
+    if (status === 'pending') return trKey('hint.pendingCanChange');
+    return trKey('hint.approvedCanChange');
   }
 
   switch (status) {
     case 'pending':
-      return 'Așteaptă confirmarea salonului';
+      return trKey('hint.pending');
     case 'approved':
       return opts?.attendanceConfirmed
-        ? 'Prezență confirmată — vezi ora și adresa'
-        : 'Ești confirmat — vezi ora și adresa';
+        ? trKey('hint.attendanceConfirmed')
+        : trKey('hint.approved');
     case 'rejected':
-      return 'Cerere respinsă — poți rezerva din nou';
+      return trKey('hint.rejected');
     case 'cancelled':
-      return 'Programare anulată — poți rezerva din nou';
+      return trKey('hint.cancelled');
     default:
-      return 'Vezi detaliile programării';
+      return trKey('hint.details');
   }
 }

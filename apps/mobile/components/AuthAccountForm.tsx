@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { Button, Callout, Screen, Segmented, useTheme } from '@/components/ui';
+import { trKey, useT } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import {
   LoginButton,
@@ -39,40 +40,41 @@ import {
 type Channel = 'email' | 'phone';
 type Mode = 'login' | 'register';
 
-const CHANNELS: { value: Channel; label: string }[] = [
-  { value: 'email', label: 'Email' },
-  { value: 'phone', label: 'Telefon' },
+const CHANNEL_VALUES: Channel[] = [
+  'email',
+  'phone',
 ];
 
 const RESEND_COOLDOWN_SEC = 60;
 
 function mapWhatsAppError(raw: string | null | undefined): string {
-  if (!raw?.trim()) return 'A apărut o eroare. Încearcă din nou.';
+  if (!raw?.trim()) return trKey('auth.waGeneric');
   const m = raw.toLowerCase();
 
-  if (m.includes('wrong_account_kind') || m.includes('cont e de')) {
+  if (m.includes('wrong_account_kind') || m.includes('cont e de') || m.includes('business account') || m.includes('client account')) {
     return raw;
   }
   if (
     m.includes('invalid_phone') ||
     m.includes('folosește un număr valid') ||
-    m.includes('foloseste un numar valid')
+    m.includes('foloseste un numar valid') ||
+    m.includes('use a valid number')
   ) {
-    return 'Folosește un număr valid (07xxxxxxxx sau +40...).';
+    return trKey('auth.validNumber');
   }
-  if (m.includes('invalid_code') || m.includes('cod greșit') || m.includes('cod gresit')) {
-    return m.includes('6 cifre')
-      ? 'Codul trebuie să aibă 6 cifre.'
-      : 'Cod greșit. Verifică mesajul WhatsApp și încearcă din nou.';
+  if (m.includes('invalid_code') || m.includes('cod greșit') || m.includes('cod gresit') || m.includes('wrong code')) {
+    return m.includes('6 cifre') || m.includes('6 digits')
+      ? trKey('auth.waCode6')
+      : trKey('auth.waWrongCode');
   }
-  if (m.includes('otp_expired') || m.includes('codul a expirat') || m.includes('cod expirat')) {
-    return 'Codul a expirat. Cere un cod nou din aplicație (nu folosi un mesaj vechi).';
+  if (m.includes('otp_expired') || m.includes('codul a expirat') || m.includes('cod expirat') || m.includes('code expired')) {
+    return trKey('auth.waExpired');
   }
-  if (m.includes('otp_already_used') || m.includes('deja folosit')) {
-    return 'Acest cod a fost deja folosit. Cere un cod nou.';
+  if (m.includes('otp_already_used') || m.includes('deja folosit') || m.includes('already used')) {
+    return trKey('auth.waUsed');
   }
   if (m.includes('otp_not_found')) {
-    return 'Nu am găsit un cod pentru acest număr. Cere un cod nou.';
+    return trKey('auth.waNotFound');
   }
   if (
     m.includes('rate_limited') ||
@@ -80,22 +82,25 @@ function mapWhatsAppError(raw: string | null | undefined): string {
     m.includes('prea multe') ||
     m.includes('cooldown') ||
     m.includes('așteaptă') ||
-    m.includes('asteapta')
+    m.includes('asteapta') ||
+    m.includes('too many') ||
+    m.includes('wait 60 seconds')
   ) {
-    return 'Prea multe încercări. Așteaptă un minut și cere un cod nou.';
+    return trKey('auth.waRateLimit');
   }
   if (m.includes('non-2xx') || m.includes('edge function')) {
-    return 'Serverul WhatsApp a răspuns cu eroare. Verifică secrets și deploy-ul funcțiilor.';
+    return trKey('auth.waServerError');
   }
   if (/[ăâîșțĂÂÎȘȚ]/.test(raw) || raw.includes('WhatsApp') || raw.includes('Twilio')) {
     return raw;
   }
   if (raw.includes(' ')) return raw;
-  return 'Nu am putut finaliza autentificarea. Încearcă din nou.';
+  return trKey('auth.waFailed');
 }
 
 export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const t = useTheme();
+  const tr = useT();
   const isBusiness = kind === 'business';
   const [channel, setChannel] = useState<Channel>('email');
   const [mode, setMode] = useState<Mode>('register');
@@ -154,11 +159,11 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     clearFeedback();
     const e = email.trim();
     if (!e) {
-      setError('Introdu adresa de email.');
+      setError(tr('auth.enterEmail'));
       return;
     }
     if (!password || password.length < 6) {
-      setError('Parola trebuie să aibă cel puțin 6 caractere.');
+      setError(tr('auth.passwordMinLength'));
       return;
     }
 
@@ -175,14 +180,14 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
         setLoading(false);
         setActivationEmail(e);
         setError(
-          'Contul există deja. Folosește „Intră în cont”. Dacă nu e activat, retrimite linkul de mai jos.'
+          tr('auth.accountExists')
         );
         return;
       }
       setActivationEmail(e);
       setLoading(false);
       setMessage(
-        `Ți-am trimis un link de activare la ${e}. Deschide-l din email, apasă linkul, apoi revino și alege „Intră în cont”. Fără link, nu poți intra.`
+        tr('auth.activationSent', { email: e })
       );
       return;
     }
@@ -194,6 +199,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       setError(mapped);
       if (
         mapped.toLowerCase().includes('nu e activat') ||
+        mapped.toLowerCase().includes('not activated') ||
         (err.message || '').toLowerCase().includes('email not confirmed')
       ) {
         setActivationEmail(e);
@@ -211,13 +217,13 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     } else {
       await clearRememberedCredentials();
     }
-    setMessage('Autentificare reușită.');
+    setMessage(tr('auth.signedIn'));
   }
 
   async function handleResendActivation() {
     const target = activationEmail || email.trim();
     if (!target) {
-      setError('Introdu adresa de email.');
+      setError(tr('auth.enterEmail'));
       return;
     }
     setResendBusy(true);
@@ -229,19 +235,19 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       return;
     }
     setActivationEmail(target);
-    setMessage(`Am retrimis linkul de activare la ${target}.`);
+    setMessage(tr('auth.activationResent', { email: target }));
   }
 
   async function handleSendWhatsAppOtp() {
     if (otpLock.current) return;
     clearFeedback();
     if (!whatsappConsent) {
-      setError('Bifeaza acordul pentru a primi codul pe WhatsApp.');
+      setError(tr('auth.waConsentNeeded'));
       return;
     }
     const normalized = normalizePhoneE164(phone);
     if (!normalized || !isValidRoMobile(normalized)) {
-      setError('Folosește un număr valid (07xxxxxxxx sau +40...).');
+      setError(tr('auth.validNumber'));
       return;
     }
 
@@ -260,8 +266,8 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     setCooldown(RESEND_COOLDOWN_SEC);
     setMessage(
       data?.stub
-        ? 'WhatsApp nu e configurat pe server — codul nu a fost trimis. Setează secrets Meta/Twilio.'
-        : 'Ți-am trimis un cod pe WhatsApp. Introdu-l mai jos.'
+        ? tr('auth.waNotConfigured')
+        : tr('auth.waCodeSent')
     );
   }
 
@@ -270,7 +276,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     clearFeedback();
     const code = otpCode.replace(/\D/g, '');
     if (!/^\d{6}$/.test(code)) {
-      setError('Codul trebuie să aibă 6 cifre.');
+      setError(tr('auth.waCode6'));
       return;
     }
 
@@ -306,7 +312,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     }
     otpLock.current = false;
     setLoading(false);
-    setMessage('Autentificare reușită.');
+    setMessage(tr('auth.signedIn'));
   }
 
   return (
@@ -314,8 +320,8 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       <Button
         label={
           peekPendingAuthRedirect()
-            ? 'Înapoi la programare'
-            : 'Înapoi la alegerea contului'
+            ? tr('auth.backToBooking')
+            : tr('auth.backToAccountChoice')
         }
         variant="ghost"
         size="sm"
@@ -331,9 +337,16 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
         style={styles.switchRole}
       />
 
-      <Segmented value={channel} onChange={setChannel} options={CHANNELS} />
+      <Segmented
+        value={channel}
+        onChange={setChannel}
+        options={CHANNEL_VALUES.map((value) => ({
+          value,
+          label: value === 'phone' ? tr('auth.channelPhone') : 'Email',
+        }))}
+      />
 
-      <LoginCard heading={isBusiness ? 'Cont business' : 'Cont client'}>
+      <LoginCard heading={isBusiness ? tr('auth.businessAccountTitle') : tr('auth.clientAccountTitle')}>
         {channel === 'email' ? (
           <>
             <LoginField
@@ -351,7 +364,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               icon="lock-closed-outline"
               secureTextEntry
               autoComplete={mode === 'register' ? 'new-password' : 'password'}
-              placeholder="Parola"
+              placeholder={tr('auth.password')}
               value={password}
               onChangeText={setPassword}
               editable={!loading}
@@ -373,7 +386,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               ]}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: rememberPassword }}
-              accessibilityLabel="Reține parola"
+              accessibilityLabel={tr('auth.rememberPassword')}
             >
               <View
                 style={[
@@ -389,7 +402,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                 ) : null}
               </View>
               <Text style={[styles.consentText, { color: t.colors.text }]}>
-                Reține parola
+                {tr('auth.rememberPassword')}
               </Text>
             </Pressable>
 
@@ -399,7 +412,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
             <LoginButtonRow>
               <LoginButtonHalf>
                 <LoginButton
-                  label="Intră în cont"
+                  label={tr('auth.signIn')}
                   onPress={() => void handleEmailSubmit('login')}
                   disabled={loading}
                   loading={loading && mode === 'login'}
@@ -407,7 +420,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               </LoginButtonHalf>
               <LoginButtonHalf>
                 <LoginButton
-                  label="Creează cont"
+                  label={tr('auth.createAccount')}
                   onPress={() => void handleEmailSubmit('register')}
                   disabled={loading}
                   loading={loading && mode === 'register'}
@@ -415,14 +428,14 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               </LoginButtonHalf>
             </LoginButtonRow>
             <LoginButton
-              label="Recuperează parola"
+              label={tr('auth.recoverPassword')}
               tone="danger"
               onPress={() => router.push('/(auth)/forgot-password')}
               disabled={loading}
             />
             {activationEmail ? (
               <LoginButton
-                label={resendBusy ? 'Se trimite…' : 'Retrimite linkul de activare'}
+                label={resendBusy ? tr('common.sending') : tr('auth.resendActivation')}
                 onPress={() => void handleResendActivation()}
                 disabled={loading || resendBusy}
               />
@@ -435,7 +448,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               keyboardType="phone-pad"
               autoComplete="tel"
               autoCorrect={false}
-              placeholder="Telefon"
+              placeholder={tr('auth.channelPhone')}
               value={phone}
               onChangeText={setPhone}
               onBlur={() => {
@@ -462,16 +475,16 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                     {whatsappConsent ? <Ionicons name="checkmark" size={14} color={t.colors.onAccent} /> : null}
                   </View>
                   <Text style={[styles.consentText, { color: t.colors.text }]}>
-                    Sunt de acord sa primesc codul de verificare pe WhatsApp la numarul introdus.{' '}
+                    {tr('auth.waConsentText')}{' '}
                     <Text onPress={() => Linking.openURL('https://programari.expo.app/privacy')} style={[styles.consentLink, { color: t.colors.accent }]}>
-                      Politica de confidențialitate
+                      {tr('auth.privacyPolicy')}
                     </Text>
                   </Text>
                 </Pressable>
                 {error ? <Callout tone="danger">{error}</Callout> : null}
                 {message ? <Callout tone="success">{message}</Callout> : null}
                 <LoginButton
-                  label="Trimite cod pe WhatsApp"
+                  label={tr('auth.sendWaCode')}
                   onPress={() => void handleSendWhatsAppOtp()}
                   disabled={loading}
                   loading={loading}
@@ -484,7 +497,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                   keyboardType="number-pad"
                   autoComplete="one-time-code"
                   autoCorrect={false}
-                  placeholder="Cod"
+                  placeholder={tr('auth.code')}
                   maxLength={6}
                   value={otpCode}
                   onChangeText={setOtpCode}
@@ -497,7 +510,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                 {message ? <Callout tone="success">{message}</Callout> : null}
 
                 <LoginButton
-                  label="Intră în cont"
+                  label={tr('auth.signIn')}
                   onPress={() => void handleVerifyWhatsAppOtp()}
                   disabled={loading}
                   loading={loading}
@@ -505,7 +518,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
                 <LoginButton
                   label={
-                    cooldown > 0 ? `Retrimite cod (${cooldown}s)` : 'Retrimite cod pe WhatsApp'
+                    cooldown > 0 ? tr('auth.resendCodeIn', { s: cooldown }) : tr('auth.resendWaCode')
                   }
                   onPress={() => void handleSendWhatsAppOtp()}
                   disabled={loading || cooldown > 0}

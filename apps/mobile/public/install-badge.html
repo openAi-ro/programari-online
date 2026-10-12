@@ -22,7 +22,24 @@
   <!-- Exemplu standalone; pe site-ul tău folosește snippet-ul din docs/pwa-embed.md -->
   <a class="badge" href="https://programari.expo.app/install" rel="noopener">
     <img src="/icons/icon-192.png" alt="" width="36" height="36" />
-    Instalează Programări
+    <span id="badge-label">Instalează Programări</span>
   </a>
+  <script>
+    (function () {
+      var lang = 'ro';
+      try {
+        var q = new URLSearchParams(location.search).get('lang');
+        if (q === 'ro' || q === 'en') lang = q;
+        else {
+          var saved = localStorage.getItem('programari.language');
+          if (saved === 'ro' || saved === 'en') lang = saved;
+          else if ((navigator.language || 'ro').toLowerCase().indexOf('en') === 0) lang = 'en';
+        }
+      } catch (e) {}
+      document.documentElement.lang = lang;
+      var label = document.getElementById('badge-label');
+      if (label && lang === 'en') label.textContent = 'Install Programări';
+    })();
+  </script>
 </body>
 </html>

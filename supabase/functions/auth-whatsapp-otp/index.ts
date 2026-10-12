@@ -6,7 +6,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageAuthOtp, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
+import { messageAuthOtp, parseNotifyLang, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 const COOLDOWN_MS = 60_000;
@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'server_misconfigured' }, 500);
   }
 
-  let body: { phone?: string };
+  let body: { phone?: string; lang?: string };
   try {
     body = await req.json();
   } catch {
@@ -48,11 +48,12 @@ Deno.serve(async (req) => {
   }
 
   const phone = normalizePhoneE164(body.phone);
+  const lang = parseNotifyLang(body.lang);
   if (!phone) {
     return jsonResponse(
       {
         error: 'invalid_phone',
-        hint: 'Folosește un număr valid (07xxxxxxxx sau +40...).',
+        hint: lang === 'en' ? 'Use a valid number (07xxxxxxxx or +40...).' : 'Folosește un număr valid (07xxxxxxxx sau +40...).',
       },
       400
     );
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'rate_limited',
-        hint: 'Așteaptă 60 de secunde înainte de a cere un cod nou.',
+        hint: lang === 'en' ? 'Wait 60 seconds before requesting a new code.' : 'Așteaptă 60 de secunde înainte de a cere un cod nou.',
       },
       429
     );
@@ -101,7 +102,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'otp_store_failed' }, 500);
   }
 
-  const copy = messageAuthOtp(code);
+  const copy = messageAuthOtp(code, lang);
   const wa = await sendWhatsApp(phone, copy.text, { otpCode: code });
 
   if (!wa.ok && !wa.stub) {
@@ -110,7 +111,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'whatsapp_send_failed',
-        hint: whatsappUserHint(wa),
+        hint: whatsappUserHint(wa, lang),
       },
       502
     );

@@ -25,6 +25,7 @@ import type { ComponentProps } from 'react';
 import { useColorScheme } from '@/components/useColorScheme';
 import { buildTheme, fontSize, radius, spacing, type Theme } from '@/constants/theme';
 import { computeFooterPaddingBottom } from '@/lib/keyboardPad';
+import { trKey, useT } from '@/lib/i18n';
 
 /** Înălțimea tastaturii (0 când e ascunsă). Folosit pe Android, unde resize nu ridică footer-ul cu edge-to-edge. */
 function useKeyboardHeight(enabled: boolean): number {
@@ -88,6 +89,7 @@ export function Screen({
   keyboardAvoid = true,
 }: ScreenProps) {
   const t = useTheme();
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight(keyboardAvoid && Platform.OS === 'android');
   const footerPaddingBottom = computeFooterPaddingBottom({
@@ -120,7 +122,7 @@ export function Screen({
           <View style={[styles.header, styles.shell]}>
             <View style={styles.headerLeft}>
               {onBack ? (
-                <IconBadge icon="chevron-back" onPress={onBack} accessibilityLabel="Înapoi" />
+                <IconBadge icon="chevron-back" onPress={onBack} accessibilityLabel={tr('common.back')} />
               ) : null}
               <View style={styles.headerTitles}>
                 <Text style={[styles.headerTitle, { color: t.colors.text }]} numberOfLines={1}>
@@ -510,6 +512,7 @@ type FieldProps = TextInputProps & {
 
 export function Field({ label, hint, error, icon, style, secureTextEntry, ...inputProps }: FieldProps) {
   const t = useTheme();
+  const tr = useT();
   const [focused, setFocused] = useState(false);
   const isPassword = secureTextEntry === true;
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -565,7 +568,7 @@ export function Field({ label, hint, error, icon, style, secureTextEntry, ...inp
           <Pressable
             onPress={() => setPasswordVisible((v) => !v)}
             accessibilityRole="button"
-            accessibilityLabel={passwordVisible ? 'Ascunde parola' : 'Arată parola'}
+            accessibilityLabel={passwordVisible ? tr('auth.hidePassword') : tr('auth.showPassword')}
             hitSlop={8}
             style={styles.fieldEyeBtn}
           >
@@ -801,6 +804,7 @@ export function Avatar({
   size?: AvatarSize;
 }) {
   const t = useTheme();
+  const tr = useT();
   const dim = size === 'sm' ? 28 : size === 'lg' ? 48 : 36;
   const textSize = size === 'sm' ? fontSize.xs : size === 'lg' ? fontSize.lg : fontSize.sm;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 22 : 18;
@@ -825,7 +829,7 @@ export function Avatar({
           source={{ uri: imageUrl as string }}
           style={{ width: dim, height: dim, borderRadius: radius.pill }}
           resizeMode="cover"
-          accessibilityLabel="Poză profil"
+          accessibilityLabel={tr('common.avatarPhoto')}
         />
       ) : icon ? (
         <Ionicons name={icon} size={iconSize} color={t.colors.accentSoftText} />
@@ -844,7 +848,7 @@ export function ErrorState({
   title,
   description,
   onRetry,
-  retryLabel = 'Încearcă din nou',
+  retryLabel,
   action,
 }: {
   icon?: IconName;
@@ -860,7 +864,7 @@ export function ErrorState({
     action ??
     (onRetry ? (
       <Button
-        label={retryLabel}
+        label={retryLabel ?? trKey('ui.retryDefault')}
         icon="refresh"
         variant="secondary"
         size="md"
@@ -934,12 +938,12 @@ export function EmptyState({
   );
 }
 
-export function LoadingScreen({ label = 'Se încarcă…' }: { label?: string }) {
+export function LoadingScreen({ label }: { label?: string }) {
   const t = useTheme();
   return (
     <View style={[styles.centered, { backgroundColor: t.colors.bg }]}>
       <ActivityIndicator size="large" color={t.colors.accent} />
-      <Text style={[styles.loadingText, { color: t.colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.loadingText, { color: t.colors.textMuted }]}>{label ?? trKey('common.loading')}</Text>
     </View>
   );
 }
@@ -1045,7 +1049,7 @@ export function ListLoadingScreen({
   count = 4,
   showIcon = true,
   lines = 2,
-  label = 'Se încarcă…',
+  label,
 }: {
   title?: string;
   subtitle?: string;
@@ -1057,7 +1061,7 @@ export function ListLoadingScreen({
 }) {
   return (
     <Screen title={title} subtitle={subtitle} onBack={onBack}>
-      <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.skeletonList}>
+      <View accessibilityRole="progressbar" accessibilityLabel={label ?? trKey('common.loading')} style={styles.skeletonList}>
         <SkeletonList count={count} showIcon={showIcon} lines={lines} />
       </View>
     </Screen>
@@ -1070,7 +1074,7 @@ export function SkeletonScreen({
   subtitle,
   onBack,
   blocks = 4,
-  label = 'Se încarcă…',
+  label,
   children,
 }: {
   title?: string;
@@ -1083,7 +1087,7 @@ export function SkeletonScreen({
 }) {
   return (
     <Screen title={title} subtitle={subtitle} onBack={onBack}>
-      <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.skeletonList}>
+      <View accessibilityRole="progressbar" accessibilityLabel={label ?? trKey('common.loading')} style={styles.skeletonList}>
         {children ??
           Array.from({ length: blocks }, (_, i) => (
             <Skeleton key={i} height={i === 0 ? 44 : 64} radius={radius.lg} />
@@ -1096,14 +1100,14 @@ export function SkeletonScreen({
 /** Schelet pentru ecranele cu cifre cheie (rapoarte): grilă de cartonașe. */
 export function SkeletonStatGrid({
   count = 6,
-  label = 'Se calculează rapoartele…',
+  label,
 }: {
   count?: number;
   label?: string;
 }) {
   const t = useTheme();
   return (
-    <View accessibilityRole="progressbar" accessibilityLabel={label} style={styles.skeletonGrid}>
+    <View accessibilityRole="progressbar" accessibilityLabel={label ?? trKey('ui.computingReports')} style={styles.skeletonGrid}>
       {Array.from({ length: count }, (_, i) => (
         <View
           key={i}

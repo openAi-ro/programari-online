@@ -7,6 +7,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
+import { parseNotifyLang } from '../_shared/notify.ts';
 
 const MAX_ATTEMPTS = 5;
 const IDEMPOTENT_MS = 3 * 60_000;
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'server_misconfigured' }, 500);
   }
 
-  let body: { phone?: string; code?: string; account_kind?: string };
+  let body: { phone?: string; code?: string; account_kind?: string; lang?: string };
   try {
     body = await req.json();
   } catch {
@@ -48,20 +49,21 @@ Deno.serve(async (req) => {
   }
 
   const accountKind = body.account_kind === 'business' ? 'business' : 'client';
+  const lang = parseNotifyLang(body.lang);
   const phone = normalizePhoneE164(body.phone);
   const code = (body.code ?? '').replace(/\D/g, '');
   if (!phone) {
     return jsonResponse(
       {
         error: 'invalid_phone',
-        hint: 'Folosește un număr valid (07xxxxxxxx sau +40...).',
+        hint: lang === 'en' ? 'Use a valid number (07xxxxxxxx or +40...).' : 'Folosește un număr valid (07xxxxxxxx sau +40...).',
       },
       400
     );
   }
   if (!/^\d{6}$/.test(code)) {
     return jsonResponse(
-      { error: 'invalid_code', hint: 'Codul trebuie să aibă 6 cifre.' },
+      { error: 'invalid_code', hint: lang === 'en' ? 'The code must be 6 digits.' : 'Codul trebuie să aibă 6 cifre.' },
       400
     );
   }
@@ -102,7 +104,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         {
           error: 'otp_already_used',
-          hint: 'Acest cod a fost deja folosit. Cere un cod nou.',
+          hint: lang === 'en' ? 'This code was already used. Request a new code.' : 'Acest cod a fost deja folosit. Cere un cod nou.',
         },
         400
       );
@@ -111,7 +113,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'otp_expired',
-        hint: 'Codul a expirat. Cere un cod nou.',
+        hint: lang === 'en' ? 'The code expired. Request a new code.' : 'Codul a expirat. Cere un cod nou.',
       },
       400
     );
@@ -124,7 +126,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         {
           error: 'too_many_attempts',
-          hint: 'Prea multe încercări. Cere un cod nou.',
+          hint: lang === 'en' ? 'Too many attempts. Request a new code.' : 'Prea multe încercări. Cere un cod nou.',
         },
         429
       );
@@ -138,13 +140,13 @@ Deno.serve(async (req) => {
       return jsonResponse(
         {
           error: 'too_many_attempts',
-          hint: 'Prea multe încercări. Cere un cod nou.',
+          hint: lang === 'en' ? 'Too many attempts. Request a new code.' : 'Prea multe încercări. Cere un cod nou.',
         },
         429
       );
     }
     return jsonResponse(
-      { error: 'invalid_code', hint: 'Cod greșit. Încearcă din nou.' },
+      { error: 'invalid_code', hint: lang === 'en' ? 'Wrong code. Try again.' : 'Cod greșit. Încearcă din nou.' },
       400
     );
   } else {
@@ -153,7 +155,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         {
           error: 'otp_expired',
-          hint: 'Codul a expirat. Cere un cod nou.',
+          hint: lang === 'en' ? 'The code expired. Request a new code.' : 'Codul a expirat. Cere un cod nou.',
         },
         400
       );
@@ -161,7 +163,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'otp_not_found',
-        hint: 'Nu am găsit un cod pentru acest număr. Cere un cod nou.',
+        hint: lang === 'en' ? 'No code found for this number. Request a new code.' : 'Nu am găsit un cod pentru acest număr. Cere un cod nou.',
       },
       400
     );
@@ -172,7 +174,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'otp_not_found',
-        hint: 'Nu am găsit un cod pentru acest număr. Cere un cod nou.',
+        hint: lang === 'en' ? 'No code found for this number. Request a new code.' : 'Nu am găsit un cod pentru acest număr. Cere un cod nou.',
       },
       400
     );
@@ -206,8 +208,8 @@ Deno.serve(async (req) => {
           error: 'wrong_account_kind',
           hint:
             existingKind === 'business'
-              ? 'Acest număr e un cont business. Folosește „Cont business”.'
-              : 'Acest număr e un cont client. Folosește „Cont client”.',
+              ? (lang === 'en' ? 'This number is a business account. Use "Business account".' : 'Acest număr e un cont business. Folosește „Cont business”.')
+              : (lang === 'en' ? 'This number is a client account. Use "Client account".' : 'Acest număr e un cont client. Folosește „Cont client”.'),
         },
         403
       );
@@ -291,7 +293,7 @@ Deno.serve(async (req) => {
         return jsonResponse(
           {
             error: 'user_create_failed',
-            hint: createErr?.message ?? 'Nu am putut crea contul.',
+            hint: createErr?.message ?? (lang === 'en' ? 'Could not create the account.' : 'Nu am putut crea contul.'),
           },
           500
         );
@@ -310,8 +312,8 @@ Deno.serve(async (req) => {
             error: 'wrong_account_kind',
             hint:
               racedKind === 'business'
-                ? 'Acest număr e un cont business. Folosește „Cont business”.'
-                : 'Acest număr e un cont client. Folosește „Cont client”.',
+                ? (lang === 'en' ? 'This number is a business account. Use "Business account".' : 'Acest număr e un cont business. Folosește „Cont business”.')
+                : (lang === 'en' ? 'This number is a client account. Use "Client account".' : 'Acest număr e un cont client. Folosește „Cont client”.'),
           },
           403
         );
@@ -338,7 +340,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'session_create_failed',
-        hint: 'Nu am putut crea sesiunea. Încearcă din nou.',
+        hint: lang === 'en' ? 'Could not create the session. Try again.' : 'Nu am putut crea sesiunea. Încearcă din nou.',
       },
       500
     );
@@ -359,7 +361,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'session_create_failed',
-        hint: 'Nu am putut crea sesiunea. Încearcă din nou.',
+        hint: lang === 'en' ? 'Could not create the session. Try again.' : 'Nu am putut crea sesiunea. Încearcă din nou.',
       },
       500
     );

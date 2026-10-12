@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { trKey } from '@/lib/i18n';
 
 type Props = {
   name: string;
@@ -45,7 +46,7 @@ export function StaffBadge({ name, photoUrl, color, size = 72, selected }: Props
           <Image
             source={{ uri: photoUrl as string }}
             style={{ width: size, height: size, borderRadius: size / 2 }}
-            accessibilityLabel={`Poza ${name}`}
+            accessibilityLabel={trKey('staff.photoOf', { name })}
             onError={() => setFailedUri(photoUrl as string)}
           />
         ) : (

@@ -1,10 +1,12 @@
 import { Stack, useRouter } from 'expo-router';
 
 import { Button, EmptyState, Screen, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 
 export default function NotFoundScreen() {
   const t = useTheme();
+  const tr = useT();
   const router = useRouter();
 
   return (
@@ -13,25 +15,25 @@ export default function NotFoundScreen() {
       <Screen>
         <EmptyState
           icon="compass-outline"
-          title="Ecranul nu există"
-          description="Linkul acesta nu duce nicăieri în app. Verifică linkul sau întoarce-te la început."
+          title={tr('nav.notFoundTitle')}
+          description={tr('nav.notFoundDesc')}
           action={
             <Button
-              label="Înapoi la început"
+              label={tr('nav.backToStart')}
               icon="home-outline"
               onPress={() => router.replace('/(auth)/login' as never)}
             />
           }
         />
         <Button
-          label="Scanează un cod QR"
+          label={tr('nav.scanQr')}
           variant="secondary"
           icon="scan-outline"
           onPress={() => router.replace('/(app)/scan' as never)}
           style={{ marginTop: spacing.md }}
         />
         <Button
-          label="Deschide contul tău"
+          label={tr('nav.openAccount')}
           variant="ghost"
           icon="person-circle-outline"
           onPress={() => router.replace('/(app)/home' as never)}

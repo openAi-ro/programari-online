@@ -1,8 +1,8 @@
-/** Romanian copy for book-screen waitlist UX (P1). */
-export const WAITLIST_JOIN_TITLE = 'Locurile sunt ocupate';
-export const WAITLIST_JOIN_BODY =
-  'Intră pe lista de așteptare. Te anunțăm dacă se eliberează un loc în ziua aleasă.';
-export const WAITLIST_JOIN_CTA = 'Intră pe lista de așteptare';
-export const WAITLIST_LEAVE_CTA = 'Ieși de pe lista de așteptare';
-export const WAITLIST_ON_LIST =
-  'Ești pe lista de așteptare pentru această zi. Te notificăm dacă se eliberează un loc.';
+import { trKey } from './i18n';
+
+/** Waitlist copy for the book screen (P1), in the current language. */
+export const waitlistJoinTitle = (): string => trKey('waitlist.joinTitle');
+export const waitlistJoinBody = (): string => trKey('waitlist.joinBody');
+export const waitlistJoinCta = (): string => trKey('waitlist.joinCta');
+export const waitlistLeaveCta = (): string => trKey('waitlist.leaveCta');
+export const waitlistOnList = (): string => trKey('waitlist.onList');

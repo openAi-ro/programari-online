@@ -2,6 +2,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { getMyAppointmentsUrl } from './bookingLink';
 import { supabase } from './supabase';
+import { trKey } from './i18n';
 
 export async function startDepositCheckout(appointmentId: string): Promise<{
   ok: boolean;
@@ -31,13 +32,13 @@ export async function startDepositCheckout(appointmentId: string): Promise<{
 
 export function mapPayError(error: string): string {
   if (error === 'stripe_not_configured') {
-    return 'Plata cu cardul nu e activă încă. Business-ul marchează avansul când îl primește (cash sau transfer).';
+    return trKey('pay.noCard');
   }
   if (error === 'not_payable') {
-    return 'Această programare nu mai are un avans de plată.';
+    return trKey('pay.notPayable');
   }
   if (error === 'amount_too_small') {
-    return 'Avansul minim pentru plata online este 2 lei.';
+    return trKey('pay.minAmount');
   }
   return error;
 }

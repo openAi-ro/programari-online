@@ -4,20 +4,21 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/components/ui';
+import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 
 type TabKey = 'home' | 'search' | 'appointments' | 'favorites' | 'account';
 
 const TABS: {
   key: TabKey;
-  label: string;
+  labelKey: TrKey;
   icon: keyof typeof Ionicons.glyphMap;
   href: string;
   match: (path: string) => boolean;
 }[] = [
   {
     key: 'home',
-    label: 'Acasă',
+    labelKey: 'tabs.home',
     icon: 'home-outline',
     href: '/(app)/home',
     match: (p) =>
@@ -26,28 +27,28 @@ const TABS: {
   },
   {
     key: 'search',
-    label: 'Caută',
+    labelKey: 'tabs.search',
     icon: 'search-outline',
     href: '/(app)/browse',
     match: (p) => p.includes('/browse') || p.includes('/map'),
   },
   {
     key: 'appointments',
-    label: 'Programări',
+    labelKey: 'tabs.appointments',
     icon: 'calendar-outline',
     href: '/(app)/my-appointments',
     match: (p) => p.includes('my-appointments'),
   },
   {
     key: 'favorites',
-    label: 'Favorite',
+    labelKey: 'tabs.favorites',
     icon: 'heart-outline',
     href: '/(app)/favorites',
     match: (p) => p.includes('/favorites'),
   },
   {
     key: 'account',
-    label: 'Cont',
+    labelKey: 'tabs.account',
     icon: 'person-outline',
     href: '/(app)/settings',
     match: (p) => p.includes('/settings') && !p.includes('/business/'),
@@ -64,6 +65,7 @@ export function ClientTabBar({
   badges?: Partial<Record<TabKey, number>>;
 }) {
   const t = useTheme();
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const pathname = usePathname() || '';
 
@@ -86,7 +88,7 @@ export function ClientTabBar({
           <Pressable
             key={tab.key}
             accessibilityRole="button"
-            accessibilityLabel={tab.label}
+            accessibilityLabel={tr(tab.labelKey)}
             onPress={() => {
               if (active) return;
               router.replace(tab.href as never);
@@ -111,7 +113,7 @@ export function ClientTabBar({
               minimumFontScale={0.75}
               ellipsizeMode="tail"
             >
-              {tab.label}
+              {tr(tab.labelKey)}
             </Text>
           </Pressable>
         );

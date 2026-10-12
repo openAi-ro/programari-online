@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   buildMapsUrl,
@@ -26,6 +27,7 @@ type Props = {
  */
 export function LocationCard({ location, compact = false }: Props) {
   const t = useTheme();
+  const tr = useT();
   const address = formatAddress(location);
   const mapsUrl = buildMapsUrl(location);
   const nativeMapsUrl = buildNativeMapsUrl(location);
@@ -33,7 +35,7 @@ export function LocationCard({ location, compact = false }: Props) {
 
   if (!address && !mapsUrl && !canDrive) return null;
 
-  const title = address ?? 'Vezi locația pe hartă';
+  const title = address ?? tr('loc.seeOnMap');
 
   return (
     <View
@@ -55,10 +57,10 @@ export function LocationCard({ location, compact = false }: Props) {
           <Text style={[styles.title, { color: t.colors.text }]}>{title}</Text>
           <Text style={[styles.hint, { color: t.colors.textMuted }]}>
             {canDrive
-              ? 'Coordonate GPS salvate — poți porni navigarea acum.'
+              ? tr('loc.gpsSaved')
               : address
-                ? 'Deschide harta pentru indicații de orientare.'
-                : 'Locația nu are adresă completă.'}
+                ? tr('loc.openForDirections')
+                : tr('loc.noFullAddress')}
           </Text>
         </View>
       </View>
@@ -66,7 +68,7 @@ export function LocationCard({ location, compact = false }: Props) {
       {canDrive ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Condu acum"
+          accessibilityLabel={tr('appt.driveNow')}
           onPress={() => void openDriveChooser(location)}
           style={({ pressed }) => [
             styles.action,
@@ -77,12 +79,12 @@ export function LocationCard({ location, compact = false }: Props) {
           ]}
         >
           <Ionicons name="navigate" size={16} color={t.colors.onAccent} />
-          <Text style={[styles.actionText, { color: t.colors.onAccent }]}>Condu acum</Text>
+          <Text style={[styles.actionText, { color: t.colors.onAccent }]}>{tr('appt.driveNow')}</Text>
         </Pressable>
       ) : mapsUrl ? (
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="Deschide locația pe hartă"
+          accessibilityLabel={tr('loc.openOnMap')}
           onPress={() => void openMaps(mapsUrl, nativeMapsUrl)}
           style={({ pressed }) => [
             styles.action,
@@ -93,7 +95,7 @@ export function LocationCard({ location, compact = false }: Props) {
           ]}
         >
           <Ionicons name="map-outline" size={16} color={t.colors.onAccent} />
-          <Text style={[styles.actionText, { color: t.colors.onAccent }]}>Deschide pe hartă</Text>
+          <Text style={[styles.actionText, { color: t.colors.onAccent }]}>{tr('loc.openMap')}</Text>
         </Pressable>
       ) : null}
     </View>

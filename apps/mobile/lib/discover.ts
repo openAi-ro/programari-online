@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/withTimeout';
 import type { WorkingHours } from '@/lib/types';
+import { trKey } from './i18n';
 
 export type PublicBusiness = {
   id: string;
@@ -282,16 +283,16 @@ export function locationErrorMessage(err: unknown): string {
   const code = err instanceof Error ? err.message : String(err ?? '');
   switch (code) {
     case 'permission_denied':
-      return 'Permisiunea de locație a fost refuzată. Poți căuta după județ / localitate din Caută.';
+      return trKey('loc.errDenied');
     case 'location_timeout':
     case 'permission_timeout':
-      return 'Locația a durat prea mult. Încearcă din nou sau caută după județ / localitate.';
+      return trKey('loc.errTimeout');
     case 'location_unavailable':
-      return 'Locația nu e disponibilă pe acest dispozitiv.';
+      return trKey('loc.errUnavailable');
     case 'location_failed':
-      return 'Nu am putut determina locația. Încearcă din nou.';
+      return trKey('loc.errFailed');
     default:
-      return 'Nu am putut determina locația. Încearcă din nou sau caută după județ / localitate.';
+      return trKey('loc.errDefault');
   }
 }
 

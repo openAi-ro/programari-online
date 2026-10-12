@@ -8,12 +8,17 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageWaitlistSpot, notifyClientChannels } from '../_shared/notify.ts';
+import {
+  messageWaitlistSpot,
+  notifyClientChannels,
+  parseNotifyLang,
+} from '../_shared/notify.ts';
 
 type Payload = {
   business_id?: string;
   desired_date?: string;
   booking_url?: string;
+  lang?: string;
 };
 
 Deno.serve(async (req) => {
@@ -105,17 +110,21 @@ Deno.serve(async (req) => {
   const link =
     bookingUrl ||
     `programari://b/${business.public_code}`;
-  const copy = messageWaitlistSpot(business.name, desiredDate, link);
+  const fallbackLang = parseNotifyLang(payload.lang);
 
   for (const row of list) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('email, phone')
+      .select('email, phone, language')
       .eq('id', row.client_user_id)
       .maybeSingle();
 
     const email = row.client_email ?? profile?.email ?? null;
     const phone = row.client_phone ?? profile?.phone ?? null;
+    const lang = parseNotifyLang(
+      (profile as { language?: string } | null)?.language ?? fallbackLang
+    );
+    const copy = messageWaitlistSpot(business.name, desiredDate, link, lang);
 
     await notifyClientChannels({
       email,

@@ -32,11 +32,12 @@ import {
 import { createAppointmentIfFree, createRecurringAppointments, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { clampRepeatCount } from '@/lib/recurringRules';
 import {
-  WAITLIST_JOIN_BODY,
-  WAITLIST_JOIN_CTA,
-  WAITLIST_JOIN_TITLE,
-  WAITLIST_ON_LIST,
+  waitlistJoinBody,
+  waitlistJoinCta,
+  waitlistJoinTitle,
+  waitlistOnList,
 } from '@/lib/waitlistCopy';
+import { trKey, useT } from '@/lib/i18n';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import { useBack } from '@/lib/nav';
 import { locationFromBusiness, formatAddress } from '@/lib/location';
@@ -61,12 +62,12 @@ type ReviewSnippet = {
   created_at: string;
 };
 
-const STEP_LABELS: Record<WizardStep, string> = {
-  staff: 'Specialist',
-  service: 'Serviciu',
-  date: 'Dată',
-  slot: 'Oră',
-  confirm: 'Confirmă',
+const STEP_LABELS: Record<WizardStep, 'book.stepStaff' | 'book.stepService' | 'book.stepDate' | 'book.stepTime' | 'book.stepConfirm'> = {
+  staff: 'book.stepStaff',
+  service: 'book.stepService',
+  date: 'book.stepDate',
+  slot: 'book.stepTime',
+  confirm: 'book.stepConfirm',
 };
 
 function buildSteps(hasStaffChoice: boolean, hasServices: boolean): WizardStep[] {
@@ -79,6 +80,7 @@ function buildSteps(hasStaffChoice: boolean, hasServices: boolean): WizardStep[]
 
 export default function BookScreen() {
   const t = useTheme();
+  const tr = useT();
   const router = useRouter();
   const { publicCode, rescheduleId, serviceId: serviceIdParam, staffId: staffIdParam } =
     useLocalSearchParams<{
@@ -160,7 +162,7 @@ export default function BookScreen() {
       setStepsReady(false);
       const code = String(publicCode ?? '').trim();
       if (!code) {
-        setError('Cod business invalid.');
+        setError(trKey('book.badCode'));
         setLoading(false);
         return;
       }
@@ -175,7 +177,7 @@ export default function BookScreen() {
         return;
       }
       if (!data) {
-        setError('Business-ul nu a fost găsit.');
+        setError(trKey('book.notFound'));
         setLoading(false);
         return;
       }
@@ -397,11 +399,11 @@ export default function BookScreen() {
 
   async function handleBook() {
     if (!business || !selected) {
-      setError('Alege un slot.');
+      setError(trKey('book.pickSlot'));
       return;
     }
     if (services.length > 0 && !serviceId) {
-      setError('Alege un serviciu.');
+      setError(trKey('book.pickService'));
       return;
     }
     setBooking(true);
@@ -442,7 +444,7 @@ export default function BookScreen() {
         }
       }
       setSelected(null);
-      setMessage('Programarea a fost mutată.');
+      setMessage(trKey('book.moved'));
       setTimeout(() => router.replace('/(app)/my-appointments'), 800);
       return;
     }
@@ -473,8 +475,8 @@ export default function BookScreen() {
       const first = series[0];
       setMessage(
         first?.status === 'approved'
-          ? `Serie săptămânală × ${series.length} confirmată automat.`
-          : `Serie săptămânală × ${series.length} trimisă. Așteaptă confirmarea.`
+          ? trKey('book.seriesAuto', { n: series.length })
+          : trKey('book.seriesPending', { n: series.length })
       );
       setTimeout(() => router.replace('/(app)/my-appointments'), 600);
       return;
@@ -522,18 +524,18 @@ export default function BookScreen() {
     setSelected(null);
     await loadSlots();
     if (appointment?.loyalty_redeemed) {
-      setMessage('Ședință cadou (loialitate). Cererea a fost trimisă.');
+      setMessage(trKey('book.giftSent'));
     } else if (appointment?.status === 'approved') {
       setMessage(
         appointment.payment_status === 'unpaid'
-          ? `Programarea e confirmată. Avans: ${formatLei(appointment.deposit_ron)}.`
-          : 'Programarea a fost confirmată automat.'
+          ? trKey('book.confirmedDeposit', { amount: formatLei(appointment.deposit_ron) })
+          : trKey('book.confirmedAuto')
       );
     } else {
       setMessage(
         appointment?.payment_status === 'unpaid'
-          ? `Cererea a fost trimisă. Avans: ${formatLei(appointment.deposit_ron)}. Așteaptă confirmarea.`
-          : 'Cererea a fost trimisă. Așteaptă confirmarea.'
+          ? trKey('book.sentDeposit', { amount: formatLei(appointment.deposit_ron) })
+          : trKey('book.sentPending')
       );
     }
     if (appointment?.id) {
@@ -558,7 +560,7 @@ export default function BookScreen() {
       return;
     }
     setOnWaitlist(true);
-    setMessage(WAITLIST_ON_LIST);
+    setMessage(waitlistOnList());
   }
 
   function goNext() {
@@ -566,7 +568,7 @@ export default function BookScreen() {
     if (i < 0 || i >= steps.length - 1) return;
     const next = steps[i + 1];
     if (step === 'slot' && !selected) {
-      setError('Alege un slot liber.');
+      setError(trKey('book.pickFreeSlot'));
       return;
     }
     setError(null);
@@ -585,17 +587,17 @@ export default function BookScreen() {
 
   if (loading || !stepsReady) {
     return (
-      <SkeletonScreen title="Rezervare" onBack={goBack} blocks={5} label="Căutăm agenda…" />
+      <SkeletonScreen title={tr('book.title')} onBack={goBack} blocks={5} label={tr('book.loadingAgenda')} />
     );
   }
 
   if (!business) {
     return (
-      <Screen title="Rezervare" onBack={goBack}>
+      <Screen title={tr('book.title')} onBack={goBack}>
         <ErrorState
-          title="Nu am putut încărca business-ul"
-          description={error ?? 'Eroare necunoscută.'}
-          action={<Button label="Înapoi" variant="secondary" onPress={goBack} />}
+          title={tr('book.loadFail')}
+          description={error ?? tr('auth.cbUnknownError')}
+          action={<Button label={tr('common.back')} variant="secondary" onPress={goBack} />}
         />
       </Screen>
     );
@@ -603,13 +605,13 @@ export default function BookScreen() {
 
   if (ownBusinessBlock) {
     return (
-      <Screen title="Rezervare" onBack={goBack}>
+      <Screen title={tr('book.title')} onBack={goBack}>
         <ErrorState
-          title="Propriul tău business"
-          description="Nu te poți programa la business-ul tău prin scanare. Folosește Calendarul pentru programări interne."
+          title={tr('book.ownBiz')}
+          description={tr('book.ownBizDesc')}
           action={
             <Button
-              label="Deschide calendarul"
+              label={tr('book.openCalendar')}
               icon="calendar-outline"
               onPress={() => router.replace('/(app)/business/calendar' as never)}
             />
@@ -640,10 +642,10 @@ export default function BookScreen() {
         <Button
           label={
             booking
-              ? 'Se trimite…'
+              ? tr('common.sending')
               : isReschedule
-                ? 'Mută programarea'
-                : 'Trimite cererea'
+                ? tr('book.moveBooking')
+                : tr('book.sendRequest')
           }
           icon="paper-plane-outline"
           onPress={handleBook}
@@ -652,12 +654,12 @@ export default function BookScreen() {
         />
         {!isReschedule && !slotsLoading && slots.length === 0 ? (
           <>
-            <Callout tone="accent" title={WAITLIST_JOIN_TITLE}>
-              {onWaitlist ? WAITLIST_ON_LIST : WAITLIST_JOIN_BODY}
+            <Callout tone="accent" title={waitlistJoinTitle()}>
+              {onWaitlist ? waitlistOnList() : waitlistJoinBody()}
             </Callout>
             {!onWaitlist ? (
               <Button
-                label={waitlistBusy ? 'Se salvează…' : WAITLIST_JOIN_CTA}
+                label={waitlistBusy ? tr('book.saving') : waitlistJoinCta()}
                 variant="secondary"
                 icon="notifications-outline"
                 loading={waitlistBusy}
@@ -670,25 +672,25 @@ export default function BookScreen() {
     ) : step === 'slot' && !slotsLoading && slots.length === 0 && !isReschedule ? (
       <>
         {error ? <Callout tone="danger">{error}</Callout> : null}
-        <Callout tone="accent" title={WAITLIST_JOIN_TITLE}>
-          {onWaitlist ? WAITLIST_ON_LIST : WAITLIST_JOIN_BODY}
+        <Callout tone="accent" title={waitlistJoinTitle()}>
+          {onWaitlist ? waitlistOnList() : waitlistJoinBody()}
         </Callout>
         {!onWaitlist ? (
           <Button
-            label={waitlistBusy ? 'Se salvează…' : WAITLIST_JOIN_CTA}
+            label={waitlistBusy ? tr('book.saving') : waitlistJoinCta()}
             variant="secondary"
             icon="notifications-outline"
             loading={waitlistBusy}
             onPress={() => void handleWaitlist()}
           />
         ) : null}
-        <Button label="Alege altă dată" variant="secondary" onPress={() => setStep('date')} />
+        <Button label={tr('book.pickOtherDate')} variant="secondary" onPress={() => setStep('date')} />
       </>
     ) : (
       <>
         {error ? <Callout tone="danger">{error}</Callout> : null}
         <Button
-          label={step === 'slot' ? 'Continuă la confirmare' : 'Continuă'}
+          label={step === 'slot' ? tr('book.continueConfirm') : tr('book.continue')}
           icon="arrow-forward"
           onPress={goNext}
           disabled={!canAdvance}
@@ -698,8 +700,8 @@ export default function BookScreen() {
 
   return (
     <Screen
-      title={isReschedule ? 'Reprogramare' : business.name}
-      subtitle={`${STEP_LABELS[step]} · pasul ${stepIndex + 1}/${steps.length}`}
+      title={isReschedule ? tr('book.rescheduleTitle') : business.name}
+      subtitle={tr('book.stepOf', { label: tr(STEP_LABELS[step]), i: stepIndex + 1, n: steps.length })}
       onBack={goPrev}
       footer={footer}
     >
@@ -772,7 +774,7 @@ export default function BookScreen() {
                 }}
                 numberOfLines={1}
               >
-                {i + 1}. {STEP_LABELS[s]}
+                {i + 1}. {tr(STEP_LABELS[s])}
               </Text>
             </Pressable>
           );
@@ -780,18 +782,18 @@ export default function BookScreen() {
       </View>
 
       {bookAsClientHint && !isReschedule ? (
-        <Callout tone="accent" title="Rezervă ca client">
-          Ai un cont business, dar aici te programezi ca client la {business.name}.
+        <Callout tone="accent" title={tr('home.cardBookAsClient')}>
+          {tr('book.asClientDesc', { name: business.name })}
         </Callout>
       ) : null}
 
       {existingAptId && !isReschedule && stepIndex === 0 ? (
         <>
-          <Callout tone="info" title="Ai deja o programare aici">
-            Poți muta ora existentă fără să creezi o cerere nouă.
+          <Callout tone="info" title={tr('book.hasBooking')}>
+            {tr('book.hasBookingDesc')}
           </Callout>
           <Button
-            label="Reprogramează"
+            label={tr('appt.reschedule')}
             variant="secondary"
             icon="calendar-outline"
             onPress={() =>
@@ -802,20 +804,20 @@ export default function BookScreen() {
       ) : null}
 
       {!isReschedule && (business.deposit_ron ?? 0) > 0 && step === 'confirm' ? (
-        <Callout tone="info" title="Avans">
-          La rezervare se cere un avans de {formatLei(business.deposit_ron)}.
+        <Callout tone="info" title={tr('book.deposit')}>
+          {tr('book.depositDesc', { amount: formatLei(business.deposit_ron) })}
         </Callout>
       ) : null}
 
       {(business.loyalty_every ?? 0) >= 2 && step === 'confirm' ? (
-        <Callout tone="accent" title="Loialitate">
-          A {business.loyalty_every}-a ședință confirmată e gratuită.
+        <Callout tone="accent" title={tr('book.loyalty')}>
+          {tr('book.loyaltyDesc', { n: business.loyalty_every ?? 0 })}
         </Callout>
       ) : null}
 
       {step === 'staff' ? (
         <>
-          <SectionTitle>Alege specialistul</SectionTitle>
+          <SectionTitle>{tr('book.pickStaff')}</SectionTitle>
           <View style={styles.staffGrid}>
             {staffList.map((s) => {
               const on = s.id === staffId;
@@ -829,7 +831,7 @@ export default function BookScreen() {
                   style={({ pressed }) => [styles.staffCell, { opacity: pressed ? 0.85 : 1 }]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
-                  accessibilityLabel={`Specialist ${s.name}`}
+                  accessibilityLabel={tr('book.staffA11y', { name: s.name })}
                 >
                   <StaffBadge
                     name={s.name}
@@ -847,7 +849,7 @@ export default function BookScreen() {
 
       {step === 'service' ? (
         <>
-          <SectionTitle>Alege serviciul</SectionTitle>
+          <SectionTitle>{tr('book.pickServiceTitle')}</SectionTitle>
           <View style={styles.serviceList}>
             {services.map((s) => {
               const on = s.id === serviceId;
@@ -900,9 +902,9 @@ export default function BookScreen() {
 
       {step === 'date' ? (
         <>
-          <SectionTitle>Alege data</SectionTitle>
+          <SectionTitle>{tr('pick.dateTitle')}</SectionTitle>
           <DatePickerField
-            label="Data programării"
+            label={tr('book.dateLabel')}
             value={dateLocal}
             onChange={(ymd) => {
               setDateLocal(ymd);
@@ -913,8 +915,10 @@ export default function BookScreen() {
           />
           {selectedStaff ? (
             <Text style={[styles.note, { color: t.colors.textMuted }]}>
-              Specialist: {selectedStaff.name}
-              {selectedService ? ` · ${selectedService.name}` : ''}
+              {tr('book.staffLine', {
+                staff: selectedStaff.name,
+                service: selectedService ? ` · ${selectedService.name}` : '',
+              })}
             </Text>
           ) : null}
         </>
@@ -922,7 +926,7 @@ export default function BookScreen() {
 
       {step === 'slot' ? (
         <>
-          <SectionTitle>Alege ora</SectionTitle>
+          <SectionTitle>{tr('book.pickTime')}</SectionTitle>
           <View
             style={[
               styles.timeLocked,
@@ -932,7 +936,7 @@ export default function BookScreen() {
             <View style={styles.timeLockedLeft}>
               <Ionicons name="time-outline" size={16} color={t.colors.textMuted} />
               <Text style={[styles.timeLockedLabel, { color: t.colors.textMuted }]}>
-                Ora aleasă
+                {tr('book.chosenTime')}
               </Text>
             </View>
             <Text
@@ -943,7 +947,7 @@ export default function BookScreen() {
             >
               {selected ? selected.labelLocal : '—'}
             </Text>
-            <Badge tone="accent">{slots.length} libere</Badge>
+            <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
           </View>
           {slotsLoading ? (
             <View style={styles.slotsLoading}>
@@ -956,8 +960,11 @@ export default function BookScreen() {
               onSelect={setSelected}
               emptyLabel={
                 (business.blocked_dates ?? []).includes(dateLocal)
-                  ? 'Această zi este blocată (concediu / sărbătoare).'
-                  : `Nu există sloturi libere pe ${dateLocal}. Alege altă dată (preaviz minim ${Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60))}h).`
+                  ? tr('book.dayBlocked')
+                  : tr('book.noSlots', {
+                      date: dateLocal,
+                      h: Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60)),
+                    })
               }
             />
           )}
@@ -966,29 +973,29 @@ export default function BookScreen() {
 
       {step === 'confirm' ? (
         <>
-          <SectionTitle>Confirmă rezervarea</SectionTitle>
+          <SectionTitle>{tr('book.confirmTitle')}</SectionTitle>
           <View
             style={[
               styles.confirmCard,
               { backgroundColor: t.colors.surface, borderColor: t.colors.border },
             ]}
           >
-            <ConfirmLine label="Salon" value={business.name} />
-            {selectedStaff ? <ConfirmLine label="Specialist" value={selectedStaff.name} /> : null}
+            <ConfirmLine label={tr('book.salon')} value={business.name} />
+            {selectedStaff ? <ConfirmLine label={tr('book.stepStaff')} value={selectedStaff.name} /> : null}
             {selectedService ? (
               <ConfirmLine
-                label="Serviciu"
+                label={tr('book.stepService')}
                 value={`${selectedService.name} · ${formatDuration(selectedService.duration_minutes)} · ${formatRon(selectedService.price)}`}
               />
             ) : (
-              <ConfirmLine label="Durată" value={`${durationMinutes} min`} />
+              <ConfirmLine label={tr('book.duration')} value={`${durationMinutes} min`} />
             )}
-            <ConfirmLine label="Data" value={dateLocal} />
-            <ConfirmLine label="Ora" value={selected?.labelLocal ?? '—'} />
+            <ConfirmLine label={tr('book.date')} value={dateLocal} />
+            <ConfirmLine label={tr('book.time')} value={selected?.labelLocal ?? '—'} />
             {!isReschedule ? (
               <ConfirmLine
-                label="Repetă"
-                value={repeatCount === 1 ? 'O singură dată' : `Săptămânal × ${repeatCount}`}
+                label={tr('book.repeat')}
+                value={repeatCount === 1 ? tr('book.once') : tr('book.weekly', { n: repeatCount })}
               />
             ) : null}
           </View>
@@ -997,18 +1004,16 @@ export default function BookScreen() {
               value={String(repeatCount)}
               onChange={(v) => setRepeatCount(clampRepeatCount(Number(v)))}
               options={[
-                { value: '1', label: 'O dată' },
-                { value: '2', label: '×2 săpt.' },
-                { value: '3', label: '×3 săpt.' },
-                { value: '4', label: '×4 săpt.' },
+                { value: '1', label: tr('book.onceShort') },
+                { value: '2', label: tr('book.times2') },
+                { value: '3', label: tr('book.times3') },
+                { value: '4', label: tr('book.times4') },
               ]}
             />
           ) : null}
           <LocationCard location={locationFromBusiness(business)} />
           <Text style={[styles.note, { color: t.colors.textFaint }]}>
-            {isReschedule
-              ? 'Alege un slot nou. Statusul programării rămâne neschimbat.'
-              : 'După trimitere, cererea apare ca „în așteptare” până la confirmare (sau e aprobată automat).'}
+            {isReschedule ? tr('book.reschedNote') : tr('book.submitNote')}
           </Text>
         </>
       ) : null}
@@ -1042,6 +1047,7 @@ function SalonProfileHeader({
   onToggleFavorite: () => void;
 }) {
   const t = useTheme();
+  const tr = useT();
   const [imgFailed, setImgFailed] = useState(false);
   const showLogo = Boolean(business.logo_url) && !imgFailed;
 
@@ -1076,11 +1082,11 @@ function SalonProfileHeader({
           {rating && rating.count > 0 && rating.avg != null ? (
             <Text style={[styles.profileRating, { color: t.colors.accentSoftText }]}>
               ★ {rating.avg.toFixed(1)} · {rating.count}{' '}
-              {rating.count === 1 ? 'recenzie' : 'recenzii'}
+              {rating.count === 1 ? tr('book.reviewOne') : tr('book.reviewMany')}
             </Text>
           ) : (
             <Text style={[styles.profileRating, { color: t.colors.accentSoftText }]}>
-              Fără recenzii încă
+              {tr('book.noReviews')}
             </Text>
           )}
         </View>
@@ -1088,7 +1094,7 @@ function SalonProfileHeader({
           onPress={onToggleFavorite}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={favorited ? 'Scoate din favorite' : 'Adaugă la favorite'}
+          accessibilityLabel={favorited ? tr('fav.remove') : tr('fav.add')}
           style={styles.heartBtn}
         >
           <Ionicons

@@ -1,12 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ro">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Termeni și Condiții - Programări Online</title>
-<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}h1{font-size:28px}h2{font-size:20px;margin-top:32px}</style>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}h1{font-size:28px}h2{font-size:20px;margin-top:32px}.langswitch{margin:8px 0 0}.langswitch a{margin-right:12px}</style>
 </head>
 <body>
+<p class="langswitch"><a href="?lang=ro">Română</a><a href="?lang=en">English</a></p>
+<div data-lang="ro">
 <h1>Termeni și Condiții</h1>
 <p><strong>Ultima actualizare:</strong> 19 septembrie 2026</p>
 <p>Prin crearea contului (email sau telefon/WhatsApp) ești de acord cu acești termeni. Serviciul permite gestionarea programărilor pentru clienți și business-uri.</p>
@@ -15,5 +17,36 @@
 <h2>Contact</h2>
 <p>contact@programari.expo.app</p>
 <p><a href="/privacy.html">Politica de confidențialitate</a></p>
+</div>
+<div data-lang="en" hidden>
+<h1>Terms and Conditions</h1>
+<p><strong>Last updated:</strong> September 19, 2026</p>
+<p>By creating an account (email or phone/WhatsApp) you agree to these terms. The service allows managing bookings for clients and businesses.</p>
+<h2>WhatsApp OTP usage</h2>
+<p>By ticking opt-in you agree to receive a WhatsApp message with the verification code. Messages are transactional, not marketing.</p>
+<h2>Contact</h2>
+<p>contact@programari.expo.app</p>
+<p><a href="/privacy.html">Privacy Policy</a></p>
+</div>
+<script>
+(function () {
+  function pickLang() {
+    try {
+      var q = new URLSearchParams(location.search).get('lang');
+      if (q === 'ro' || q === 'en') return q;
+      var saved = localStorage.getItem('programari.language');
+      if (saved === 'ro' || saved === 'en') return saved;
+    } catch (e) {}
+    return (navigator.language || 'ro').toLowerCase().indexOf('en') === 0 ? 'en' : 'ro';
+  }
+  var lang = pickLang();
+  document.documentElement.lang = lang;
+  document.title = lang === 'en' ? 'Terms and Conditions - Programări Online' : 'Termeni și Condiții - Programări Online';
+  var blocks = document.querySelectorAll('[data-lang]');
+  for (var i = 0; i < blocks.length; i++) {
+    blocks[i].hidden = blocks[i].getAttribute('data-lang') !== lang;
+  }
+})();
+</script>
 </body>
 </html>

@@ -5,6 +5,8 @@ import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { radius } from '@/constants/theme';
+import { getLanguageSync, type AppLanguage } from '@/lib/language';
+import { trKey, useLanguage } from '@/lib/i18n';
 
 type Props = {
   latitude: number | null;
@@ -48,8 +50,48 @@ export const GOOGLE_MAPS_KEY_GUIDE = `1) Deschide Google Cloud Console → APIs 
 7) Rebuild APK (cheia nativă nu intră mereu prin OTA). Pe web/Expo Go nu e nevoie de rebuild.
 Consolă: https://console.cloud.google.com/google/maps-apis/start`;
 
+/** EN version of the key guide (shown when the app language is English). */
+export const GOOGLE_MAPS_KEY_GUIDE_EN = `1) Open Google Cloud Console → APIs & Services → Credentials
+2) Create credentials → API key
+3) Enable: Maps SDK for Android, Maps SDK for iOS, Maps JavaScript API + Geocoding API. Also check Billing (without billing the JS map shows an error overlay).
+4) If the map shows an error overlay + details in the JS console: in DevTools → Console you see the Google code (ApiNotActivatedMapError, RefererNotAllowedMapError, InvalidKeyMapError, BillingNotEnabledMapError). Enable the missing API, add the referrer or enable billing.
+5) Key restrictions: Android apps = com.programari.app + SHA-1 from EAS; Web: the key used in WebView/iframe (origin null or about:blank) is blocked by Website restrictions — use a separate key WITHOUT Website restrictions (only with API restrictions: Maps JavaScript API) or leave Application restrictions = None for the JS key.
+6) Put the key in apps/mobile/.env as EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=...
+   and in app.json (ios.config.googleMapsApiKey + android.config.googleMaps.apiKey + extra.googleMapsApiKey)
+7) Rebuild the APK (the native key does not always come through OTA). On web/Expo Go no rebuild is needed.
+Console: https://console.cloud.google.com/google/maps-apis/start`;
+
+const GOOGLE_HTML_STRINGS: Record<AppLanguage, { hint: string; authFailure: string; loadError: string; markerTitle: string; noKey: string; missingTitle: string; fallbackHint: string; guide: string }> = {
+  ro: {
+    hint: 'Apasă pe harta Google ca să pui pinul. Trage pinul ca să-l muți.',
+    authFailure: 'Google Maps a respins cheia (verifică consola JS: RefererNotAllowed / ApiNotActivated / BillingNotEnabled). Vezi ghidul cheii din ecranul Configurare.',
+    loadError: 'Nu s-a putut încărca Google Maps (rețea sau restricții pe cheie). Verifică consola JS.',
+    markerTitle: 'Afacerea ta',
+    noKey: 'Lipsește cheia Google Maps în config.',
+    missingTitle: 'Lipsește cheia Google Maps',
+    fallbackHint: 'Harta nativă Google nu a pornit — folosești tot Google Maps (JS). Pinul se salvează la fel.',
+    guide: GOOGLE_MAPS_KEY_GUIDE,
+  },
+  en: {
+    hint: 'Tap the Google map to drop the pin. Drag the pin to move it.',
+    authFailure: 'Google Maps rejected the key (check the JS console: RefererNotAllowed / ApiNotActivated / BillingNotEnabled). See the key guide in the Setup screen.',
+    loadError: 'Couldn’t load Google Maps (network or key restrictions). Check the JS console.',
+    markerTitle: 'Your business',
+    noKey: 'Google Maps key missing from config.',
+    missingTitle: 'Google Maps key missing',
+    fallbackHint: 'Native Google map did not start — you still use Google Maps (JS). The pin saves the same.',
+    guide: GOOGLE_MAPS_KEY_GUIDE_EN,
+  },
+};
+
 function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: string): string {
   const keyJson = JSON.stringify(apiKey);
+  const s = GOOGLE_HTML_STRINGS[getLanguageSync()];
+  const hintJson = JSON.stringify(s.hint);
+  const authFailureJson = JSON.stringify(s.authFailure);
+  const loadErrorJson = JSON.stringify(s.loadError);
+  const markerTitleJson = JSON.stringify(s.markerTitle);
+  const noKeyJson = JSON.stringify(s.noKey);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -71,7 +113,7 @@ function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: stri
   </style>
 </head>
 <body>
-  <div class="hint">Apasă pe harta Google ca să pui pinul. Trage pinul ca să-l muți.</div>
+  <div class="hint">${s.hint.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
   <div id="map"></div>
   <script>
     const API_KEY = ${keyJson};
@@ -101,12 +143,12 @@ function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: stri
     // doar în consola JS. Îl interceptăm ca să arătăm cauza probabilă.
     (window as any).initMap = initMap;
     (window as any).gm_authFailure = function () {
-      showErr('Google Maps a respins cheia (verifică consola JS: RefererNotAllowed / ApiNotActivated / BillingNotEnabled). Vezi ghidul cheii din ecranul Configurare.');
+      showErr(${authFailureJson});
       post({ type: 'authFailure' });
     };
     window.addEventListener('error', function (e) {
       if (e && e.message && e.message.indexOf('initMap is not a function') !== -1) {
-        showErr('Nu s-a putut încărca Google Maps (rețea sau restricții pe cheie). Verifică consola JS.');
+        showErr(${loadErrorJson});
       }
     });
 
@@ -126,7 +168,7 @@ function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: stri
           // google.maps.Marker e clasic (legacy) dar încă suportat când se cere
           // explicit librăria "marker" în bootstrap. Alternativa nouă ar fi
           // google.maps.marker.AdvancedMarkerElement (necesită mapId).
-          marker = new google.maps.Marker({ position: pos, map: map, draggable: true, title: 'Afacerea ta' });
+          marker = new google.maps.Marker({ position: pos, map: map, draggable: true, title: ${markerTitleJson} });
           marker.addListener('dragend', function () {
             var p = marker.getPosition();
             post({ type: 'pin', latitude: p.lat(), longitude: p.lng() });
@@ -143,7 +185,7 @@ function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: stri
     }
 
     if (!API_KEY) {
-      showErr('Lipsește cheia Google Maps în config.');
+      showErr(${noKeyJson});
     } else {
       // Bootstrap modern Google Maps JS: callback + loading=async + v=weekly.
       // Fără callback, eșecul de autentificare lasă doar overlay-ul generic
@@ -153,7 +195,7 @@ function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: stri
         + '&callback=initMap&loading=async&v=weekly&libraries=marker';
       s.async = true;
       s.defer = true;
-      s.onerror = function () { showErr('Nu s-a putut încărca Google Maps (rețea sau restricții pe cheie). Verifică consola JS.'); };
+      s.onerror = function () { showErr(${loadErrorJson}); };
       document.head.appendChild(s);
     }
   </script>
@@ -202,9 +244,11 @@ function WebGoogleMap({
     Number.isFinite(longitude);
   const lat = hasPin ? (latitude as number) : 44.4268;
   const lng = hasPin ? (longitude as number) : 26.1025;
+  const { lang } = useLanguage();
   const html = useMemo(
     () => buildGoogleHtml(lat, lng, hasPin, apiKey),
-    [apiKey, hasPin, Number(lat.toFixed(5)), Number(lng.toFixed(5))]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [apiKey, hasPin, Number(lat.toFixed(5)), Number(lng.toFixed(5)), lang]
   );
 
   useEffect(() => {
@@ -221,7 +265,7 @@ function WebGoogleMap({
     return (
       <View style={[styles.wrap, { height }]}>
         <iframe
-          title="Hartă Google locație business"
+          title={trKey('map.googleIframe')}
           srcDoc={html}
           style={{ border: 'none', width: '100%', height: '100%' }}
           allow="geolocation"
@@ -251,7 +295,7 @@ function WebGoogleMap({
 function NativeGoogleMap({
   latitude,
   longitude,
-  title = 'Afacerea ta',
+  title,
   onPick,
   onMarkerPress,
   height = 280,
@@ -305,8 +349,8 @@ function NativeGoogleMap({
               longitude: longitude as number,
             }}
             draggable
-            title={title}
-            description="Apasă pentru cartea de vizită · trage ca să muți"
+            title={title ?? trKey('map.yourBusiness')}
+            description={trKey('map.markerHint')}
             onPress={() => onMarkerPress?.()}
             onCalloutPress={() => onMarkerPress?.()}
             onDragEnd={(e) => {
@@ -358,13 +402,15 @@ function useExpoGo(): boolean {
  */
 export function GoogleMapPicker(props: Props) {
   const { latitude, longitude, onPick, height = 280 } = props;
+  const { lang } = useLanguage();
   const key = getMapsApiKey();
 
   if (!key) {
+    const s = GOOGLE_HTML_STRINGS[lang];
     return (
       <View style={[styles.wrap, { height: height ?? 280, padding: 14, justifyContent: 'center' }]}>
-        <Text style={styles.missingTitle}>Lipsește cheia Google Maps</Text>
-        <Text style={styles.fallbackHint}>{GOOGLE_MAPS_KEY_GUIDE}</Text>
+        <Text style={styles.missingTitle}>{s.missingTitle}</Text>
+        <Text style={styles.fallbackHint}>{s.guide}</Text>
       </View>
     );
   }
@@ -386,7 +432,7 @@ export function GoogleMapPicker(props: Props) {
         <View style={{ gap: 6 }}>
           <WebGoogleMap {...props} />
           <Text style={styles.fallbackHint}>
-            Harta nativă Google nu a pornit — folosești tot Google Maps (JS). Pinul se salvează la fel.
+            {GOOGLE_HTML_STRINGS[getLanguageSync()].fallbackHint}
           </Text>
         </View>
       }

@@ -3,7 +3,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router, usePathname, use
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import 'react-native-reanimated';
 import type { Session } from '@supabase/supabase-js';
@@ -20,7 +20,9 @@ import { consumePendingAuthRedirect } from '@/lib/auth-redirect';
 import { isAuthCallbackUrl, isAuthRedirectHeld } from '@/lib/auth';
 import { stashAuthCallbackUrl } from '@/lib/auth-link';
 import { getThemePreference } from '@/lib/themePreference';
+import { LanguageProvider, trKey } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
+import { getLanguage, subscribeLanguage } from '@/lib/language';
 import * as Linking from 'expo-linking';
 
 export { ErrorBoundary } from 'expo-router';
@@ -38,6 +40,8 @@ export default function RootLayout() {
   const [updatesReady, setUpdatesReady] = useState(__DEV__);
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const { isUpdatePending } = Updates.useUpdates();
+  const [, forceRender] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => subscribeLanguage(() => forceRender()), []);
 
   useEffect(() => {
     if (error) throw error;
@@ -45,6 +49,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     void getThemePreference();
+    void getLanguage();
   }, []);
 
   useEffect(() => {
@@ -94,7 +99,7 @@ export default function RootLayout() {
             textAlign: 'center',
           }}
         >
-          Se descarcă ultima versiune…
+          {trKey('root.downloadingTitle')}
         </Text>
         <Text
           style={{
@@ -103,13 +108,17 @@ export default function RootLayout() {
             textAlign: 'center',
           }}
         >
-          Așteaptă puțin. Aplicația se reîncarcă singură după instalare.
+          {trKey('root.downloadingBody')}
         </Text>
       </View>
     );
   }
 
-  return <RootLayoutNav />;
+  return (
+    <LanguageProvider>
+      <RootLayoutNav />
+    </LanguageProvider>
+  );
 }
 
 function useSessionGuard() {

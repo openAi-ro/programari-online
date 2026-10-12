@@ -4,6 +4,7 @@ import { isRunningInExpoGo } from 'expo';
 import { router } from 'expo-router';
 
 import { ensureMyProfile } from './bookingRpc';
+import { trKey } from './i18n';
 import { setAppMode } from './appMode';
 import { supabase } from './supabase';
 
@@ -93,9 +94,8 @@ async function ensureHeadsUpChannel(
   }
 
   await Notifications.setNotificationChannelAsync(BOOKING_PUSH_CHANNEL_ID, {
-    name: 'Cereri programări (popup)',
-    description:
-      'Popup pe ecran când vine o cerere nouă. Activează „Pop on screen” / „Pe ecran” dacă e oprit.',
+    name: trKey('push.chanBooking'),
+    description: trKey('push.chanBookingDesc'),
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 120, 250],
     lightColor: '#7C3AED',
@@ -110,9 +110,8 @@ async function ensureHeadsUpChannel(
   // Canal de chat — importance MAX ca pop-urile de mesaje să apare și cu
   // aplicația închisă / pe ecranul de bloare.
   await Notifications.setNotificationChannelAsync(CHAT_PUSH_CHANNEL_ID, {
-    name: 'Mesaje (popup)',
-    description:
-      'Popup pe ecran când primești un mesaj nou în chat. Activează „Pop on screen” / „Pe ecran” dacă e oprit.',
+    name: trKey('push.chanChat'),
+    description: trKey('push.chanChatDesc'),
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 100, 80, 100],
     lightColor: '#0EA5E9',
@@ -125,7 +124,7 @@ async function ensureHeadsUpChannel(
   });
 
   await Notifications.setNotificationChannelAsync('default', {
-    name: 'General',
+    name: trKey('push.chanGeneral'),
     importance: Notifications.AndroidImportance.HIGH,
     sound: 'default',
     enableVibrate: true,
@@ -189,7 +188,7 @@ export async function presentLocalBookingNotification(opts: {
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: opts.title ?? 'Cerere nouă de programare',
+        title: opts.title ?? trKey('notif.newBookingTitle'),
         body: opts.body,
         sound: true,
         priority: Notifications.AndroidNotificationPriority.MAX,
@@ -246,7 +245,7 @@ export async function presentLocalChatNotification(opts: {
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: opts.title ?? 'Mesaj nou',
+        title: opts.title ?? trKey('notif.newMessage'),
         body: opts.body,
         sound: true,
         priority: Notifications.AndroidNotificationPriority.MAX,
@@ -310,8 +309,8 @@ export async function presentStatusBarTestNotification(): Promise<{
   const delaySec = 5;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Test Pop on screen',
-      body: 'Dacă vezi acest popup pe ecran (nu doar în app), canalul e OK.',
+      title: trKey('push.testTitle'),
+      body: trKey('push.testBody'),
       sound: true,
       priority: Notifications.AndroidNotificationPriority.MAX,
       vibrate: [0, 250, 120, 250],
@@ -345,11 +344,7 @@ export async function registerForPushAsync(userId: string): Promise<PushRegister
     return { token: null, reason: 'web_unsupported' };
   }
   if (isRunningInExpoGo()) {
-    return {
-      token: null,
-      reason:
-        'Expo Go (SDK 53+) nu suportă push remote pe Android. Folosește un development build / APK EAS.',
-    };
+    return { token: null, reason: 'expo_go_no_remote_push' };
   }
   const Device = await import('expo-device');
   if (!Device.isDevice) {
@@ -542,11 +537,7 @@ export function mapPushTokenError(raw: string): string {
     m.includes('fcm') ||
     m.includes('missing_instanceid_service')
   ) {
-    return (
-      'Lipsește configurarea Google/Firebase pe acest APK (google-services.json). ' +
-      'Trebuie un build nou după ce adaugi fișierul Firebase — actualizarea OTA nu ajunge. ' +
-      'Vezi Setări → Notificări push sau rulează scripts/setup-push-android.ps1.'
-    );
+    return trKey('push.fcmMissing');
   }
   if (m.includes('permission') || m.includes('denied')) {
     return 'permission_denied';

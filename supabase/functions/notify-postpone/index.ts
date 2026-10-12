@@ -11,18 +11,24 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { authorizeNotifyRequest } from '../_shared/auth-notify.ts';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messagePostpone, notifyClientChannels } from '../_shared/notify.ts';
+import {
+  messagePostpone,
+  notifyClientChannels,
+  notifyLocale,
+  parseNotifyLang,
+} from '../_shared/notify.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 type Payload = {
   appointment_id?: string;
   id?: string;
   hours?: number;
+  lang?: string;
 };
 
-function formatTimeLocal(iso: string, timezone: string): string {
+function formatTimeLocal(iso: string, timezone: string, lang: 'ro' | 'en'): string {
   try {
-    return new Intl.DateTimeFormat('ro-RO', {
+    return new Intl.DateTimeFormat(notifyLocale(lang), {
       timeZone: timezone,
       dateStyle: 'medium',
       timeStyle: 'short',
@@ -119,8 +125,18 @@ Deno.serve(async (req) => {
 
   const businessName = business?.name ?? 'business';
   const timezone = business?.timezone ?? 'Europe/Bucharest';
-  const newTimeLocal = formatTimeLocal(newStart, timezone);
-  const copy = messagePostpone(businessName, hours, newTimeLocal, timezone);
+  let clientLang: string | undefined;
+  if ((live as { client_user_id?: string | null }).client_user_id) {
+    const { data: clientProfile } = await admin
+      .from('profiles')
+      .select('language')
+      .eq('id', (live as { client_user_id: string }).client_user_id)
+      .maybeSingle();
+    clientLang = (clientProfile as { language?: string } | null)?.language;
+  }
+  const lang = parseNotifyLang(clientLang ?? payload.lang);
+  const newTimeLocal = formatTimeLocal(newStart, timezone, lang);
+  const copy = messagePostpone(businessName, hours, newTimeLocal, timezone, lang);
 
   const results = await notifyClientChannels({
     email: live.client_email,

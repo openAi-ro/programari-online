@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
 import { LoadingScreen } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
 export default function Index() {
+  const tr = useT();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export default function Index() {
   }, []);
 
   if (session === undefined) {
-    return <LoadingScreen label="Se încarcă…" />;
+    return <LoadingScreen label={tr('common.loading')} />;
   }
 
   if (!session) {

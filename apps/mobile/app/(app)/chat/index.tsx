@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Callout, EmptyState, ListLoadingScreen, Screen, useTheme } from '@/components/ui';
 import { spacing } from '@/constants/theme';
 import { fetchLatestMessages, listConversations } from '@/lib/chatRpc';
+import { useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { ChatConversation, ChatMessage } from '@/lib/types';
@@ -11,6 +12,7 @@ import type { ChatConversation, ChatMessage } from '@/lib/types';
 export default function ClientChatListScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const router = useRouter();
   const [rows, setRows] = useState<ChatConversation[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -37,14 +39,14 @@ export default function ClientChatListScreen() {
   }, []);
   useFocusEffect(useCallback(() => { setLoading(true); void load(); }, [load]));
   if (loading && rows.length === 0) {
-    return <ListLoadingScreen title='Mesaje' subtitle='Chat cu business-urile' onBack={back} label='Se încarcă conversațiile…' />;
+    return <ListLoadingScreen title={tr('chat.title')} subtitle={tr('chat.subtitle')} onBack={back} label={tr('chat.loading')} />;
   }
   return (
-    <Screen title='Mesaje' subtitle='Chat cu business-urile' onBack={back}>
+    <Screen title={tr('chat.title')} subtitle={tr('chat.subtitle')} onBack={back}>
       {error ? (
-        <Callout tone='danger' title='A apărut o eroare'>{error}</Callout>
+        <Callout tone='danger' title={tr('common.errorTitle')}>{error}</Callout>
       ) : rows.length === 0 ? (
-        <EmptyState icon='chatbubbles-outline' title='Nicio conversație' description='Conversația apare după prima programare.' />
+        <EmptyState icon='chatbubbles-outline' title={tr('chat.empty')} description={tr('chat.emptyDesc')} />
       ) : (
         <FlatList
           data={rows}
@@ -53,8 +55,8 @@ export default function ClientChatListScreen() {
           renderItem={({ item }) => (
             <Pressable onPress={() => router.push('/(app)/chat/' + item.id as never)} style={[styles.row, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
               <View style={styles.flex}>
-                <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>{names[item.business_id] ?? 'Business'}</Text>
-                <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id]?.body ?? 'Deschide conversatia'}</Text>
+                <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>{names[item.business_id] ?? tr('chat.business')}</Text>
+                <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id]?.body ?? tr('chat.openConvo')}</Text>
               </View>
             </Pressable>
           )}

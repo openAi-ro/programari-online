@@ -3,17 +3,18 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { SectionTitle, Toggle, useTheme } from '@/components/ui';
+import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import type { DayHours, DayKey, WorkingHours } from '@/lib/types';
 
-const DAY_LABELS: { key: DayKey; label: string }[] = [
-  { key: 'mon', label: 'Luni' },
-  { key: 'tue', label: 'Marți' },
-  { key: 'wed', label: 'Miercuri' },
-  { key: 'thu', label: 'Joi' },
-  { key: 'fri', label: 'Vineri' },
-  { key: 'sat', label: 'Sâmbătă' },
-  { key: 'sun', label: 'Duminică' },
+const DAY_LABELS: { key: DayKey; labelKey: TrKey }[] = [
+  { key: 'mon', labelKey: 'hours.mon' },
+  { key: 'tue', labelKey: 'hours.tue' },
+  { key: 'wed', labelKey: 'hours.wed' },
+  { key: 'thu', labelKey: 'hours.thu' },
+  { key: 'fri', labelKey: 'hours.fri' },
+  { key: 'sat', labelKey: 'hours.sat' },
+  { key: 'sun', labelKey: 'hours.sun' },
 ];
 
 type Props = {
@@ -111,6 +112,7 @@ function LabeledTimeBox({
 
 export function WorkingHoursForm({ value, onChange }: Props) {
   const t = useTheme();
+  const tr = useT();
 
   const defaultFromOpen = useMemo(() => {
     const open = DAY_LABELS.map(({ key }) => value[key]).find((d) => !d.closed);
@@ -158,7 +160,7 @@ export function WorkingHoursForm({ value, onChange }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <SectionTitle>Program de lucru</SectionTitle>
+      <SectionTitle>{tr('hours.title')}</SectionTitle>
 
       <View
         style={[
@@ -167,20 +169,20 @@ export function WorkingHoursForm({ value, onChange }: Props) {
         ]}
       >
         <Text style={[styles.configTitle, { color: t.colors.text }]}>
-          Ore de început și sfârșit
+          {tr('hours.rangeTitle')}
         </Text>
         <Text style={[styles.configHint, { color: t.colors.textMuted }]}>
-          Setează intervalul, apoi aplică-l pe toate zilele deschise. Poți ajusta apoi pe fiecare zi.
+          {tr('hours.rangeHint')}
         </Text>
         <View style={styles.configRow}>
           <LabeledTimeBox
-            label="Ora început"
+            label={tr('hours.startLabel')}
             value={bulkStart}
             onChangeText={setBulkStart}
             placeholder="09:00"
           />
           <LabeledTimeBox
-            label="Ora sfârșit"
+            label={tr('hours.endLabel')}
             value={bulkEnd}
             onChangeText={setBulkEnd}
             placeholder="17:00"
@@ -190,7 +192,7 @@ export function WorkingHoursForm({ value, onChange }: Props) {
           onPress={applyBulkHours}
           disabled={!bulkOk}
           accessibilityRole="button"
-          accessibilityLabel="Aplică orele pe zilele deschise"
+          accessibilityLabel={tr('hours.applyA11y')}
           style={({ pressed }) => [
             styles.applyBtn,
             {
@@ -211,12 +213,12 @@ export function WorkingHoursForm({ value, onChange }: Props) {
               { color: bulkOk ? t.colors.onAccent : t.colors.textFaint },
             ]}
           >
-            Aplică pe zilele deschise
+            {tr('hours.apply')}
           </Text>
         </Pressable>
         {!bulkOk ? (
           <Text style={[styles.configError, { color: t.colors.danger }]}>
-            Folosește format HH:MM (ex. 09:00–17:00), cu început înainte de sfârșit.
+            {tr('hours.formatError')}
           </Text>
         ) : null}
       </View>
@@ -227,7 +229,8 @@ export function WorkingHoursForm({ value, onChange }: Props) {
           { backgroundColor: t.colors.surface, borderColor: t.colors.border },
         ]}
       >
-        {DAY_LABELS.map(({ key, label }, index) => {
+        {DAY_LABELS.map(({ key, labelKey }, index) => {
+          const label = tr(labelKey);
           const day = value[key];
           return (
             <View
@@ -256,7 +259,7 @@ export function WorkingHoursForm({ value, onChange }: Props) {
                       { color: day.closed ? t.colors.textFaint : t.colors.textMuted },
                     ]}
                   >
-                    {day.closed ? 'Închis' : 'Deschis'}
+                    {day.closed ? tr('hours.closed') : tr('hours.open')}
                   </Text>
                 </View>
               </View>
@@ -264,26 +267,26 @@ export function WorkingHoursForm({ value, onChange }: Props) {
               {!day.closed ? (
                 <View style={styles.times}>
                   <View style={styles.timeCol}>
-                    <Text style={[styles.miniLabel, { color: t.colors.textFaint }]}>Început</Text>
+                    <Text style={[styles.miniLabel, { color: t.colors.textFaint }]}>{tr('hours.startMini')}</Text>
                     <TimeChip
                       value={day.start}
                       onChangeText={(start) =>
                         updateDay(key, { closed: false, start, end: day.end })
                       }
                       placeholder="09:00"
-                      accessibilityLabel={`Ora început ${label}`}
+                      accessibilityLabel={tr('hours.startA11y', { day: label })}
                     />
                   </View>
                   <Text style={[styles.dash, { color: t.colors.textFaint }]}>–</Text>
                   <View style={styles.timeCol}>
-                    <Text style={[styles.miniLabel, { color: t.colors.textFaint }]}>Sfârșit</Text>
+                    <Text style={[styles.miniLabel, { color: t.colors.textFaint }]}>{tr('hours.endMini')}</Text>
                     <TimeChip
                       value={day.end}
                       onChangeText={(end) =>
                         updateDay(key, { closed: false, start: day.start, end })
                       }
                       placeholder="17:00"
-                      accessibilityLabel={`Ora sfârșit ${label}`}
+                      accessibilityLabel={tr('hours.endA11y', { day: label })}
                     />
                   </View>
                 </View>
@@ -294,7 +297,7 @@ export function WorkingHoursForm({ value, onChange }: Props) {
               <Toggle
                 value={!day.closed}
                 onValueChange={() => toggleClosed(key)}
-                accessibilityLabel={`Deschide sau închide ${label}`}
+                accessibilityLabel={tr('hours.toggleA11y', { day: label })}
               />
             </View>
           );
@@ -325,8 +328,8 @@ export function WorkingHoursForm({ value, onChange }: Props) {
         <Ionicons name="flash-outline" size={14} color={t.colors.accent} />
         <Text style={[styles.quickActionText, { color: t.colors.accent }]}>
           {DAY_LABELS.some(({ key }) => !value[key].closed)
-            ? 'Închide toate zilele'
-            : 'Deschide toate zilele'}
+            ? tr('hours.closeAll')
+            : tr('hours.openAll')}
         </Text>
       </Pressable>
     </View>

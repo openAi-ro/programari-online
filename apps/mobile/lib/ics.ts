@@ -1,6 +1,8 @@
 import { Platform, Share } from 'react-native';
 import * as Linking from 'expo-linking';
 
+import { trKey } from './i18n';
+
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -90,7 +92,7 @@ export async function addAppointmentToCalendar(opts: {
 
   try {
     await Share.share({
-      message: `${opts.title}\nAdaugă în calendar:\n${gcal}`,
+      message: `${opts.title}\n${trKey('appt.addToCalendar')}:\n${gcal}`,
       url: gcal,
       title: opts.title,
     });

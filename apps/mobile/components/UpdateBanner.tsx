@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { Banner } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import {
   forceHardRefreshAndUpdate,
   shouldShowUpdateBanner,
@@ -11,6 +12,7 @@ import {
  * forțează hard refresh / EAS reload.
  */
 export function UpdateBanner() {
+  const tr = useT();
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -46,9 +48,9 @@ export function UpdateBanner() {
     <Banner
       tone="info"
       icon="cloud-download-outline"
-      title="Actualizare disponibilă"
-      description="O versiune nouă a aplicației este gata. Atinge pentru a actualiza acum."
-      actionLabel={busy ? 'Se actualizează…' : 'Actualizează acum'}
+      title={tr('update.available')}
+      description={tr('update.description')}
+      actionLabel={busy ? tr('update.updating') : tr('update.updateNow')}
       onPress={onPress}
     />
   );

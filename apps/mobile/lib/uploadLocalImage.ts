@@ -1,5 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { trKey } from './i18n';
+
 /** Decode base64 → ArrayBuffer (fără dependințe extra). */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   // React Native are atob global (Hermes / Expo).
@@ -29,7 +31,7 @@ export async function readLocalImageBytes(localUri: string): Promise<LocalImageB
 
   const cacheRoot = FileSystem.cacheDirectory;
   if (!cacheRoot) {
-    throw new Error('Cache-ul local nu e disponibil pe acest dispozitiv.');
+    throw new Error(trKey('media.cacheUnavailable'));
   }
 
   const dest = `${cacheRoot}upload-${Date.now()}.${ext}`;
@@ -43,14 +45,14 @@ export async function readLocalImageBytes(localUri: string): Promise<LocalImageB
       });
       const buffer = base64ToArrayBuffer(base64Direct);
       if (buffer.byteLength < 100) {
-        throw new Error('Poza e goală sau inaccesibilă. Alege din nou din galerie.');
+        throw new Error(trKey('media.imageEmpty'));
       }
       return { buffer, contentType, ext };
     } catch (e) {
       throw new Error(
         e instanceof Error
           ? e.message
-          : 'Nu am putut citi poza de pe telefon. Verifică permisiunea la galerie.'
+          : trKey('media.imageUnreadable')
       );
     }
   }
@@ -61,7 +63,7 @@ export async function readLocalImageBytes(localUri: string): Promise<LocalImageB
     });
     const buffer = base64ToArrayBuffer(base64);
     if (buffer.byteLength < 100) {
-      throw new Error('Poza citită e goală. Încearcă altă imagine sau camera.');
+      throw new Error(trKey('media.imageEmptyRead'));
     }
     return { buffer, contentType, ext };
   } finally {

@@ -1,3 +1,4 @@
+import { getLanguageSync } from './language';
 import { supabase } from './supabase';
 import type { Appointment } from './types';
 
@@ -12,7 +13,7 @@ export async function invokeDecisionNotify(
   appointmentId: string
 ): Promise<InvokeResult> {
   const { data, error } = await supabase.functions.invoke('notify-decision', {
-    body: { appointment_id: appointmentId },
+    body: { appointment_id: appointmentId, lang: getLanguageSync() },
   });
 
   if (error) {
@@ -29,7 +30,7 @@ export async function invokePostpone(
   hours: number
 ): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-postpone', {
-    body: { appointment_id: appointmentId, hours },
+    body: { appointment_id: appointmentId, hours, lang: getLanguageSync() },
   });
 
   if (error) {
@@ -60,7 +61,7 @@ export async function invokeTestWhatsApp(): Promise<
   InvokeResult<{ phone?: string; result?: { stub?: boolean }; hint?: string }>
 > {
   const { data, error } = await supabase.functions.invoke('test-whatsapp', {
-    body: {},
+    body: { lang: getLanguageSync() },
   });
 
   if (error) {
@@ -128,6 +129,7 @@ export async function invokePendingPush(
       client_phone: appointment.client_phone,
       start_at: appointment.start_at,
       reason: opts?.reason ?? null,
+      lang: getLanguageSync(),
     },
   });
 
@@ -144,7 +146,7 @@ export async function invokeMoved(
   appointmentId: string
 ): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-moved', {
-    body: { appointment_id: appointmentId },
+    body: { appointment_id: appointmentId, lang: getLanguageSync() },
   });
 
   if (error) {
@@ -193,7 +195,7 @@ export async function invokeWaitlistNotify(opts: {
   booking_url: string;
 }): Promise<InvokeResult> {
   const { data, error } = await supabase.functions.invoke('notify-waitlist', {
-    body: opts,
+    body: { ...opts, lang: getLanguageSync() },
   });
   if (error) {
     console.warn('notify-waitlist invoke failed', error.message);

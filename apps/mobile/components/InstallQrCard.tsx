@@ -4,6 +4,7 @@ import QRCode from 'react-native-qrcode-svg';
 import * as Clipboard from 'expo-clipboard';
 
 import { Button, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import {
   getAndroidInstallUrl,
@@ -13,6 +14,7 @@ import {
 
 export function InstallQrCard() {
   const t = useTheme();
+  const tr = useT();
   const androidUrl = getAndroidInstallUrl();
   const iosUrl = getIosInstallUrl();
   const androidDirect = isDirectFileUrl(androidUrl);
@@ -41,11 +43,9 @@ export function InstallQrCard() {
           t.shadows.md,
         ]}
       >
-        <Text style={[styles.title, { color: t.colors.text }]}>Descarcă aplicația Android</Text>
+        <Text style={[styles.title, { color: t.colors.text }]}>{tr('install.androidTitle')}</Text>
         <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-          {androidDirect
-            ? 'Scanează cu camera telefonului Android — se descarcă fișierul APK de instalare.'
-            : 'Scanează cu camera telefonului Android ca să descarci și să instalezi aplicația.'}
+          {androidDirect ? tr('install.androidApk') : tr('install.androidStore')}
         </Text>
         <View style={styles.qrInner}>
           <QRCode
@@ -55,11 +55,11 @@ export function InstallQrCard() {
             color={palette.ink950}
           />
         </View>
-        <Text style={[styles.caption, { color: t.colors.text }]}>Scanează pentru Android</Text>
+        <Text style={[styles.caption, { color: t.colors.text }]}>{tr('install.scanAndroid')}</Text>
         <View style={styles.actions}>
           <View style={styles.action}>
             <Button
-              label={androidDirect ? 'Descarcă APK' : 'Deschide link'}
+              label={androidDirect ? tr('install.downloadApk') : tr('install.openLink')}
               variant="secondary"
               size="md"
               icon="logo-android"
@@ -68,7 +68,7 @@ export function InstallQrCard() {
           </View>
           <View style={styles.action}>
             <Button
-              label={copiedAndroid ? 'Copiat' : 'Copiază'}
+              label={copiedAndroid ? tr('install.copied') : tr('install.copy')}
               variant="secondary"
               size="md"
               icon={copiedAndroid ? 'checkmark' : 'copy-outline'}
@@ -86,36 +86,35 @@ export function InstallQrCard() {
           t.shadows.md,
         ]}
       >
-        <Text style={[styles.title, { color: t.colors.text }]}>Descarcă aplicația iOS</Text>
+        <Text style={[styles.title, { color: t.colors.text }]}>{tr('install.iosTitle')}</Text>
         <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-          Pe iPhone: QR-ul deschide login-ul în Safari. Adaugă pe Home DE ACOLO (nu de pe pagina
-          de instalare), altfel apare iconița „P” și aplicația nu pornește.
+          {tr('install.iosHint')}
         </Text>
         <View style={styles.qrInner}>
           <QRCode value={iosUrl} size={168} backgroundColor={palette.white} color={palette.ink950} />
         </View>
-        <Text style={[styles.caption, { color: t.colors.text }]}>Scanează pentru iPhone</Text>
+        <Text style={[styles.caption, { color: t.colors.text }]}>{tr('install.scanIphone')}</Text>
 
         <View style={styles.steps}>
-          <Text style={[styles.stepsTitle, { color: t.colors.text }]}>Pași instalare iOS</Text>
+          <Text style={[styles.stepsTitle, { color: t.colors.text }]}>{tr('install.iosSteps')}</Text>
           <Text style={[styles.step, { color: t.colors.text }]}>
-            1. Deschide în Safari — trebuie să vezi ecranul de login Programări.
+            {tr('install.iosStep1')}
           </Text>
           <Text style={[styles.step, { color: t.colors.text }]}>
-            2. Partajează (pătrat cu săgeată în sus).
+            {tr('install.iosStep2')}
           </Text>
           <Text style={[styles.step, { color: t.colors.text }]}>
-            3. „Pe ecranul Home” / „Add to Home Screen” → Adaugă (nume: Programări).
+            {tr('install.iosStep3')}
           </Text>
           <Text style={[styles.step, { color: t.colors.text }]}>
-            4. Șterge iconița veche cu „P” dacă există. Deschide iconița nouă.
+            {tr('install.iosStep4')}
           </Text>
         </View>
 
         <View style={styles.actions}>
           <View style={styles.action}>
             <Button
-              label="Deschide login Safari"
+              label={tr('install.openSafariLogin')}
               variant="secondary"
               size="md"
               icon="logo-apple"
@@ -124,7 +123,7 @@ export function InstallQrCard() {
           </View>
           <View style={styles.action}>
             <Button
-              label={copiedIos ? 'Copiat' : 'Copiază'}
+              label={copiedIos ? tr('install.copied') : tr('install.copy')}
               variant="secondary"
               size="md"
               icon={copiedIos ? 'checkmark' : 'copy-outline'}

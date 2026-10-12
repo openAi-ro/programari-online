@@ -4,6 +4,18 @@
  */
 import { normalizePhoneE164, phoneForMetaApi } from './phone.ts';
 
+/** Recipient language for notification copy. Functions accept `lang` in the body (default 'ro'). */
+export type NotifyLang = 'ro' | 'en';
+
+export function parseNotifyLang(v: unknown): NotifyLang {
+  return v === 'en' ? 'en' : 'ro';
+}
+
+/** Intl locale tag for date/time labels inside notifications. */
+export function notifyLocale(lang: NotifyLang): string {
+  return lang === 'en' ? 'en-GB' : 'ro-RO';
+}
+
 export type SendResult = {
   ok: boolean;
   stub?: boolean;
@@ -59,14 +71,19 @@ export type SendWhatsAppOpts = {
   otpCode?: string;
 };
 
-/** Romanian hint from Meta/Twilio error payload — safe to show in the app. */
-export function whatsappUserHint(result: SendResult): string {
+/** User hint from Meta/Twilio error payload — safe to show in the app. */
+export function whatsappUserHint(result: SendResult, lang: NotifyLang = 'ro'): string {
   const e = `${result.error ?? ''}`.toLowerCase();
+  const en = lang === 'en';
   if (e.includes('invalid_phone')) {
-    return 'Folosește un număr valid (07xxxxxxxx sau +40...).';
+    return en
+      ? 'Use a valid number (07xxxxxxxx or +40...).'
+      : 'Folosește un număr valid (07xxxxxxxx sau +40...).';
   }
   if (e.includes('63015')) {
-    return 'Numărul nu e înscris în sandbox-ul Twilio. Deschide WhatsApp, scrie „join …” către numărul Twilio, apoi reîncearcă.';
+    return en
+      ? 'The number is not enrolled in the Twilio sandbox. Open WhatsApp, text “join …” to the Twilio number, then retry.'
+      : 'Numărul nu e înscris în sandbox-ul Twilio. Deschide WhatsApp, scrie „join …” către numărul Twilio, apoi reîncearcă.';
   }
   if (
     e.includes('63016') ||
@@ -74,17 +91,21 @@ export function whatsappUserHint(result: SendResult): string {
     e.includes('re-engagement') ||
     e.includes('outside the allowed window')
   ) {
-    return 'WhatsApp blochează mesajele libere. Adaugă un șablon OTP aprobat: WHATSAPP_OTP_TEMPLATE (Meta) sau TWILIO_WHATSAPP_CONTENT_SID (Twilio).';
+    return en
+      ? 'WhatsApp blocks free-form messages. Add an approved OTP template: WHATSAPP_OTP_TEMPLATE (Meta) or TWILIO_WHATSAPP_CONTENT_SID (Twilio).'
+      : 'WhatsApp blochează mesajele libere. Adaugă un șablon OTP aprobat: WHATSAPP_OTP_TEMPLATE (Meta) sau TWILIO_WHATSAPP_CONTENT_SID (Twilio).';
   }
   if (e.includes('133010') || e.includes('not a whatsapp user')) {
-    return 'Acest număr nu are WhatsApp activ.';
+    return en ? 'This number has no active WhatsApp.' : 'Acest număr nu are WhatsApp activ.';
   }
   if (
     e.includes('131037') ||
     e.includes('display name approval') ||
     e.includes('needs display name')
   ) {
-    return 'Nu am putut trimite codul: WhatsApp cere aprobarea numelui afișat al numărului de business. Approbă-l în WhatsApp Manager (Meta Business), apoi reîncearcă.';
+    return en
+      ? 'Could not send the code: WhatsApp requires display-name approval for the business number. Approve it in WhatsApp Manager (Meta Business), then retry.'
+      : 'Nu am putut trimite codul: WhatsApp cere aprobarea numelui afișat al numărului de business. Approbă-l în WhatsApp Manager (Meta Business), apoi reîncearcă.';
   }
   if (
     e.includes('"code":190') ||
@@ -92,15 +113,23 @@ export function whatsappUserHint(result: SendResult): string {
     (e.includes('oauth') && e.includes('expired')) ||
     e.includes('session has expired')
   ) {
-    return 'Token-ul WhatsApp a expirat. Reînnoiește WHATSAPP_ACCESS_TOKEN în secrets Supabase.';
+    return en
+      ? 'The WhatsApp token expired. Refresh WHATSAPP_ACCESS_TOKEN in the Supabase secrets.'
+      : 'Token-ul WhatsApp a expirat. Reînnoiește WHATSAPP_ACCESS_TOKEN în secrets Supabase.';
   }
   if (e.includes('132001') || e.includes('template name does not exist')) {
-    return 'Șablonul WhatsApp nu există sau nu e aprobat. Verifică WHATSAPP_OTP_TEMPLATE și limba.';
+    return en
+      ? 'The WhatsApp template does not exist or is not approved. Check WHATSAPP_OTP_TEMPLATE and the language.'
+      : 'Șablonul WhatsApp nu există sau nu e aprobat. Verifică WHATSAPP_OTP_TEMPLATE și limba.';
   }
   if (e.includes('21608') || e.includes('unverified')) {
-    return 'Numărul Twilio WhatsApp nu e verificat / aprobat pentru acest destinatar.';
+    return en
+      ? 'The Twilio WhatsApp number is not verified / approved for this recipient.'
+      : 'Numărul Twilio WhatsApp nu e verificat / aprobat pentru acest destinatar.';
   }
-  return 'Nu am putut trimite mesajul WhatsApp. Verifică secrets Meta/Twilio și încearcă din nou.';
+  return en
+    ? 'Could not send the WhatsApp message. Check the Meta/Twilio secrets and try again.'
+    : 'Nu am putut trimite mesajul WhatsApp. Verifică secrets Meta/Twilio și încearcă din nou.';
 }
 
 async function postMetaMessage(
@@ -335,8 +364,15 @@ export async function notifyClientChannels(opts: {
 export function messageNewPendingRequest(
   businessName: string,
   contact: string,
-  whenLabel?: string
+  whenLabel?: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  if (lang === 'en') {
+    const text = whenLabel
+      ? `New request at ${businessName} from ${contact} (${whenLabel}). Open Requests to reply.`
+      : `New request at ${businessName} from ${contact}. Open Requests to reply.`;
+    return { subject: 'New booking request', text };
+  }
   const text = whenLabel
     ? `Cerere nouă la ${businessName} de la ${contact} (${whenLabel}). Deschide Cereri pentru a răspunde.`
     : `Cerere nouă la ${businessName} de la ${contact}. Deschide Cereri pentru a răspunde.`;
@@ -347,27 +383,54 @@ export function messageNewPendingRequest(
 export function messageRescheduledRequest(
   businessName: string,
   contact: string,
-  whenLabel?: string
+  whenLabel?: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  if (lang === 'en') {
+    const text = whenLabel
+      ? `${contact} moved the booking at ${businessName} (${whenLabel}). Open the Calendar.`
+      : `${contact} moved the booking at ${businessName}. Open the Calendar.`;
+    return { subject: 'Booking moved', text };
+  }
   const text = whenLabel
     ? `${contact} a mutat programarea la ${businessName} (${whenLabel}). Deschide Calendarul.`
     : `${contact} a mutat programarea la ${businessName}. Deschide Calendarul.`;
   return { subject: 'Programare mutată', text };
 }
 
-/** Romanian copy helpers for decision + reminder. */
-export function messageApproved(businessName: string, whenLabel: string): {
+/** Copy helpers for decision + reminder. */
+export function messageApproved(
+  businessName: string,
+  whenLabel: string,
+  lang: NotifyLang = 'ro'
+): {
   subject: string;
   text: string;
 } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking confirmed',
+      text: `Your booking at ${businessName} on ${whenLabel} was confirmed.`,
+    };
+  }
   const text = `Programarea ta la ${businessName} pe ${whenLabel} a fost confirmată.`;
   return { subject: 'Programare confirmată', text };
 }
 
-export function messageRejected(businessName: string, whenLabel: string): {
+export function messageRejected(
+  businessName: string,
+  whenLabel: string,
+  lang: NotifyLang = 'ro'
+): {
   subject: string;
   text: string;
 } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking rejected',
+      text: `Your booking at ${businessName} on ${whenLabel} was rejected. The slot was released.`,
+    };
+  }
   const text = `Programarea ta la ${businessName} pe ${whenLabel} a fost respinsă. Slotul a fost eliberat.`;
   return { subject: 'Programare respinsă', text };
 }
@@ -375,8 +438,15 @@ export function messageRejected(businessName: string, whenLabel: string): {
 export function messageReminder(
   businessName: string,
   timeLocal: string,
-  timezone: string
+  timezone: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking reminder — 30 minutes',
+      text: `Hi! You have a booking at ${businessName} in 30 minutes (${timeLocal}, ${timezone}).`,
+    };
+  }
   const text = `Salut! Ai o programare la ${businessName} în 30 de minute (${timeLocal}, ${timezone}).`;
   return { subject: 'Reminder programare — 30 de minute', text };
 }
@@ -384,19 +454,36 @@ export function messageReminder(
 export function messageReminder24h(
   businessName: string,
   timeLocal: string,
-  timezone: string
+  timezone: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking reminder — 24 hours',
+      text: `Hi! You have a booking at ${businessName} tomorrow at ${timeLocal} (${timezone}). Confirm attendance from the app, under My bookings.`,
+    };
+  }
   const text = `Salut! Ai o programare la ${businessName} mâine la ${timeLocal} (${timezone}). Confirmă prezența din aplicație, la Programările mele.`;
   return { subject: 'Reminder programare — 24 de ore', text };
 }
 
 export function messagePostpone(
   businessName: string,
-  hours: 1 | 2,
+  hours: number,
   newTimeLocal: string,
-  timezone: string
+  timezone: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
-  const hoursLabel = hours === 1 ? '1 oră' : '2 ore';
+  const hoursLabel =
+    lang === 'en'
+      ? `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+      : `${hours} ${hours === 1 ? 'oră' : 'ore'}`;
+  if (lang === 'en') {
+    return {
+      subject: `Booking postponed by ${hoursLabel}`,
+      text: `The booking at ${businessName} is postponed by ${hoursLabel}. New time: ${newTimeLocal} (${timezone}).`,
+    };
+  }
   const text = `Programarea la ${businessName} se amână cu ${hoursLabel}. Noua oră: ${newTimeLocal} (${timezone}).`;
   return { subject: `Programare amânată cu ${hoursLabel}`, text };
 }
@@ -404,20 +491,42 @@ export function messagePostpone(
 export function messageMoved(
   businessName: string,
   newTimeLocal: string,
-  timezone: string
+  timezone: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking moved',
+      text: `Your booking at ${businessName} was moved. New time: ${newTimeLocal} (${timezone}).`,
+    };
+  }
   const text = `Programarea ta la ${businessName} a fost mutata. Noua ora: ${newTimeLocal} (${timezone}).`;
   return { subject: 'Programare mutata', text };
 }
 
-export function messageTest(): { subject: string; text: string } {
+export function messageTest(lang: NotifyLang = 'ro'): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Programari WhatsApp test',
+      text: 'Programari test: WhatsApp messages work. You will receive confirmations and reminders here.',
+    };
+  }
   const text =
     'Test Programari: mesajele WhatsApp funcționează. Vei primi confirmări și reminder-uri aici.';
   return { subject: 'Test WhatsApp Programari', text };
 }
 
-/** Romanian OTP for WhatsApp phone login. */
-export function messageAuthOtp(code: string): { subject: string; text: string } {
+/** OTP for WhatsApp phone login. */
+export function messageAuthOtp(code: string, lang: NotifyLang = 'ro'): {
+  subject: string;
+  text: string;
+} {
+  if (lang === 'en') {
+    return {
+      subject: 'Programari login code',
+      text: `Your Programari code: ${code}. Valid for 15 minutes.`,
+    };
+  }
   const text = `Codul tau Programari: ${code}. Valabil 15 minute.`;
   return { subject: 'Cod autentificare Programari', text };
 }
@@ -426,8 +535,15 @@ export function messageAuthOtp(code: string): { subject: string; text: string } 
 export function messageWaitlistSpot(
   businessName: string,
   dateLabel: string,
-  bookingUrl: string
+  bookingUrl: string,
+  lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Slot freed up — Programari',
+      text: `A slot freed up at ${businessName} on ${dateLabel}. Book now: ${bookingUrl}`,
+    };
+  }
   const text = `S-a eliberat un loc la ${businessName} pe ${dateLabel}. Rezervă acum: ${bookingUrl}`;
   return { subject: 'Loc eliberat — Programari', text };
 }

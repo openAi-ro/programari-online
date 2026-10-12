@@ -20,6 +20,7 @@ import {
   toggleFavorite,
 } from '@/lib/favorites';
 import { useBack } from '@/lib/nav';
+import { useT } from '@/lib/i18n';
 
 type FavBiz = {
   id: string;
@@ -30,6 +31,7 @@ type FavBiz = {
 };
 
 export default function FavoritesScreen() {
+  const tr = useT();
   const router = useRouter();
   const back = useBack();
   const insets = useSafeAreaInsets();
@@ -71,10 +73,10 @@ export default function FavoritesScreen() {
     return (
       <View style={{ flex: 1 }}>
         <ListLoadingScreen
-          title="Favorite"
-          subtitle="Saloane salvate"
+          title={tr('tabs.favorites')}
+          subtitle={tr('fav.saved')}
           onBack={back}
-          label="Se încarcă favoritele…"
+          label={tr('fav.loading')}
         />
         <ClientTabBar />
       </View>
@@ -84,19 +86,19 @@ export default function FavoritesScreen() {
   return (
     <View style={{ flex: 1 }}>
       <Screen
-        title="Favorite"
-        subtitle="Saloane salvate pentru rebook rapid"
+        title={tr('tabs.favorites')}
+        subtitle={tr('fav.savedSub')}
         onBack={back}
         bottomInset={insets.bottom + spacing['3xl'] + 56}
       >
         {rows.length === 0 ? (
           <EmptyState
             icon="heart-outline"
-            title="Niciun salon favorit"
-            description="Adaugă saloane din Acasă, Caută sau după o rezervare — apar aici și în cloud."
+            title={tr('fav.empty')}
+            description={tr('fav.emptyDesc')}
             action={
               <Button
-                label="Caută business"
+                label={tr('fav.searchBiz')}
                 icon="search-outline"
                 onPress={() => router.push('/(app)/browse' as never)}
               />
@@ -109,7 +111,7 @@ export default function FavoritesScreen() {
                 key={biz.id}
                 title={biz.name}
                 favorited
-                hint={[biz.city, biz.public_code ? `Cod ${biz.public_code}` : null]
+                hint={[biz.city, biz.public_code ? tr('fav.code', { code: biz.public_code }) : null]
                   .filter(Boolean)
                   .join(' · ')}
                 onPress={() =>

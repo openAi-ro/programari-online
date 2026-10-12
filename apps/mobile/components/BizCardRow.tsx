@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 
 /** Business row with optional favorite heart — avoids extending shared Card API. */
@@ -21,6 +22,7 @@ export function BizCardRow({
   heart?: boolean;
 }) {
   const t = useTheme();
+  const tr = useT();
   return (
     <Pressable
       onPress={onPress}
@@ -53,7 +55,7 @@ export function BizCardRow({
           onPress={() => onToggleFavorite()}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={favorited ? 'Scoate din favorite' : 'Adaugă la favorite'}
+          accessibilityLabel={favorited ? tr('fav.remove') : tr('fav.add')}
           style={styles.heartBtn}
         >
           <Ionicons

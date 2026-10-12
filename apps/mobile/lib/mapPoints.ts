@@ -1,4 +1,5 @@
 /** Puncte de hartă persistate local: pinul rămâne vizibil după restart. */
+import { trKey } from './i18n';
 
 export type MapPoint = {
   id: string;
@@ -70,10 +71,10 @@ export async function upsertPoint(
   input: MapPointInput & { id?: string }
 ): Promise<MapPoint> {
   if (!isValidCoords(input.latitude, input.longitude)) {
-    throw new Error('Coordonate invalide.');
+    throw new Error(trKey('map.badCoords'));
   }
   const title = input.title.trim();
-  if (!title) throw new Error('Titlul punctului e obligatoriu.');
+  if (!title) throw new Error(trKey('map.titleRequired'));
   const points = await loadPoints(storage);
   const stamp = nowIso();
   const byExternal = input.externalId

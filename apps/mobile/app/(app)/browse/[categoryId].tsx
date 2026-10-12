@@ -37,17 +37,18 @@ import {
 import {
   BROWSE_CATEGORIES,
   businessMatchesCategory,
+  categoryLabel,
   type BrowseCategory,
 } from '@/lib/browseCategories';
 import { useBack } from '@/lib/nav';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
 import {
   JUDETE,
   localitatiPentruJudet,
   normalizeRo,
 } from '@/lib/roGeo';
 
-const ALL_COUNTIES_LABEL = 'Toate județele';
-const ALL_LOCALITIES_LABEL = 'Toate localitățile';
+
 
 /**
  * Pagina dedicată unei categorii: listă + căutare + județ → localitate + aproape de mine.
@@ -55,6 +56,8 @@ const ALL_LOCALITIES_LABEL = 'Toate localitățile';
  */
 export default function CategoryResultsScreen() {
   const t = useTheme();
+  const tr = useT();
+  const { lang } = useLanguage();
   const back = useBack();
   const router = useRouter();
   const params = useLocalSearchParams<{ categoryId?: string | string[] }>();
@@ -104,13 +107,13 @@ export default function CategoryResultsScreen() {
   }, [rows, category]);
 
   // Nomenclator complet RO (toate județele), nu doar cele din business-urile încărcate.
-  const countyOptions = useMemo(() => [ALL_COUNTIES_LABEL, ...JUDETE], []);
+  const countyOptions = useMemo(() => [trKey('browse.allCounties'), ...JUDETE], [lang]);
   const localityOptions = useMemo(
     () =>
       selectedCounty
-        ? [ALL_LOCALITIES_LABEL, ...localitatiPentruJudet(selectedCounty)]
-        : [ALL_LOCALITIES_LABEL],
-    [selectedCounty]
+        ? [trKey('browse.allLocalities'), ...localitatiPentruJudet(selectedCounty)]
+        : [trKey('browse.allLocalities')],
+    [selectedCounty, lang]
   );
 
   const filtered = useMemo(() => {
@@ -148,13 +151,13 @@ export default function CategoryResultsScreen() {
   }, [load, q]);
 
   const onCountyChange = useCallback((next: string) => {
-    const county = next === ALL_COUNTIES_LABEL ? null : next;
+    const county = next === trKey('browse.allCounties') ? null : next;
     setSelectedCounty(county);
     setSelectedLocality(null);
   }, []);
 
   const onLocalityChange = useCallback((next: string) => {
-    setSelectedLocality(next === ALL_LOCALITIES_LABEL ? null : next);
+    setSelectedLocality(next === trKey('browse.allLocalities') ? null : next);
   }, []);
 
   const onNearMe = useCallback(async () => {
@@ -181,14 +184,14 @@ export default function CategoryResultsScreen() {
   if (!category) {
     return (
       <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-        <Screen title="Categorie" subtitle="Necunoscută" onBack={back}>
+        <Screen title={tr('cat.unknownTitle')} subtitle={tr('cat.unknownSub')} onBack={back}>
           <EmptyState
             icon="grid-outline"
-            title="Categorie invalidă"
-            description="Revino la Caută și alege o casetă din listă."
+            title={tr('cat.invalid')}
+            description={tr('cat.invalidDesc')}
             action={
               <Button
-                label="Înapoi la Caută"
+                label={tr('cat.backToSearch')}
                 icon="search-outline"
                 onPress={() => router.replace('/(app)/browse' as never)}
               />
@@ -203,35 +206,36 @@ export default function CategoryResultsScreen() {
   if (loading && rows.length === 0 && !error) {
     return (
       <ListLoadingScreen
-        title={category.label}
-        subtitle="Business-uri din această categorie"
+        title={categoryLabel(category)}
+        subtitle={tr('cat.inCategory')}
         onBack={back}
-        label="Se încarcă…"
+        label={tr('common.loading')}
       />
     );
   }
 
   const subtitle =
     nearMe && coords
-      ? `${filtered.length} business-uri · sortate după distanță`
-      : `${filtered.length} business-uri`;
+      ? tr('cat.countDist', { n: filtered.length })
+      : tr('cat.count', { n: filtered.length });
 
+  const catName = category ? categoryLabel(category) : '';
   const emptyDescription = (() => {
     if (selectedLocality && selectedCounty) {
-      return `Niciun business „${category.label}” în ${selectedLocality}, ${selectedCounty}.`;
+      return tr('cat.emptyInCity', { label: catName, city: selectedLocality, county: selectedCounty });
     }
     if (selectedCounty) {
-      return `Niciun business „${category.label}” în județul ${selectedCounty}.`;
+      return tr('cat.emptyInCounty', { label: catName, county: selectedCounty });
     }
     if (q.trim()) {
-      return `Niciun business „${category.label}” pentru „${q.trim()}”.`;
+      return tr('cat.emptyForQuery', { label: catName, q: q.trim() });
     }
-    return `Niciun business găsit pentru „${category.label}”.`;
+    return tr('cat.emptyGeneric', { label: catName });
   })();
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-      <Screen title={category.label} subtitle={subtitle} onBack={back} scroll={false}>
+      <Screen title={catName} subtitle={subtitle} onBack={back} scroll={false}>
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
@@ -240,53 +244,53 @@ export default function CategoryResultsScreen() {
           ListHeaderComponent={
             <View style={{ gap: spacing.md }}>
               <Field
-                label="Caută în categorie"
+                label={tr('cat.searchIn')}
                 icon="search-outline"
                 value={q}
                 onChangeText={setQ}
-                placeholder="Nume sau cod public"
+                placeholder={tr('cat.searchPlaceholder')}
                 autoCapitalize="none"
                 returnKeyType="search"
                 onSubmitEditing={onSearch}
               />
 
               <PickerField
-                label="Județ"
-                value={selectedCounty ?? ALL_COUNTIES_LABEL}
+                label={tr('browse.county')}
+                value={selectedCounty ?? trKey('browse.allCounties')}
                 options={countyOptions}
                 onChange={onCountyChange}
-                placeholder="Alege județul"
+                placeholder={tr('browse.pickCounty')}
                 icon="map-outline"
-                hint="Toate județele din România"
+                hint={tr('browse.allCountiesRo')}
               />
 
               <PickerField
-                label="Localitate"
-                value={selectedLocality ?? ALL_LOCALITIES_LABEL}
+                label={tr('browse.locality')}
+                value={selectedLocality ?? trKey('browse.allLocalities')}
                 options={localityOptions}
                 onChange={onLocalityChange}
                 placeholder={
-                  selectedCounty ? 'Alege localitatea' : 'Alege mai întâi județul'
+                  selectedCounty ? tr('browse.pickLocality') : tr('browse.pickCountyFirst')
                 }
                 icon="business-outline"
                 disabled={!selectedCounty}
                 hint={
                   selectedCounty
                     ? undefined
-                    : 'Lista localităților apare după ce alegi județul.'
+                    : tr('browse.localityHint')
                 }
               />
 
               <View style={styles.actions}>
                 <Button
-                  label="Caută"
+                  label={tr('tabs.search')}
                   icon="search-outline"
                   size="sm"
                   fullWidth={false}
                   onPress={onSearch}
                 />
                 <Button
-                  label="Aproape de mine"
+                  label={tr('browse.nearMe')}
                   icon="navigate-outline"
                   variant={nearMe ? 'primary' : 'secondary'}
                   size="sm"
@@ -295,7 +299,7 @@ export default function CategoryResultsScreen() {
                   onPress={() => void onNearMe()}
                 />
                 <Button
-                  label="Toate categoriile"
+                  label={tr('cat.allCategories')}
                   icon="grid-outline"
                   variant="secondary"
                   size="sm"
@@ -310,19 +314,19 @@ export default function CategoryResultsScreen() {
                 options={
                   nearMe && coords
                     ? [
-                        { value: 'distance', label: 'Distanță' },
-                        { value: 'rating', label: 'Rating' },
-                        { value: 'name', label: 'Nume' },
+                        { value: 'distance', label: tr('cat.sortDistance') },
+                        { value: 'rating', label: tr('cat.sortRating') },
+                        { value: 'name', label: tr('cat.sortName') },
                       ]
                     : [
-                        { value: 'rating', label: 'Rating' },
-                        { value: 'name', label: 'Nume' },
+                        { value: 'rating', label: tr('cat.sortRating') },
+                        { value: 'name', label: tr('cat.sortName') },
                       ]
                 }
               />
               <View style={styles.actions}>
                 <Button
-                  label="Deschis acum"
+                  label={tr('browse.openNow')}
                   icon="time-outline"
                   variant={openOnly ? 'primary' : 'secondary'}
                   size="sm"
@@ -332,13 +336,13 @@ export default function CategoryResultsScreen() {
               </View>
 
               {locError ? (
-                <Callout tone="warning" title="Locație indisponibilă">
+                <Callout tone="warning" title={tr('cat.locUnavailable')}>
                   {locError}
                 </Callout>
               ) : null}
               {error ? (
-                <Callout tone="warning" title="Listă parțială">
-                  {`Nu am putut încărca tot (${error}).`}
+                <Callout tone="warning" title={tr('browse.partialList')}>
+                  {tr('cat.partialDesc', { error: error ?? '' })}
                 </Callout>
               ) : null}
             </View>
@@ -346,12 +350,12 @@ export default function CategoryResultsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="storefront-outline"
-              title="Niciun rezultat"
+              title={tr('cat.noResults')}
               description={emptyDescription}
               action={
                 selectedCounty || selectedLocality || q.trim() ? (
                   <Button
-                    label="Șterge filtrele"
+                    label={tr('browse.clearFilters')}
                     icon="close-outline"
                     onPress={() => {
                       setSelectedCounty(null);
@@ -363,7 +367,7 @@ export default function CategoryResultsScreen() {
                   />
                 ) : (
                   <Button
-                    label="Înapoi la Caută"
+                    label={tr('cat.backToSearch')}
                     icon="search-outline"
                     onPress={() => router.replace('/(app)/browse' as never)}
                   />

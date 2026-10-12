@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 
 /**
@@ -12,6 +13,7 @@ import { fontSize, palette, radius, spacing } from '@/constants/theme';
  */
 export function PromoVideo({ videoUrl, title }: { videoUrl: string; title?: string }) {
   const t = useTheme();
+  const tr = useT();
   const [failed, setFailed] = useState(false);
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = false;
@@ -21,7 +23,7 @@ export function PromoVideo({ videoUrl, title }: { videoUrl: string; title?: stri
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Deschide video-ul de prezentare"
+        accessibilityLabel={tr('video.openPromo')}
         onPress={() => {
           if (videoUrl) void Linking.openURL(videoUrl);
         }}
@@ -36,7 +38,7 @@ export function PromoVideo({ videoUrl, title }: { videoUrl: string; title?: stri
       >
         <Ionicons name="play-circle-outline" size={28} color={t.colors.accent} />
         <Text style={[styles.fallbackText, { color: t.colors.text }]}>
-          {title ?? 'Vezi video-ul de prezentare'}
+          {title ?? tr('video.watchPromo')}
         </Text>
       </Pressable>
     );

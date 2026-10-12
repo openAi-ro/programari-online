@@ -14,10 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Badge, Button, ButtonRow, useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { STATUS_META } from '@/lib/status';
+import { statusMeta } from '@/lib/status';
 import { appointmentNextHint } from '@/lib/appointmentNextHint';
 import { cancelPolicyLine } from '@/lib/cancelPolicyCopy';
 import { canMarkNoShow } from '@/lib/bookingRules';
+import { localeTag, useT } from '@/lib/i18n';
 import type { Appointment } from '@/lib/types';
 
 const POSTPONE_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -85,12 +86,13 @@ export function AppointmentCard({
   onShare,
 }: Props) {
   const t = useTheme();
+  const tr = useT();
   const status = appointment.status;
-  const meta = STATUS_META[status];
+  const meta = statusMeta(status);
 
-  const fallbackLabel = `${new Date(appointment.start_at).toLocaleString('ro-RO')} – ${new Date(
+  const fallbackLabel = `${new Date(appointment.start_at).toLocaleString(localeTag())} – ${new Date(
     appointment.end_at
-  ).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}`;
+  ).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })}`;
 
   const contact = [appointment.client_email, appointment.client_phone]
     .filter(Boolean)
@@ -176,7 +178,7 @@ export function AppointmentCard({
               <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
                 {appointment.service_name}
                 {appointment.staff_name ? ` · ${appointment.staff_name}` : ''}
-                {appointment.loyalty_redeemed ? ' · cadou' : ''}
+                {appointment.loyalty_redeemed ? tr('appt.giftSuffix') : ''}
               </Text>
             ) : appointment.staff_name ? (
               <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
@@ -191,7 +193,7 @@ export function AppointmentCard({
             </View>
           </View>
           <Badge tone={appointment.no_show ? 'danger' : meta.tone} dot>
-            {appointment.no_show ? 'Nu s-a prezentat' : meta.label}
+            {appointment.no_show ? tr('appt.noShowBadge') : meta.label}
           </Badge>
         </View>
 
@@ -229,12 +231,12 @@ export function AppointmentCard({
                 })}
               </Text>
               <Text style={[styles.confirmText, { color: t.colors.textMuted }]} numberOfLines={2}>
-                Slotul va fi eliberat. Sigur anulezi?
+                {tr('appt.confirmCancel')}
               </Text>
               <ButtonRow>
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Renunță"
+                    label={tr('appt.giveUp')}
                     variant="secondary"
                     size="sm"
                     contentAlign="start"
@@ -244,7 +246,7 @@ export function AppointmentCard({
                 </View>
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Anulează"
+                    label={tr('common.cancel')}
                     icon="trash-outline"
                     variant="danger"
                     size="sm"
@@ -260,7 +262,7 @@ export function AppointmentCard({
               {canReschedule && onReschedule ? (
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Reprogramează"
+                    label={tr('appt.reschedule')}
                     icon="swap-horizontal-outline"
                     variant="secondary"
                     size="sm"
@@ -273,7 +275,7 @@ export function AppointmentCard({
               {onCancel && canCancel && (status === 'pending' || status === 'approved') ? (
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Anulează"
+                    label={tr('common.cancel')}
                     icon="close-circle-outline"
                     variant="danger"
                     size="sm"
@@ -291,7 +293,7 @@ export function AppointmentCard({
           <ButtonRow>
             <View style={styles.actionFlex}>
               <Button
-                label="Respinge"
+                label={tr('appt.reject')}
                 icon="close"
                 variant="secondary"
                 size="sm"
@@ -300,7 +302,7 @@ export function AppointmentCard({
             </View>
             <View style={styles.actionFlex}>
               <Button
-                label="Aprobă"
+                label={tr('appt.approve')}
                 icon="checkmark"
                 variant="success"
                 size="sm"
@@ -312,7 +314,7 @@ export function AppointmentCard({
 
         {canPostpone ? (
           <Button
-            label="Amână"
+            label={tr('appt.postpone')}
             icon="time-outline"
             variant="secondary"
             size="sm"
@@ -321,7 +323,7 @@ export function AppointmentCard({
         ) : null}
         {showActions && onMoveToSlot && (status === 'approved' || status === 'pending') ? (
           <Button
-            label="Mută pe slot"
+            label={tr('appt.moveToSlot')}
             icon="swap-horizontal-outline"
             variant="secondary"
             size="sm"
@@ -339,11 +341,11 @@ export function AppointmentCard({
           <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
             <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
               <View style={styles.modalHead}>
-                <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>Amână</Text>
+                <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>{tr('appt.postpone')}</Text>
                 <Pressable
                   onPress={() => !postponeBusy && setPostponeOpen(false)}
                   accessibilityRole="button"
-                  accessibilityLabel="Închide"
+                  accessibilityLabel={tr('common.close')}
                   hitSlop={8}
                   disabled={Boolean(postponeBusy)}
                 >
@@ -354,7 +356,7 @@ export function AppointmentCard({
                 style={[styles.modalHint, { color: t.colors.textMuted }]}
                 numberOfLines={3}
               >
-                Alege cu câte ore amâni. Derulează roata sus / jos.
+                {tr('appt.postponeHint')}
               </Text>
 
               <View style={[styles.wheelWrap, { backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border }]}>
@@ -402,7 +404,7 @@ export function AppointmentCard({
                           adjustsFontSizeToFit
                           minimumFontScale={0.85}
                         >
-                          {h} {h === 1 ? 'oră' : 'ore'}
+                          {h} {h === 1 ? tr('duration.unitHourOne') : tr('duration.unitHours')}
                         </Text>
                       </View>
                     );
@@ -414,7 +416,7 @@ export function AppointmentCard({
               <ButtonRow>
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Anulează"
+                    label={tr('common.cancel')}
                     variant="secondary"
                     size="sm"
                     disabled={Boolean(postponeBusy)}
@@ -423,7 +425,7 @@ export function AppointmentCard({
                 </View>
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Confirmă"
+                    label={tr('appt.confirm')}
                     icon="checkmark"
                     variant="primary"
                     size="sm"
@@ -440,7 +442,7 @@ export function AppointmentCard({
 
         {onMarkNoShow && canMarkNoShow(appointment) ? (
           <Button
-            label="Nu s-a prezentat"
+            label={tr('appt.markNoShow')}
             icon="alert-circle-outline"
             variant="danger"
             size="sm"
@@ -450,7 +452,7 @@ export function AppointmentCard({
 
         {onClearNoShow && appointment.no_show ? (
           <Button
-            label="Anulează absența"
+            label={tr('appt.clearNoShow')}
             variant="secondary"
             size="sm"
             onPress={onClearNoShow}
@@ -459,7 +461,7 @@ export function AppointmentCard({
 
         {onDelete ? (
           <Button
-            label="Șterge ședința și chatul"
+            label={tr('appt.deleteSession')}
             icon="trash-outline"
             variant="danger"
             size="sm"
@@ -469,7 +471,7 @@ export function AppointmentCard({
 
         {onReview ? (
           <Button
-            label={reviewLabel ?? 'Lasă o recenzie'}
+            label={reviewLabel ?? tr('appt.leaveReview')}
             icon="star-outline"
             variant="secondary"
             size="sm"
@@ -493,14 +495,14 @@ export function AppointmentCard({
             <View style={styles.chatSectionHead}>
               <Ionicons name="chatbubble-ellipses-outline" size={16} color={t.colors.info} />
               <Text style={[styles.chatSectionTitle, { color: t.colors.text }]}>
-                Mesaj chat
+                {tr('appt.chatMessage')}
               </Text>
             </View>
             <Text style={[styles.chatSectionHint, { color: t.colors.textFaint }]}>
-              Independent de Amână — trimite doar în conversația cu clientul.
+              {tr('appt.chatHint')}
             </Text>
             <TextInput
-              placeholder="Scrie mesajul pentru client…"
+              placeholder={tr('appt.writeToClient')}
               placeholderTextColor={t.colors.textFaint}
               value={quickText}
               onChangeText={setQuickText}
@@ -509,7 +511,7 @@ export function AppointmentCard({
               maxLength={4000}
             />
             <Button
-              label="Trimite mesaj"
+              label={tr('appt.sendMessage')}
               icon="send-outline"
               size="sm"
               variant="secondary"
@@ -527,7 +529,7 @@ export function AppointmentCard({
 
         {canConfirm && onConfirmAttendance ? (
           <Button
-            label="Confirmă că ajung"
+            label={tr('appt.confirmAttendance')}
             icon="checkmark-circle-outline"
             variant="success"
             size="md"
@@ -536,13 +538,13 @@ export function AppointmentCard({
             onPress={onConfirmAttendance}
           />
         ) : appointment.attendance_confirmed && appointment.status === 'approved' ? (
-          <Text style={[styles.confirmed, { color: t.colors.success }]}>Prezență confirmată</Text>
+          <Text style={[styles.confirmed, { color: t.colors.success }]}>{tr('appt.attendanceConfirmed')}</Text>
         ) : null}
 
         {/* Reschedule already in primary ButtonRow for client (!showActions) */}
         {showActions && canReschedule && onReschedule ? (
           <Button
-            label="Reprogramează"
+            label={tr('appt.reschedule')}
             icon="swap-horizontal-outline"
             variant="secondary"
             size="sm"
@@ -563,7 +565,7 @@ export function AppointmentCard({
             <View style={styles.driveHead}>
               <Ionicons name="navigate-outline" size={18} color={t.colors.accentSoftText} />
               <Text style={[styles.driveTitle, { color: t.colors.accentSoftText }]} numberOfLines={1}>
-                Condu acum
+                {tr('appt.driveNow')}
               </Text>
             </View>
             {driveAddress ? (
@@ -572,11 +574,11 @@ export function AppointmentCard({
               </Text>
             ) : (
               <Text style={[styles.driveAddress, { color: t.colors.textMuted }]} numberOfLines={2}>
-                Deschide meniul telefonului cu aplicațiile de navigație.
+                {tr('appt.driveHint')}
               </Text>
             )}
             <Button
-              label="Deschide navigația"
+              label={tr('appt.openNav')}
               icon="map-outline"
               variant="primary"
               size="sm"
@@ -589,7 +591,7 @@ export function AppointmentCard({
 
         {onAddToCalendar && status === 'approved' ? (
           <Button
-            label="Adaugă în calendar"
+            label={tr('appt.addToCalendar')}
             icon="calendar-outline"
             variant="secondary"
             size="sm"
@@ -601,7 +603,7 @@ export function AppointmentCard({
 
         {onShare ? (
           <Button
-            label="Distribuie"
+            label={tr('appt.share')}
             icon="share-outline"
             variant="secondary"
             size="sm"
@@ -620,12 +622,12 @@ export function AppointmentCard({
                 })}
               </Text>
               <Text style={[styles.confirmText, { color: t.colors.textMuted }]} numberOfLines={2}>
-                Slotul va fi eliberat. Sigur anulezi?
+                {tr('appt.confirmCancel')}
               </Text>
               <ButtonRow>
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Renunță"
+                    label={tr('appt.giveUp')}
                     variant="secondary"
                     size="sm"
                     onPress={() => setConfirming(false)}
@@ -633,7 +635,7 @@ export function AppointmentCard({
                 </View>
                 <View style={styles.actionFlex}>
                   <Button
-                    label="Anulează"
+                    label={tr('common.cancel')}
                     icon="trash-outline"
                     variant="danger"
                     size="sm"
@@ -654,7 +656,7 @@ export function AppointmentCard({
             >
               <Ionicons name="close-circle-outline" size={15} color={t.colors.danger} />
               <Text style={[styles.cancelText, { color: t.colors.danger }]}>
-                Anulează programarea
+                {tr('appt.cancelBooking')}
               </Text>
             </Pressable>
           )

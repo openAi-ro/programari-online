@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, type ComponentProps } from 'react';
 
 import { useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -75,6 +76,7 @@ type LoginFieldProps = TextInputProps & {
 /** Câmp pill cu iconiță (aspect inset din grafică). */
 export function LoginField({ icon, style, secureTextEntry, ...inputProps }: LoginFieldProps) {
   const p = useLoginPalette();
+  const tr = useT();
   const isPassword = secureTextEntry === true;
   const [passwordVisible, setPasswordVisible] = useState(false);
 
@@ -96,7 +98,7 @@ export function LoginField({ icon, style, secureTextEntry, ...inputProps }: Logi
         <Pressable
           onPress={() => setPasswordVisible((v) => !v)}
           accessibilityRole="button"
-          accessibilityLabel={passwordVisible ? 'Ascunde parola' : 'Arată parola'}
+          accessibilityLabel={passwordVisible ? tr('auth.hidePassword') : tr('auth.showPassword')}
           hitSlop={8}
           style={styles.eyeBtn}
         >

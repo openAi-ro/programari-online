@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import type { FreeSlot } from '@/lib/types';
 
@@ -15,16 +16,17 @@ export function SlotPicker({
   slots,
   selectedStartUtc,
   onSelect,
-  emptyLabel = 'Nu există sloturi libere în această zi.',
+  emptyLabel,
 }: Props) {
   const t = useTheme();
+  const tr = useT();
 
   if (slots.length === 0) {
     return (
       <EmptyState
         icon="time-outline"
-        title="Niciun slot liber"
-        description={emptyLabel}
+        title={tr('slots.emptyTitle')}
+        description={emptyLabel ?? tr('slots.emptyDay')}
         compact
       />
     );

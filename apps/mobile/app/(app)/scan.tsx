@@ -9,6 +9,7 @@ import { Button, Field, useTheme } from '@/components/ui';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { extractPublicCode } from '@/lib/bookingLink';
 import { useBack } from '@/lib/nav';
+import { useT } from '@/lib/i18n';
 
 /**
  * Camera chrome: intentional dark overlay (palette.ink950) so the finder
@@ -17,6 +18,7 @@ import { useBack } from '@/lib/nav';
  */
 export default function ScanScreen() {
   const t = useTheme();
+  const tr = useT();
   const router = useRouter();
   const back = useBack();
   const insets = useSafeAreaInsets();
@@ -35,7 +37,7 @@ export default function ScanScreen() {
     if (locked) return;
     const code = extractPublicCode(data);
     if (!code) {
-      setHint('QR invalid. Aștept link /b/…, book/… sau programari://b/…');
+      setHint(tr('scan.invalidQr'));
       return;
     }
     goToBook(code);
@@ -44,7 +46,7 @@ export default function ScanScreen() {
   function onManual() {
     const code = extractPublicCode(manual.trim());
     if (!code) {
-      setHint('Introdu codul business (ex. din ecranul QR).');
+      setHint(tr('scan.enterCode'));
       return;
     }
     goToBook(code);
@@ -54,7 +56,7 @@ export default function ScanScreen() {
     return (
       <View style={styles.center}>
         <Ionicons name="camera-outline" size={28} color={palette.white} />
-        <Text style={styles.centerText}>Se încarcă camera…</Text>
+        <Text style={styles.centerText}>{tr('scan.loadingCam')}</Text>
       </View>
     );
   }
@@ -74,11 +76,10 @@ export default function ScanScreen() {
             <Ionicons name="scan-outline" size={30} color={palette.white} />
           </View>
           <Text style={styles.centerText}>
-            Camera nu are permisiunea încă. Poți oricând să introduci codul business
-            mai jos, fără cameră.
+            {tr('scan.noPermission')}
           </Text>
           <Button
-            label="Permite camera"
+            label={tr('scan.allowCam')}
             icon="camera-outline"
             onPress={requestPermission}
             fullWidth={false}
@@ -89,7 +90,7 @@ export default function ScanScreen() {
       {permission.granted ? (
         <View style={styles.frame} pointerEvents="none">
           <View style={[styles.frameBox, { borderColor: 'rgba(255,255,255,0.75)' }]} />
-          <Text style={styles.frameHint}>Alinează codul QR în interiorul cadrului</Text>
+          <Text style={styles.frameHint}>{tr('scan.alignQr')}</Text>
         </View>
       ) : null}
 
@@ -97,7 +98,7 @@ export default function ScanScreen() {
         <Pressable
           onPress={back}
           accessibilityRole="button"
-          accessibilityLabel="Închide scanarea"
+          accessibilityLabel={tr('scan.closeScan')}
           hitSlop={4}
           style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
         >
@@ -116,12 +117,12 @@ export default function ScanScreen() {
         ]}
       >
         <Text style={[styles.overlayTitle, { color: t.colors.text }]}>
-          Scanează codul QR sau introdu codul
+          {tr('scan.title')}
         </Text>
         <Field
           value={manual}
           onChangeText={setManual}
-          placeholder="Cod business"
+          placeholder={tr('scan.codePlaceholder')}
           icon="keypad-outline"
           autoCapitalize="none"
           autoCorrect={false}
@@ -129,7 +130,7 @@ export default function ScanScreen() {
           onSubmitEditing={onManual}
         />
         <Button
-          label="Deschide programarea"
+          label={tr('home.openBooking')}
           icon="arrow-forward"
           onPress={onManual}
         />
@@ -149,7 +150,7 @@ export default function ScanScreen() {
             ]}
           >
             <Ionicons name="refresh" size={14} color={t.colors.accent} />
-            <Text style={[styles.retryText, { color: t.colors.accent }]}>Scanează din nou</Text>
+            <Text style={[styles.retryText, { color: t.colors.accent }]}>{tr('scan.rescan')}</Text>
           </Pressable>
         ) : null}
       </View>

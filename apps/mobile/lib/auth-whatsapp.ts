@@ -1,6 +1,8 @@
 import type { User } from '@supabase/supabase-js';
 
 import { normalizePhoneE164 } from './phone';
+import { trKey } from './i18n';
+import { getLanguageSync } from './language';
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 
 export type WhatsAppOtpRequestResult = {
@@ -43,7 +45,7 @@ async function invokePublicAuthFunction(
   if (!supabaseUrl || !supabaseAnonKey) {
     return {
       data: null,
-      error: 'Aplicația nu e configurată (lipsește URL-ul Supabase).',
+      error: trKey('wa.appNotConfigured'),
     };
   }
 
@@ -61,7 +63,7 @@ async function invokePublicAuthFunction(
   } catch {
     return {
       data: null,
-      error: 'Nu am putut contacta serverul. Verifică internetul și încearcă din nou.',
+      error: trKey('wa.noServer'),
     };
   }
 
@@ -77,14 +79,14 @@ async function invokePublicAuthFunction(
       return {
         data: payload,
         error:
-          'Funcția WhatsApp nu e instalată pe server. Rulează: supabase functions deploy auth-whatsapp-otp --no-verify-jwt',
+          trKey('wa.fnMissing'),
       };
     }
     if (res.status === 401) {
       return {
         data: payload,
         error:
-          'Serverul respinge apelul (JWT). Redeploy: supabase functions deploy auth-whatsapp-otp --no-verify-jwt',
+          trKey('wa.jwtRejected'),
       };
     }
     return {
@@ -92,7 +94,7 @@ async function invokePublicAuthFunction(
       error:
         payload?.hint ||
         payload?.error ||
-        `Nu am putut trimite cererea (cod ${res.status}).`,
+        trKey('wa.requestFailed', { code: res.status }),
     };
   }
 
@@ -118,12 +120,13 @@ export async function requestWhatsAppOtp(phoneRaw: string): Promise<{
   if (!phone) {
     return {
       data: null,
-      error: 'Folosește un număr valid (07xxxxxxxx sau +40...).',
+      error: trKey('auth.validNumber'),
     };
   }
 
   const { data, error } = await invokePublicAuthFunction('auth-whatsapp-otp', {
     phone,
+    lang: getLanguageSync(),
   });
 
   if (error) {
@@ -153,16 +156,16 @@ export async function verifyWhatsAppOtp(
   if (!phone) {
     return {
       data: null,
-      error: 'Folosește un număr valid (07xxxxxxxx sau +40...).',
+      error: trKey('auth.validNumber'),
     };
   }
   if (!/^\d{6}$/.test(code)) {
-    return { data: null, error: 'Codul trebuie să aibă 6 cifre.' };
+    return { data: null, error: trKey('auth.waCode6') };
   }
 
   const { data, error } = await invokePublicAuthFunction(
     'auth-whatsapp-verify',
-    { phone, code, account_kind: accountKind }
+    { phone, code, account_kind: accountKind, lang: getLanguageSync() }
   );
 
   if (error) {
@@ -172,7 +175,7 @@ export async function verifyWhatsAppOtp(
   if (!data?.access_token || !data?.refresh_token) {
     return {
       data: null,
-      error: data?.hint || data?.error || 'Verificare eșuată.',
+      error: data?.hint || data?.error || trKey('wa.verifyFailed'),
     };
   }
 

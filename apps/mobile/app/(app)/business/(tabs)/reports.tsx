@@ -11,6 +11,7 @@ import {
   SkeletonStatGrid,
   useTheme,
 } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatLei } from '@/lib/format';
@@ -42,6 +43,7 @@ export default function BusinessReportsScreen() {
   }, []);
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -74,7 +76,7 @@ export default function BusinessReportsScreen() {
   if (loading && !report) {
     return (
       <View style={{ flex: 1 }}>
-        <SkeletonScreen title="Rapoarte" onBack={back} blocks={2}>
+        <SkeletonScreen title={tr('rep.title')} onBack={back} blocks={2}>
           <SkeletonStatGrid />
         </SkeletonScreen>
       </View>
@@ -83,12 +85,12 @@ export default function BusinessReportsScreen() {
 
   if (!report) {
     return (
-      <Screen title="Rapoarte" onBack={back}>
+      <Screen title={tr('rep.title')} onBack={back}>
         {error ? <Callout tone="danger">{error}</Callout> : null}
         <EmptyState
           icon="stats-chart-outline"
-          title="Nu am putut încărca rapoartele"
-          description="Configurează business-ul, apoi revino aici."
+          title={tr('rep.loadFail')}
+          description={tr('rep.loadFailDesc')}
         />
       </Screen>
     );
@@ -100,15 +102,15 @@ export default function BusinessReportsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen title="Rapoarte" subtitle={`Ultimele ${report.days} zile`} onBack={back}>
+      <Screen title={tr('rep.title')} subtitle={tr('rep.lastDays').replace('{days}', String(report.days))} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
       <View style={styles.grid}>
-        <Stat label="Confirmate" value={String(report.approved)} color={t.colors.text} />
-        <Stat label="Venit estimat" value={formatLei(report.revenue_ron)} color={t.colors.text} />
-        <Stat label="No-show" value={`${report.no_show} (${noShowPct}%)`} color={t.colors.danger} />
+        <Stat label={tr('rep.confirmed')} value={String(report.approved)} color={t.colors.text} />
+        <Stat label={tr('rep.revenue')} value={formatLei(report.revenue_ron)} color={t.colors.text} />
+        <Stat label={tr('rep.noShow')} value={`${report.no_show} (${noShowPct}%)`} color={t.colors.danger} />
         <Stat
-          label="Recenzii"
+          label={tr('rep.reviews')}
           value={
             report.review_count
               ? `${report.avg_rating ?? '—'} ★ · ${report.review_count}`
@@ -116,13 +118,13 @@ export default function BusinessReportsScreen() {
           }
           color={t.colors.text}
         />
-        <Stat label="Anulate" value={String(report.cancelled)} color={t.colors.textMuted} />
-        <Stat label="Cadouri loialitate" value={String(report.loyalty_redeemed)} color={t.colors.text} />
+        <Stat label={tr('rep.cancelled')} value={String(report.cancelled)} color={t.colors.textMuted} />
+        <Stat label={tr('rep.gifts')} value={String(report.loyalty_redeemed)} color={t.colors.text} />
       </View>
 
-      <SectionTitle>Top servicii</SectionTitle>
+      <SectionTitle>{tr('rep.topServices')}</SectionTitle>
       {(report.top_services ?? []).length === 0 ? (
-        <EmptyState compact title="Nicio programare în interval" />
+        <EmptyState compact title={tr('rep.noBookings')} />
       ) : (
         (report.top_services ?? []).map((s) => (
           <View
@@ -137,7 +139,7 @@ export default function BusinessReportsScreen() {
         ))
       )}
 
-      <SectionTitle>Pe specialist</SectionTitle>
+      <SectionTitle>{tr('rep.byStaff')}</SectionTitle>
       {(report.staff ?? []).map((s) => (
         <View
           key={s.name}
@@ -145,7 +147,7 @@ export default function BusinessReportsScreen() {
         >
           <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
           <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
-            {s.approved} confirmate · {s.no_show} absențe · {formatLei(s.revenue_ron)}
+            {s.approved} {tr('rep.confirmedLow')} · {s.no_show} {tr('cli.noShows')} · {formatLei(s.revenue_ron)}
           </Text>
         </View>
       ))}

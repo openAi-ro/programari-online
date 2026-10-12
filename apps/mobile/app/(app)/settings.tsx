@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,6 +33,8 @@ import {
   setThemePreference,
   type ThemePreference,
 } from '@/lib/themePreference';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
+import { setLanguage } from '@/lib/language';
 import { useBack } from '@/lib/nav';
 import {
   registerForPushAsync,
@@ -67,6 +69,8 @@ export default function SettingsScreen() {
 
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
+  const { lang } = useLanguage();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
@@ -253,7 +257,7 @@ export default function SettingsScreen() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) throw new Error('Nu ești autentificat.');
+    if (!user) throw new Error(trKey('req.notAuthed'));
     const cols =
       'id, email, phone, display_name, account_kind, notify_reminders, notify_decision, notify_whatsapp, avatar_url';
     if (profile?.id) {
@@ -291,7 +295,7 @@ export default function SettingsScreen() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return;
     }
     setAvatarBusy(true);
@@ -303,9 +307,9 @@ export default function SettingsScreen() {
     try {
       const url = await uploadProfileAvatar(localUri, user.id);
       await persistAvatarUrl(url);
-      setMessage('Poza de profil a fost actualizată.');
+      setMessage(trKey('set.avatarUp'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut încărca poza.');
+      setError(e instanceof Error ? e.message : trKey('team.photoFail'));
       // Dacă uploadul eșuează, revenim la URL-ul salvat (dacă există).
       setAvatarUrl(profile?.avatar_url ?? null);
     }
@@ -315,7 +319,7 @@ export default function SettingsScreen() {
   async function pickAvatarFromGallery(): Promise<void> {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la galerie ca să alegi poza de profil.');
+      setError(trKey('set.avatarGallery'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -330,7 +334,7 @@ export default function SettingsScreen() {
   async function takeAvatarPhoto(): Promise<void> {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la cameră ca să faci poza de profil.');
+      setError(trKey('set.avatarCamera'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -346,9 +350,9 @@ export default function SettingsScreen() {
     setError(null);
     try {
       await persistAvatarUrl(null);
-      setMessage('Poza de profil a fost ștearsă.');
+      setMessage(trKey('set.avatarDel'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut șterge poza.');
+      setError(e instanceof Error ? e.message : trKey('set.avatarDelFail'));
     }
     setAvatarBusy(false);
   }
@@ -367,7 +371,7 @@ export default function SettingsScreen() {
   }
 
   async function persistLogoUrl(url: string | null): Promise<void> {
-    if (!businessId) throw new Error('Configurează mai întâi business-ul (Configurare business).');
+    if (!businessId) throw new Error(trKey('set.setupFirstParen', { setup: trKey('setup.title') }));
     const { error } = await supabase
       .from('business_profiles')
       .update({ logo_url: url })
@@ -379,7 +383,7 @@ export default function SettingsScreen() {
   async function handleLogoResult(result: ImagePicker.ImagePickerResult): Promise<void> {
     if (result.canceled || result.assets.length === 0) return;
     if (!businessId) {
-      setError('Configurează business-ul înainte să adaugi logo-ul.');
+      setError(trKey('set.logoNeedSetup'));
       return;
     }
     setLogoBusy(true);
@@ -390,9 +394,9 @@ export default function SettingsScreen() {
     try {
       const url = await uploadBusinessLogo(localUri, businessId);
       await persistLogoUrl(url);
-      setMessage('Logo-ul firmei a fost actualizat.');
+      setMessage(trKey('set.logoUp'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut încărca logo-ul.');
+      setError(e instanceof Error ? e.message : trKey('set.logoFail'));
       const { data: biz } = await supabase
         .from('business_profiles')
         .select('logo_url')
@@ -406,7 +410,7 @@ export default function SettingsScreen() {
   async function pickLogoFromGallery(): Promise<void> {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la galerie ca să alegi logo-ul.');
+      setError(trKey('set.logoGallery'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -421,7 +425,7 @@ export default function SettingsScreen() {
   async function takeLogoPhoto(): Promise<void> {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la cameră ca să fotografiezi logo-ul.');
+      setError(trKey('set.logoCamera'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -437,9 +441,9 @@ export default function SettingsScreen() {
     setError(null);
     try {
       await persistLogoUrl(null);
-      setMessage('Logo-ul firmei a fost șters.');
+      setMessage(trKey('set.logoDel'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut șterge logo-ul.');
+      setError(e instanceof Error ? e.message : trKey('set.logoDelFail'));
     }
     setLogoBusy(false);
   }
@@ -450,33 +454,29 @@ export default function SettingsScreen() {
       style?: 'cancel' | 'destructive' | 'default';
       onPress?: () => void;
     }[] = [
-      { text: 'Alege din galerie', onPress: () => void pickLogoFromGallery() },
-      { text: 'Deschide camera', onPress: () => void takeLogoPhoto() },
+      { text: tr('team.fromGallery'), onPress: () => void pickLogoFromGallery() },
+      { text: tr('set.openCamera'), onPress: () => void takeLogoPhoto() },
     ];
     if (logoUrl) {
       buttons.push({
-        text: 'Șterge logo',
+        text: tr('set.delLogo'),
         style: 'destructive',
         onPress: () => void clearLogo(),
       });
     }
-    buttons.push({ text: 'Anulează', style: 'cancel' });
-    Alert.alert(
-      'Logo firmă',
-      'Separat de poza ta de profil. Apare pe pagina principală business.',
-      buttons
-    );
+    buttons.push({ text: tr('common.cancel'), style: 'cancel' });
+    Alert.alert(tr('set.logoTitle'), tr('set.logoAlertBody'), buttons);
   }
 
   async function persistVideoUrl(url: string | null): Promise<void> {
-    if (!businessId) throw new Error('Configurează mai întâi business-ul (Configurare business).');
+    if (!businessId) throw new Error(trKey('set.setupFirstParen', { setup: trKey('setup.title') }));
     const { error } = await supabase
       .from('business_profiles')
       .update({ promo_video_url: url })
       .eq('id', businessId);
     if (error) {
       if (/promo_video_url|business-videos|bucket/i.test(error.message)) {
-        throw new Error('Video-ul nu poate fi salvat până nu aplici migrările v28/v29 (supabase db push).');
+        throw new Error(trKey('set.videoMigration'));
       }
       throw error;
     }
@@ -486,7 +486,7 @@ export default function SettingsScreen() {
   async function handleVideoResult(result: ImagePicker.ImagePickerResult): Promise<void> {
     if (result.canceled || result.assets.length === 0) return;
     if (!businessId) {
-      setError('Configurează business-ul înainte să adaugi video-ul.');
+      setError(trKey('set.videoNeedSetup'));
       return;
     }
     setVideoBusy(true);
@@ -500,12 +500,12 @@ export default function SettingsScreen() {
         mimeType: asset.mimeType ?? null,
       });
       await persistVideoUrl(url);
-      setMessage('Video-ul de prezentare a fost salvat. Clienții îl văd la căutare.');
+      setMessage(trKey('set.videoSaved'));
     } catch (e) {
-      const raw = e instanceof Error ? e.message : 'Nu am putut încărca video-ul.';
+      const raw = e instanceof Error ? e.message : trKey('set.videoFail');
       setError(
         /bucket|storage/i.test(raw)
-          ? 'Video-ul nu poate fi salvat până nu aplici migrările v28/v29 (supabase db push).'
+          ? trKey('set.videoMigration')
           : raw
       );
       const { data: biz } = await supabase
@@ -521,7 +521,7 @@ export default function SettingsScreen() {
   async function pickVideoFromGallery(): Promise<void> {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la galerie ca să alegi video-ul.');
+      setError(trKey('set.videoGallery'));
       return;
     }
     try {
@@ -533,14 +533,14 @@ export default function SettingsScreen() {
       });
       await handleVideoResult(result);
     } catch {
-      setError('Nu am putut deschide galeria. Reîncearcă.');
+      setError(trKey('set.galleryFail'));
     }
   }
 
   async function recordVideo(): Promise<void> {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      setError('Permite accesul la cameră ca să înregistrezi video-ul.');
+      setError(trKey('set.videoCamera'));
       return;
     }
     try {
@@ -552,7 +552,7 @@ export default function SettingsScreen() {
       });
       await handleVideoResult(result);
     } catch {
-      setError('Nu am putut porni camera. Reîncearcă.');
+      setError(trKey('set.cameraFail'));
     }
   }
 
@@ -561,9 +561,9 @@ export default function SettingsScreen() {
     setError(null);
     try {
       await persistVideoUrl(null);
-      setMessage('Video-ul de prezentare a fost șters.');
+      setMessage(trKey('set.videoDel'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut șterge video-ul.');
+      setError(e instanceof Error ? e.message : trKey('set.videoDelFail'));
     }
     setVideoBusy(false);
   }
@@ -574,22 +574,18 @@ export default function SettingsScreen() {
       style?: 'cancel' | 'destructive' | 'default';
       onPress?: () => void;
     }[] = [
-      { text: 'Alege din galerie', onPress: () => void pickVideoFromGallery() },
-      { text: 'Înregistrează acum', onPress: () => void recordVideo() },
+      { text: tr('team.fromGallery'), onPress: () => void pickVideoFromGallery() },
+      { text: tr('set.recordNow'), onPress: () => void recordVideo() },
     ];
     if (videoUrl) {
       buttons.push({
-        text: 'Șterge video',
+        text: tr('set.delVideo'),
         style: 'destructive',
         onPress: () => void clearVideo(),
       });
     }
-    buttons.push({ text: 'Anulează', style: 'cancel' });
-    Alert.alert(
-      'Video prezentare',
-      'Maxim 90 secunde, 50 MB. Apare clienților la căutare, lângă cartea de vizită.',
-      buttons
-    );
+    buttons.push({ text: tr('common.cancel'), style: 'cancel' });
+    Alert.alert(tr('set.videoTitle'), tr('set.videoAlertBody'), buttons);
   }
 
   function openAvatarPicker(): void {
@@ -599,27 +595,23 @@ export default function SettingsScreen() {
       onPress?: () => void;
     }[] = [
       {
-        text: 'Alege din galerie',
+        text: tr('team.fromGallery'),
         onPress: () => void pickAvatarFromGallery(),
       },
       {
-        text: 'Deschide camera',
+        text: tr('set.openCamera'),
         onPress: () => void takeAvatarPhoto(),
       },
     ];
     if (avatarUrl) {
       buttons.push({
-        text: 'Șterge poza',
+        text: tr('team.delPhoto'),
         style: 'destructive',
         onPress: () => void clearAvatar(),
       });
     }
-    buttons.push({ text: 'Anulează', style: 'cancel' });
-    Alert.alert(
-      'Poza ta de profil',
-      'Doar pentru tine (client / cont). Nu e logo-ul firmei.',
-      buttons
-    );
+    buttons.push({ text: tr('common.cancel'), style: 'cancel' });
+    Alert.alert(tr('set.avatarTitle'), tr('set.avatarAlertBody'), buttons);
   }
 
   async function handleSave(): Promise<boolean> {
@@ -627,7 +619,7 @@ export default function SettingsScreen() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return false;
     }
 
@@ -635,18 +627,18 @@ export default function SettingsScreen() {
     if (phoneInput.trim()) {
       normalized = normalizePhoneE164(phoneInput.trim());
       if (!normalized) {
-        setError('Număr invalid. Folosește format 07xxxxxxxx sau +407xxxxxxxx.');
+        setError(trKey('set.badPhone'));
         return false;
       }
       if (!isValidRoMobile(normalized)) {
-        setError('Număr invalid pentru România (mobil 07xx sau fix 02xx/03xx).');
+        setError(trKey('set.badRoPhone'));
         return false;
       }
     }
 
     const email = profile?.email ?? user.email ?? null;
     if (!email && !normalized) {
-      setError('Trebuie email sau telefon pe cont.');
+      setError(trKey('set.needContact'));
       return false;
     }
 
@@ -678,7 +670,7 @@ export default function SettingsScreen() {
       error: string | null;
     }> {
       const uid = profile?.id ?? user?.id;
-      if (!uid) return { data: null, error: 'Nu ești autentificat.' };
+      if (!uid) return { data: null, error: trKey('req.notAuthed') };
       const attempt = async (cols: string, payload: Record<string, unknown>) => {
         if (profile?.id) {
           return supabase
@@ -735,11 +727,12 @@ export default function SettingsScreen() {
       }
       const { data: verify, error: vErr } = verifyRes;
       if (vErr) errMsg = vErr.message;
-      else if (!verify) errMsg = 'Profilul nu există după salvare (RLS?).';
+      else if (!verify) errMsg = trKey('set.profileMissing');
       else if ((verify.phone ?? null) !== (normalized ?? null)) {
-        errMsg =
-          `Telefonul nu a rămas în baza de date (am scris ${normalized ?? 'gol'}, citesc ${verify.phone ?? 'gol'}). ` +
-          'Verifică conexiunea Supabase / politicile RLS pe profiles.';
+        errMsg = trKey('set.phoneNotPersisted', {
+          wrote: normalized ?? trKey('set.unknown'),
+          read: verify.phone ?? trKey('set.unknown'),
+        });
       } else {
         saved = verify as Profile;
       }
@@ -751,7 +744,7 @@ export default function SettingsScreen() {
       return false;
     }
     if (!saved) {
-      setError('Salvarea nu a returnat profilul. Reîncearcă.');
+      setError(trKey('set.saveNoProfile'));
       return false;
     }
 
@@ -765,15 +758,18 @@ export default function SettingsScreen() {
     }
     setMessage(
       saved.phone
-        ? `Telefon salvat: ${formatPhoneDisplay(saved.phone)}. Rămâne și după ce te întorci pe Home.`
-        : 'Profil actualizat. Fără număr de telefon în DB.'
+        ? trKey('set.phoneSaved', {
+            phone: formatPhoneDisplay(saved.phone),
+            home: trKey('tabs.home'),
+          })
+        : trKey('set.profileNoPhone')
     );
     return true;
   }
 
   async function handleTestWhatsApp() {
     if (!whatsappEnabled) {
-      setError('Activează caseta WhatsApp mai jos ca să trimiți mesaje pe acest număr.');
+      setError(trKey('set.waEnableFirst'));
       return;
     }
     setWaBusy(true);
@@ -794,28 +790,27 @@ export default function SettingsScreen() {
 
     if (!normalized) {
       setWaBusy(false);
-      setError('Adaugă numărul de telefon mai întâi (câmpul Telefon, nu WhatsApp).');
+      setError(trKey('set.waNeedPhone'));
       return;
     }
 
     try {
       const result = await invokeTestWhatsApp();
       if (!result.ok) {
-        setError(result.error ?? 'Nu s-a putut trimite mesajul test.');
+        setError(result.error ?? trKey('set.waTestFail'));
         return;
       }
       if (result.data?.result?.stub) {
-        setError(
-          result.data.hint ??
-            'WhatsApp nu e configurat pe server — mesajul a fost doar logat. Setează secrets Meta sau Twilio.'
-        );
+        setError(result.data.hint ?? trKey('set.waStub'));
         return;
       }
       setMessage(
-        `Mesaj test trimis pe WhatsApp la ${formatPhoneDisplay(result.data?.phone ?? normalized)}.`
+        trKey('set.waSent', {
+          phone: formatPhoneDisplay(result.data?.phone ?? normalized),
+        })
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eroare la test WhatsApp.');
+      setError(e instanceof Error ? e.message : trKey('set.waErr'));
     } finally {
       setWaBusy(false);
     }
@@ -832,31 +827,34 @@ export default function SettingsScreen() {
         const local = await presentStatusBarTestNotification();
         if (local.ok) {
           setMessage(
-            `Push reînregistrat. Minimalizează app-ul acum — în ${local.delaySec ?? 5}s vine testul Pop on screen. Dacă nu apare popup pe ecran, apasă „Deschide setări Pop on screen”.`
+            trKey('set.pushReReg', {
+              secs: local.delaySec ?? 5,
+              pop: trKey('set.pushPopSettings'),
+            })
           );
         } else if (local.reason === 'channel_importance_low') {
-          setMessage('Push reînregistrat, dar canalul Android e pe importance mică.');
+          setMessage(trKey('set.pushLowChannel'));
           await openBookingChannelSettings();
-          setError(
-            'În setările Android: canal „Cereri programări (popup)” → activează „Pop on screen” / „Pe ecran” / importance Urgent.'
-          );
+          setError(trKey('set.pushAndroidChannel'));
         } else {
           setMessage(
-            'Push reînregistrat. Testul local în bară a eșuat: ' + (local.reason ?? 'necunoscut')
+            trKey('set.pushLocalFail', {
+              reason: local.reason ?? trKey('set.unknown'),
+            })
           );
         }
       } else if (result.reason === 'simulator') {
-        setError('Push funcționează doar pe dispozitiv fizic, nu pe simulator.');
+        setError(trKey('set.pushSim'));
       } else if (result.reason === 'permission_denied') {
-        setError('Permisiunea pentru notificări a fost refuzată. Activeaz-o din setările telefonului.');
+        setError(trKey('set.pushPermDenied'));
       } else if (result.reason === 'web_unsupported') {
-        setError('Push nu e disponibil în browser. Folosește aplicația instalată pe telefon.');
+        setError(trKey('set.pushWeb'));
+      } else if (result.reason === 'expo_go_no_remote_push') {
+        setError(trKey('set.pushExpoGoRemote'));
       } else if (result.reason === 'push_unavailable') {
-        setError(
-          'Push nu e disponibil în Expo Go. Instalează build-ul APK (EAS preview) ca să primești notificări.'
-        );
+        setError(trKey('set.pushExpoGo'));
       } else if (result.reason === 'missing_project_id') {
-        setError('Lipsește projectId EAS. Reinstalează aplicația din ultimul build.');
+        setError(trKey('set.pushEas'));
       } else if (
         result.reason?.toLowerCase().includes('google') ||
         result.reason?.toLowerCase().includes('firebase') ||
@@ -865,11 +863,11 @@ export default function SettingsScreen() {
       ) {
         setError(result.reason);
       } else {
-        setError(result.reason ?? 'Nu s-a putut înregistra token-ul push.');
+        setError(result.reason ?? trKey('set.pushTokenFail'));
       }
       void handleRefreshDiagnostics(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eroare la înregistrarea push.');
+      setError(e instanceof Error ? e.message : trKey('set.pushRegErr'));
     } finally {
       setPushBusy(false);
     }
@@ -882,21 +880,17 @@ export default function SettingsScreen() {
     try {
       const local = await presentStatusBarTestNotification();
       if (local.ok) {
-        setMessage(
-          `Test programat. Minimalizează app-ul ACUM — în ${local.delaySec ?? 5}s trebuie să vezi popup pe ecran (nu doar banner în app).`
-        );
+        setMessage(trKey('set.testScheduled', { secs: local.delaySec ?? 5 }));
       } else if (local.reason === 'permission_denied') {
-        setError('Permisiunea pentru notificări a fost refuzată. Activeaz-o din setările telefonului.');
+        setError(trKey('set.pushPermDenied'));
       } else if (local.reason === 'channel_importance_low') {
         await openBookingChannelSettings();
-        setError(
-          'Canalul e pe importance mică. Activează „Pop on screen” / „Pe ecran” pentru „Cereri programări (popup)”, apoi reîncearcă testul.'
-        );
+        setError(trKey('set.channelLow'));
       } else {
-        setError(local.reason ?? 'Testul local a eșuat.');
+        setError(local.reason ?? trKey('set.localTestFail'));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eroare la testul din bara de status.');
+      setError(e instanceof Error ? e.message : trKey('set.statusBarErr'));
     } finally {
       setPushTestBusy(false);
     }
@@ -907,11 +901,9 @@ export default function SettingsScreen() {
     setMessage(null);
     try {
       await openBookingChannelSettings();
-      setMessage(
-        'În ecranul Android: pe canalul „Cereri programări (popup)” activează „Pop on screen” / „Pe ecran” / „Afișare pe ecran”, apoi revino și rulează testul.'
-      );
+      setMessage(trKey('set.popSteps'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut deschide setările Android.');
+      setError(e instanceof Error ? e.message : trKey('set.popFail'));
     }
   }
 
@@ -939,14 +931,14 @@ export default function SettingsScreen() {
           !d.projectIdPresent
         ) {
           setError(
-            'Diagnostic push: ceva lipsește (vezi rândurile de mai jos). Apasă „Activează / reînregistrează notificările”, apoi verifică din nou.'
+            trKey('set.diagMissing', { enable: trKey('set.pushEnable') })
           );
         } else {
-          setMessage('Diagnostic push: totul e OK. Popup-ul vine și cu aplicația închisă.');
+          setMessage(trKey('set.diagOk'));
         }
       }
     } catch (e) {
-      if (!silent) setError(e instanceof Error ? e.message : 'Eroare la diagnostic push.');
+      if (!silent) setError(e instanceof Error ? e.message : trKey('set.diagErr'));
     } finally {
       if (!silent) setDiagBusy(false);
     }
@@ -956,11 +948,11 @@ export default function SettingsScreen() {
   async function handleUpdateEmail() {
     const next = emailInput.trim();
     if (!next) {
-      setError('Introdu adresa de email.');
+      setError(trKey('set.needEmail'));
       return;
     }
     if (next === (profile?.email ?? authEmail ?? '')) {
-      setMessage('Emailul e deja acesta.');
+      setMessage(trKey('set.emailSame'));
       return;
     }
     setCredBusy(true);
@@ -977,11 +969,9 @@ export default function SettingsScreen() {
         await supabase.from('profiles').update({ email: next }).eq('id', profile.id);
       }
       setAuthEmail(next);
-      setMessage(
-        'Ți-am trimis un link de confirmare pe noul email. Până confirmi, rămâne emailul vechi la autentificare.'
-      );
+      setMessage(trKey('set.emailSent'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut actualiza emailul.');
+      setError(e instanceof Error ? e.message : trKey('set.emailFail'));
     } finally {
       setCredBusy(false);
     }
@@ -989,11 +979,11 @@ export default function SettingsScreen() {
 
   async function handleUpdatePassword() {
     if (newPassword.length < 8) {
-      setError('Parola nouă trebuie să aibă cel puțin 8 caractere.');
+      setError(trKey('set.passShort'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Parolele nu coincid.');
+      setError(trKey('set.passMismatch'));
       return;
     }
     setCredBusy(true);
@@ -1007,9 +997,9 @@ export default function SettingsScreen() {
       }
       setNewPassword('');
       setConfirmPassword('');
-      setMessage('Parola a fost actualizată.');
+      setMessage(trKey('set.passUp'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Nu am putut actualiza parola.');
+      setError(e instanceof Error ? e.message : trKey('set.passFail'));
     } finally {
       setCredBusy(false);
     }
@@ -1026,11 +1016,11 @@ export default function SettingsScreen() {
     return (
       <View style={{ flex: 1 }}>
         <SkeletonScreen
-          title="Setări"
+          title={tr('set.title')}
           subtitle={getAppVersionLabel()}
           onBack={back}
           blocks={5}
-          label="Se încarcă profilul…"
+          label={tr('set.loading')}
         />
       </View>
     );
@@ -1043,24 +1033,24 @@ export default function SettingsScreen() {
   return (
     <View style={{ flex: 1 }}>
       <Screen
-      title="Setări"
+      title={tr('set.title')}
       subtitle={getAppVersionLabel()}
       onBack={back}
       bottomInset={!inBusinessTabs && appMode === 'client' ? spacing['3xl'] + 56 : undefined}
       footer={
         <View style={styles.footer}>
           {error ? (
-            <Callout tone="danger" title="A apărut o eroare">
+            <Callout tone="danger" title={tr('common.errorTitle')}>
               {error}
             </Callout>
           ) : null}
           {message ? (
-            <Callout tone="success" title="Gata">
+            <Callout tone="success" title={tr('common.done')}>
               {message}
             </Callout>
           ) : null}
           <Button
-            label={saving ? 'Se salvează…' : 'Salvează profilul'}
+            label={saving ? tr('cli.saving') : tr('set.saveProfile')}
             icon="checkmark"
             loading={saving}
             onPress={handleSave}
@@ -1080,7 +1070,7 @@ export default function SettingsScreen() {
             onPress={openAvatarPicker}
             disabled={avatarBusy}
             accessibilityRole="button"
-            accessibilityLabel="Schimbă poza de profil"
+            accessibilityLabel={tr('set.changeAvatar')}
             hitSlop={8}
             style={[styles.profileAvatarWrap, avatarBusy && { opacity: 0.6 }]}
           >
@@ -1099,7 +1089,7 @@ export default function SettingsScreen() {
                   source={{ uri: avatarUrl }}
                   style={styles.profileAvatarImg}
                   resizeMode="cover"
-                  accessibilityLabel="Poza de profil"
+                  accessibilityLabel={tr('set.avatarPhoto')}
                 />
               ) : (
                 <Ionicons name="person-outline" size={26} color={t.colors.textMuted} />
@@ -1124,17 +1114,17 @@ export default function SettingsScreen() {
           </Pressable>
           <View style={styles.profileId}>
             <Text style={[styles.profileName, { color: t.colors.text }]} numberOfLines={1}>
-              {displayName.trim() || profile?.display_name || 'Cont'}
+              {displayName.trim() || profile?.display_name || tr('set.account')}
             </Text>
             <Text style={[styles.profileEmail, { color: t.colors.textMuted }]} numberOfLines={1}>
-              {profile?.email || authEmail || 'Fără email'}
+              {profile?.email || authEmail || tr('set.noEmail')}
             </Text>
             <Text style={[styles.profilePhone, { color: t.colors.text }]} numberOfLines={1}>
               {phoneInput.trim()
                 ? phoneInput.trim()
                 : profile?.phone
                   ? formatPhoneDisplay(profile.phone)
-                  : 'Fără telefon'}
+                  : tr('set.noPhone')}
             </Text>
           </View>
         </View>
@@ -1146,7 +1136,7 @@ export default function SettingsScreen() {
               onPress={openLogoPicker}
               disabled={logoBusy || !businessId}
               accessibilityRole="button"
-              accessibilityLabel="Schimbă logo firmă"
+              accessibilityLabel={tr('set.changeLogo')}
               style={[styles.logoWrap, logoBusy && { opacity: 0.6 }]}
             >
               <View
@@ -1164,7 +1154,7 @@ export default function SettingsScreen() {
                     source={{ uri: logoUrl }}
                     style={styles.logoImg}
                     resizeMode="cover"
-                    accessibilityLabel="Logo firmă"
+                    accessibilityLabel={tr('set.logoImg')}
                   />
                 ) : (
                   <Ionicons name="storefront-outline" size={26} color={t.colors.textMuted} />
@@ -1185,11 +1175,9 @@ export default function SettingsScreen() {
               </View>
             </Pressable>
             <View style={styles.logoCopy}>
-              <Text style={[styles.logoTitle, { color: t.colors.text }]}>Logo firmă</Text>
+              <Text style={[styles.logoTitle, { color: t.colors.text }]}>{tr('set.logoTitle')}</Text>
               <Text style={[styles.logoHint, { color: t.colors.textMuted }]}>
-                {businessId
-                  ? 'Separat de poza ta de profil. Apare pe Home business.'
-                  : 'Configurează business-ul ca să poți adăuga logo-ul.'}
+                {businessId ? tr('set.logoHint') : tr('set.setupForLogo')}
               </Text>
             </View>
           </View>
@@ -1201,7 +1189,7 @@ export default function SettingsScreen() {
               onPress={openVideoPicker}
               disabled={videoBusy || !businessId}
               accessibilityRole="button"
-              accessibilityLabel="Video de prezentare"
+              accessibilityLabel={tr('set.promoVideo')}
               style={[styles.logoWrap, videoBusy && { opacity: 0.6 }]}
             >
               <View
@@ -1230,21 +1218,19 @@ export default function SettingsScreen() {
               </View>
             </Pressable>
             <View style={styles.logoCopy}>
-              <Text style={[styles.logoTitle, { color: t.colors.text }]}>Video prezentare</Text>
+              <Text style={[styles.logoTitle, { color: t.colors.text }]}>{tr('set.videoTitle')}</Text>
               <Text style={[styles.logoHint, { color: t.colors.textMuted }]}>
-                {businessId
-                  ? 'Maxim 90 secunde, 50 MB (MP4/MOV/WebM). Clienții îl văd la căutare.'
-                  : 'Configurează business-ul ca să poți adăuga video-ul.'}
+                {businessId ? tr('set.videoHint') : tr('set.setupForVideo')}
               </Text>
             </View>
           </View>
         ) : null}
         {appMode === 'business' && videoUrl && businessId ? (
-          <PromoVideo videoUrl={videoUrl} title="Prezentarea business-ului tău" />
+          <PromoVideo videoUrl={videoUrl} title={tr('set.promoTitle')} />
         ) : null}
 
 <Field
-          label={appMode === 'business' ? 'Telefon business (opțional)' : 'Telefon'}
+          label={appMode === 'business' ? tr('set.bizPhone') : tr('cal.phone')}
           value={phoneInput}
           onChangeText={setPhoneInput}
           placeholder="07xxxxxxxx"
@@ -1253,24 +1239,24 @@ export default function SettingsScreen() {
           icon="call-outline"
           hint={
             appMode === 'business'
-              ? 'Apare pe cartea de vizită ca să te poată suna clienții. Opțional dacă ai deja email pe cont — Salvează profilul ca să rămână.'
-              : 'Sub email, pe profil. Apasă „Salvează profilul” — Home nu mai șterge numărul.'
+              ? tr('set.bizPhoneHint', { save: tr('set.saveProfile') })
+              : tr('set.phoneHint', { save: tr('set.saveProfile') })
           }
         />
         <Field
-          label="Nume afișat"
+          label={tr('set.displayName')}
           value={displayName}
           onChangeText={setDisplayName}
-          placeholder="Numele tău"
+          placeholder={tr('set.displayNamePh')}
           icon="person-outline"
           autoCapitalize="words"
         />
       </View>
 
-      <SectionTitle>Aspect</SectionTitle>
+      <SectionTitle>{tr('set.appearance')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-          Temă Programări Aurora (teal + sky, ca iconul). Alege: ca pe telefon, deschisă sau închisă.
+          {tr('set.themeHint')}
         </Text>
         <Segmented
           value={themePref}
@@ -1279,17 +1265,46 @@ export default function SettingsScreen() {
             void setThemePreference(next);
           }}
           options={[
-            { value: 'system', label: 'Sistem' },
-            { value: 'light', label: 'Deschisă' },
-            { value: 'dark', label: 'Închisă' },
+            { value: 'system', label: tr('set.themeSystem') },
+            { value: 'light', label: tr('set.themeLight') },
+            { value: 'dark', label: tr('set.themeDark') },
           ]}
         />
         <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
           {themePref === 'system'
-            ? 'Urmează tema dispozitivului (light / dark).'
+            ? tr('set.themeSystemDesc')
             : themePref === 'light'
-              ? 'Tema deschisă e forțată, indiferent de telefon.'
-              : 'Tema închisă e forțată, indiferent de telefon.'}
+              ? tr('set.themeLightDesc')
+              : tr('set.themeDarkDesc')}
+        </Text>
+      </View>
+
+      <SectionTitle>{tr('set.language')}</SectionTitle>
+      <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
+        <Segmented
+          value={lang}
+          onChange={(next) => {
+            void setLanguage(next);
+            void (async () => {
+              try {
+                const {
+                  data: { user },
+                } = await supabase.auth.getUser();
+                if (user) {
+                  await supabase.from('profiles').update({ language: next }).eq('id', user.id);
+                }
+              } catch {
+                // best effort — UI language already applied locally
+              }
+            })();
+          }}
+          options={[
+            { value: 'ro', label: 'Română' },
+            { value: 'en', label: 'English' },
+          ]}
+        />
+        <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
+          {tr('set.langHint')}
         </Text>
       </View>
 
@@ -1299,12 +1314,8 @@ export default function SettingsScreen() {
           <>
             <SettingRow
               icon="logo-whatsapp"
-              title="Folosește WhatsApp pe acest număr"
-              description={
-                whatsappEnabled
-                  ? 'WhatsApp e legat de telefonul de mai sus (confirmări și reminder-uri).'
-                  : 'Oprit — telefonul rămâne doar contact, fără mesaje WhatsApp.'
-              }
+              title={tr('set.waUse')}
+              description={whatsappEnabled ? tr('set.waOn') : tr('set.waOff')}
               right={
                 <Toggle
                   value={whatsappEnabled}
@@ -1324,19 +1335,21 @@ export default function SettingsScreen() {
                         });
                     }
                   }}
-                  accessibilityLabel="Folosește WhatsApp pe acest număr"
+                  accessibilityLabel={tr('set.waUse')}
                 />
               }
             />
             {whatsappEnabled ? (
               <>
                 <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-                  Trimite un mesaj test pe {formatPhoneDisplay(
-                    normalizePhoneE164(phoneInput.trim()) ?? profile?.phone ?? null
-                  )}. Necesită Meta sau Twilio pe server.
+                  {tr('set.waTest', {
+                    phone: formatPhoneDisplay(
+                      normalizePhoneE164(phoneInput.trim()) ?? profile?.phone ?? null
+                    ),
+                  })}
                 </Text>
                 <Button
-                  label={waBusy ? 'Se trimite…' : 'Trimite mesaj test'}
+                  label={waBusy ? tr('common.sending') : tr('set.waSendTest')}
                   variant="success"
                   size="md"
                   icon="logo-whatsapp"
@@ -1347,7 +1360,7 @@ export default function SettingsScreen() {
               </>
             ) : (
               <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
-                Activează caseta ca să trimiți pe WhatsApp.
+                {tr('set.waEnableBox')}
               </Text>
             )}
           </>
@@ -1357,95 +1370,81 @@ export default function SettingsScreen() {
               <Ionicons name="logo-whatsapp" size={36} color={t.colors.success} />
             </View>
             <Text style={[styles.panelText, { color: t.colors.text, fontWeight: '700' }]}>
-              WhatsApp nelegat
+              {tr('set.waUnlinked')}
             </Text>
             <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-              Adaugă numărul la „Telefon” mai sus și apasă „Salvează profilul”. Apoi
-              activează caseta WhatsApp ca să trimiți confirmări pe acel număr.
+              {tr('set.waUnlinkedHint', { phone: tr('cal.phone'), save: tr('set.saveProfile') })}
             </Text>
           </View>
         )}
       </View>
 
-      <SectionTitle>Notificări pe care le primești</SectionTitle>
+      <SectionTitle>{tr('set.notifTitle')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         {appMode === 'business' ? (
-          <Callout tone="info" title="Cereri noi">
-            Popup-ul pentru cereri noi vine din Notificări push (mai jos) — nu din aceste casete. Casetele se aplică doar dacă tu ești client la alt business.
+          <Callout tone="info" title={tr('set.newReq')}>
+            {tr('set.newReqHint')}
           </Callout>
         ) : null}
         <SettingRow
           icon="alarm-outline"
-          title={
-            appMode === 'business'
-              ? 'Reminder (când ești client)'
-              : 'Reminder înainte de programare'
-          }
+          title={appMode === 'business' ? tr('set.remBiz') : tr('set.remClient')}
           description={
             appMode === 'business'
               ? notifyReminders
-                ? 'Dacă tu rezervi la alt business, primești reminder cu 24h / 1h înainte.'
-                : 'Oprit pentru programările tale ca client.'
+                ? tr('set.remBizOn')
+                : tr('set.remBizOff')
               : notifyReminders
-                ? 'Primești email/WhatsApp cu 24 de ore și cu 1 oră înainte.'
-                : 'Nu primești reminder înainte de programare.'
+                ? tr('set.remOn')
+                : tr('set.remOff')
           }
           right={
             <Toggle
               value={notifyReminders}
               onValueChange={setNotifyReminders}
-              accessibilityLabel="Reminder înainte de programare"
+              accessibilityLabel={tr('set.remClient')}
             />
           }
         />
         <SettingRow
           icon="checkmark-circle-outline"
-          title={
-            appMode === 'business'
-              ? 'Decizie (când ești client)'
-              : 'Confirmare sau respingere'
-          }
+          title={appMode === 'business' ? tr('set.decBiz') : tr('set.decClient')}
           description={
             appMode === 'business'
               ? notifyDecision
-                ? 'Mesaj când un alt business îți aprobă sau respinge cererea.'
-                : 'Oprit — nu primești mesaj la decizia altui business.'
+                ? tr('set.decBizOn')
+                : tr('set.decBizOff')
               : notifyDecision
-                ? 'Primești mesaj când business-ul aprobă sau respinge cererea ta.'
-                : 'Nu primești mesaj la aprobare sau respingere.'
+                ? tr('set.decOn')
+                : tr('set.decOff')
           }
           right={
             <Toggle
               value={notifyDecision}
               onValueChange={setNotifyDecision}
-              accessibilityLabel="Confirmare sau respingere"
+              accessibilityLabel={tr('set.decClient')}
             />
           }
         />
         <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
           {appMode === 'business'
-            ? 'Salvează profilul pentru casetele de mai sus. Cererea nouă pe salonul tău se anunță prin push, independent de aceste opțiuni.'
-            : 'Salvează profilul pentru a aplica schimbările. WhatsApp folosește caseta din secțiunea WhatsApp și numărul de la Telefon.'}
+            ? tr('set.notifSaveBiz', { save: tr('set.saveProfile') })
+            : tr('set.notifSaveClient', { save: tr('set.saveProfile') })}
         </Text>
       </View>
 
-      <SectionTitle>Notificări push</SectionTitle>
+      <SectionTitle>{tr('set.pushTitle')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         {Constants.appOwnership === 'expo' ? (
           <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-            Rulezi în Expo Go: notificările cu aplicația închisă nu funcționează aici
-            (limită Expo Go, nu e o eroare). Primești vibrație + banner în app când vine
-            o cerere nouă, cât timp app-ul e deschis. Pentru popup cu app-ul închis ai
-            nevoie de build-ul nativ (APK pe Android / TestFlight pe iPhone).
+            {tr('set.expoGo')}
           </Text>
         ) : null}
         <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-          Ca popup-ul să vină și cu aplicația închisă complet, toate trebuie să fie ✅:
-          permisiunea sistem, canalul popup, token înregistrat în baza de date și build
-          APK cu Firebase (actualizarea OTA nu aduce Firebase).
+          {tr('set.pushChecklist')}
         </Text>
         <Button
-          label={pushBusy ? 'Se înregistrează…' : 'Activează / reînregistrează notificările'}
+          label={pushBusy ? tr('set.pushBusy') : tr('set.pushEnable')}
           variant="secondary"
           size="md"
           icon="notifications-outline"
@@ -1455,7 +1454,7 @@ export default function SettingsScreen() {
         />
         {Platform.OS === 'android' ? (
           <Button
-            label="Deschide setări Pop on screen"
+            label={tr('set.pushPopSettings')}
             variant="ghost"
             size="md"
             icon="settings-outline"
@@ -1464,7 +1463,7 @@ export default function SettingsScreen() {
           />
         ) : null}
         <Button
-          label={pushTestBusy ? 'Se trimite test…' : 'Test popup (minimalizează în 5s)'}
+          label={pushTestBusy ? tr('set.pushTestBusy') : tr('set.pushTest')}
           variant="ghost"
           size="md"
           icon="phone-portrait-outline"
@@ -1474,8 +1473,8 @@ export default function SettingsScreen() {
         />
         <SettingRow
           icon={pushDiagOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
-          title={pushDiagOpen ? 'Ascunde diagnostic push' : 'Arată diagnostic push'}
-          description="Detalii tehnice (permisiune, canal, token) — de obicei nu ai nevoie."
+          title={pushDiagOpen ? tr('set.diagHide') : tr('set.diagShow')}
+          description={tr('set.diagHint')}
           onPress={() => setPushDiagOpen((v) => !v)}
         />
         {pushDiagOpen ? (
@@ -1483,29 +1482,26 @@ export default function SettingsScreen() {
             {diag ? (
               <View style={{ gap: 6 }}>
                 <Text style={[styles.panelText, { color: t.colors.text }]}>
-                  {diag.permission === 'granted' ? '✅' : '❌'} Permisiune notificări: {diag.permission}
+                  {diag.permission === 'granted' ? '✅' : '❌'}{' '}{tr('set.diagPerm', { v: diag.permission })}
                 </Text>
                 <Text style={[styles.panelText, { color: t.colors.text }]}>
-                  {diag.channelOk ? '✅' : '❌'} Canal popup (Pop on screen):{' '}
-                  {diag.channelOk ? 'OK' : 'lipsește / importance mică'}
+                  {diag.channelOk ? '✅' : '❌'}{' '}{tr('set.diagChannel', { v: diag.channelOk ? tr('set.ok') : tr('set.missingLow') })}
                 </Text>
                 <Text style={[styles.panelText, { color: t.colors.text }]}>
-                  {(diag.tokensInDb ?? 0) > 0 ? '✅' : '❌'} Token înregistrat în DB:{' '}
-                  {diag.tokensInDb == null ? 'necunoscut' : diag.tokensInDb}
+                  {(diag.tokensInDb ?? 0) > 0 ? '✅' : '❌'}{' '}{tr('set.diagToken', { v: diag.tokensInDb == null ? tr('set.unknown') : diag.tokensInDb })}
                 </Text>
                 <Text style={[styles.panelText, { color: t.colors.text }]}>
-                  {diag.projectIdPresent ? '✅' : '❌'} Config EAS projectId:{' '}
-                  {diag.projectIdPresent ? 'OK' : 'lipsește — reinstalează din ultimul build'}
+                  {diag.projectIdPresent ? '✅' : '❌'}{' '}{tr('set.diagEas', { v: diag.projectIdPresent ? tr('set.ok') : tr('set.easMissing') })}
                 </Text>
                 {diag.isDevice === false ? (
                   <Text style={[styles.panelText, { color: t.colors.text }]}>
-                    ❌ Rulezi pe simulator — push-ul merge doar pe telefon fizic.
+                    ❌ {tr('set.diagSim')}
                   </Text>
                 ) : null}
               </View>
             ) : null}
             <Button
-              label={diagBusy ? 'Se verifică…' : 'Verifică status push'}
+              label={diagBusy ? tr('set.diagBusy') : tr('set.diagCheck')}
               variant="ghost"
               size="md"
               icon="checkmark-circle-outline"
@@ -1514,45 +1510,41 @@ export default function SettingsScreen() {
               onPress={() => void handleRefreshDiagnostics()}
             />
             <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-              {Platform.OS === 'ios'
-                ? 'Pe iPhone nu există „Pop on screen” — notificarea vine ca banner în partea de sus dacă ai permisiunile acordate (inclusiv „Time Sensitive”, dacă ți se cere). Dacă testul local apare dar cererile noi nu, lipsește cheia APNs în EAS sau build-ul e prea vechi.'
-                : 'Cont business: cererea apare în app din baza de date; popup-ul pe ecran („Pop on screen”) e setare Android pe canalul de notificări — pe multe telefoane e oprit implicit.'}
+              {Platform.OS === 'ios' ? tr('set.pushIosNote') : tr('set.pushAndroidNote')}
               {'\n\n'}
-              {Platform.OS === 'ios'
-                ? 'Pași: 1) Activează notificările 2) „Test popup” și blochează ecranul imediat (5s) 3) Dacă testul local apare dar cererile noi nu, verifică cheia APNs în EAS și webhook-ul Supabase.'
-                : 'Pași: 1) Activează notificările 2) „Deschide setări Pop on screen” → activează Pe ecran / Urgent 3) „Test popup” și minimalizează app-ul imediat (5s). Dacă testul local apare pe ecran dar cererile noi nu, verifică webhook-ul Supabase (notify-pending-push la INSERT pe appointments) și cheia FCM V1 pe EAS.'}
+              {Platform.OS === 'ios' ? tr('set.pushIosSteps') : tr('set.pushAndroidSteps')}
             </Text>
           </>
         ) : null}
       </View>
 
-      <SectionTitle>Tip cont</SectionTitle>
+      <SectionTitle>{tr('set.accountType')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         {appMode === 'business' ? (
           <Badge tone="accent" icon="storefront-outline">
-            Cont business
+            {tr('set.bizAccount')}
           </Badge>
         ) : appMode === 'client' ? (
           <Badge tone="info" icon="person-outline">
-            Cont client
+            {tr('set.clientAccount')}
           </Badge>
         ) : (
           <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-            Tipul de cont se încarcă…
+            {tr('set.accountLoading')}
           </Text>
         )}
       </View>
 
       {appMode === 'business' ? (
         <>
-          <SectionTitle>Business</SectionTitle>
+          <SectionTitle>{tr('set.business')}</SectionTitle>
           {!businessId ? (
             <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
-              <Callout tone="warning" title="Business neconfigurat">
-                Completează numele, programul și locația ca să poți primi cereri și să afișezi QR-ul.
+              <Callout tone="warning" title={tr('set.bizNotSetup')}>
+                {tr('set.bizNotSetupHint')}
               </Callout>
               <Button
-                label="Configurează business-ul"
+                label={tr('qr.setupBiz')}
                 icon="construct-outline"
                 onPress={() => router.push('/(app)/business/setup' as never)}
               />
@@ -1561,30 +1553,30 @@ export default function SettingsScreen() {
             <>
               <SettingRow
                 icon="construct-outline"
-                title="Configurare"
-                description={bizName ? `Editează ${bizName}` : 'Program, locație, reguli'}
+                title={tr('set.setup')}
+                description={bizName ? tr('set.editBiz', { name: bizName }) : tr('set.setupDesc')}
                 onPress={() => router.push('/(app)/business/setup' as never)}
               />
               <SettingRow
                 icon="qr-code-outline"
-                title="Cod QR"
-                description={bizPublicCode ? `Cod public ${bizPublicCode}` : 'Partajează linkul de programare'}
+                title={tr('qr.title')}
+                description={bizPublicCode ? tr('set.pubCodeRow', { code: bizPublicCode }) : tr('set.shareLink')}
                 onPress={() => router.push('/(app)/business/qr' as never)}
               />
               <SettingRow
                 icon="cut-outline"
-                title="Servicii"
-                description={hasServices ? 'Gestionează oferta' : 'Adaugă primul serviciu'}
+                title={tr('svc.title')}
+                description={hasServices ? tr('set.manageOffer') : tr('set.addFirstService')}
                 onPress={() => router.push('/(app)/business/services' as never)}
               />
               <SettingRow
                 icon="people-outline"
-                title="Echipă"
-                description={hasStaff ? 'Specialiști și program' : 'Adaugă specialiști'}
+                title={tr('team.title')}
+                description={hasStaff ? tr('set.teamDesc') : tr('set.addStaff')}
                 onPress={() => router.push('/(app)/business/staff' as never)}
               />
 
-              <SectionTitle>Checklist carte de vizită</SectionTitle>
+              <SectionTitle>{tr('set.checklist')}</SectionTitle>
               <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
                 {(() => {
                   const missing = missingVisitCardFields({
@@ -1595,26 +1587,26 @@ export default function SettingsScreen() {
                     publicCode: bizPublicCode,
                   });
                   const extras: string[] = [];
-                  if (!logoUrl) extras.push('logo firmă');
-                  if (!videoUrl) extras.push('video prezentare (opțional)');
-                  if (!hasServices) extras.push('cel puțin un serviciu activ');
-                  if (!hasStaff) extras.push('cel puțin un specialist activ');
-                  const allMissing = [...missing, ...extras.filter((e) => e !== 'video prezentare (opțional)')];
+                  if (!logoUrl) extras.push(tr('set.extraLogo'));
+                  if (!videoUrl) extras.push(tr('set.extraVideo'));
+                  if (!hasServices) extras.push(tr('set.extraService'));
+                  if (!hasStaff) extras.push(tr('set.extraStaff'));
+                  const allMissing = [...missing, ...extras.filter((e) => e !== tr('set.extraVideo'))];
                   if (allMissing.length === 0) {
                     return (
                       <Text style={[styles.panelText, { color: t.colors.success }]}>
-                        ✅ Cartea de vizită e completă. Clienții te găsesc cu telefon, adresă și QR.
+                        {tr('set.cardComplete')}
                       </Text>
                     );
                   }
                   return (
                     <>
                       <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-                        Mai lipsește: {allMissing.join(', ')}.
+                        {tr('set.missingList', { list: allMissing.join(', ') })}
                       </Text>
-                      {!missing.includes('numărul de telefon (Setări)') ? null : (
+                      {!missing.includes(tr('card.missingPhone')) ? null : (
                         <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
-                          Telefonul e opțional pe cont, dar fără el clienții nu te pot suna din cartea de vizită.
+                          {tr('set.phoneOptionalNote')}
                         </Text>
                       )}
                     </>
@@ -1626,21 +1618,21 @@ export default function SettingsScreen() {
         </>
       ) : null}
 
-      <SectionTitle>Email și parolă</SectionTitle>
+      <SectionTitle>{tr('set.creds')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         <Field
           label="Email"
           value={emailInput}
           onChangeText={setEmailInput}
-          placeholder="email@exemplu.ro"
+          placeholder={tr('set.emailPh')}
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"
           icon="mail-outline"
-          hint="Schimbarea emailului cere confirmare pe adresa nouă."
+          hint={tr('set.emailHint')}
         />
         <Button
-          label={credBusy ? 'Se actualizează…' : 'Actualizează emailul'}
+          label={credBusy ? tr('set.updating') : tr('set.updateEmail')}
           variant="secondary"
           size="md"
           icon="mail-outline"
@@ -1649,25 +1641,25 @@ export default function SettingsScreen() {
           onPress={() => void handleUpdateEmail()}
         />
         <Field
-          label="Parolă nouă"
+          label={tr('set.newPass')}
           value={newPassword}
           onChangeText={setNewPassword}
-          placeholder="Minim 8 caractere"
+          placeholder={tr('set.passPh')}
           secureTextEntry
           icon="lock-closed-outline"
           autoCapitalize="none"
         />
         <Field
-          label="Confirmă parola"
+          label={tr('set.confirmPass')}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          placeholder="Rescrie parola"
+          placeholder={tr('set.confirmPassPh')}
           secureTextEntry
           icon="lock-closed-outline"
           autoCapitalize="none"
         />
         <Button
-          label={credBusy ? 'Se actualizează…' : 'Schimbă parola'}
+          label={credBusy ? tr('set.updating') : tr('set.changePass')}
           variant="secondary"
           size="md"
           icon="key-outline"
@@ -1677,26 +1669,26 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <SectionTitle>Cont</SectionTitle>
+      <SectionTitle>{tr('set.account')}</SectionTitle>
       {!inBusinessTabs && appMode === 'client' ? (
         <SettingRow
           icon="chatbubbles-outline"
-          title="Mesaje"
-          description="Chat cu business-urile tale"
+          title={tr('chat.title')}
+          description={tr('set.chatDesc')}
           onPress={() => router.push('/(app)/chat' as never)}
         />
       ) : null}
       <SettingRow
         icon="log-out-outline"
-        title="Deconectare"
-        description="Te poți întoarce oricând cu aceleași date de autentificare."
+        title={tr('set.logout')}
+        description={tr('set.logoutHint')}
         onPress={handleLogout}
         danger
       />
 
       <Text
         style={[styles.versionFooter, { color: t.colors.textFaint }]}
-        accessibilityLabel={`Versiune ${getAppVersionLabel()}`}
+        accessibilityLabel={tr('set.version', { v: getAppVersionLabel() })}
       >
         {getAppVersionLabel()}
       </Text>

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Callout, EmptyState, ListLoadingScreen, Screen, useTheme } from '@/components/ui';
+import { trKey, useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { presentLocalChatNotification } from '@/lib/notifications';
 import { formatLocalTime } from '@/lib/timezone';
@@ -37,6 +38,7 @@ function Bubble({ message, isMe, timezone }: { message: ChatMessage; isMe: boole
 }
 export default function ChatThread({ conversationId, isClient }: { conversationId: string; isClient: boolean }) {
   const t = useTheme();
+  const tr = useT();
   const back = useBack();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,11 +59,11 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const load = useCallback(async () => {
     setError(null);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); setError('Nu ești autentificat.'); return; }
+    if (!user) { setLoading(false); setError(trKey('auth.notSignedIn')); return; }
     userIdRef.current = user.id;
     const { data: conv, error: convErr } = await supabase.from('chat_conversations').select('*').eq('id', conversationId).maybeSingle();
     if (convErr) { setLoading(false); setError(convErr.message); return; }
-    if (!conv) { setLoading(false); setError('Conversația nu mai există sau nu ai acces la ea.'); return; }
+    if (!conv) { setLoading(false); setError(trKey('chat.noAccess')); return; }
     let name = isClient ? 'Business' : 'Client';
     let tz = 'Europe/Bucharest';
     if (isClient) {
@@ -98,16 +100,16 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     const body = draft.trim(); if (!body || sending) return;
     setSending(true); setError(null);
     const { message, error: err } = await sendMessage(conversationId, body);
-    if (err) setError(err === 'empty_message' ? 'Mesajul trebuie să conțină cel puțin un simbol.' : err === 'message_too_long' ? 'Mesajul depășește 4000 de caractere.' : `Eroare la trimitere: ${err}`);
+    if (err) setError(err === 'empty_message' ? trKey('chat.msgEmpty') : err === 'message_too_long' ? trKey('chat.msgTooLong') : trKey('chat.sendError', { err }));
     else if (message?.id) { seenIdsRef.current.add(message.id); setMessages((prev) => [...prev, message]); setDraft(''); scrollToBottom(true); }
     setSending(false); Keyboard.dismiss();
   }
-  if (loading && messages.length === 0) return <ListLoadingScreen title={counterpartyName} subtitle={isClient ? 'Mesaje cu business' : 'Mesaje cu clientul'} onBack={back} label="Se încarcă conversația…" />;
+  if (loading && messages.length === 0) return <ListLoadingScreen title={counterpartyName} subtitle={isClient ? tr('chat.withBusiness') : tr('chat.withClient')} onBack={back} label={tr('chat.loadingConvo')} />;
   const composer = (
     <View style={[styles.inputRow, { borderTopWidth: 1, borderTopColor: t.colors.border }]}>
       <TextInput
         style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
-        placeholder="Scrie un mesaj…"
+        placeholder={tr('chat.writeMessage')}
         placeholderTextColor={t.colors.textMuted}
         value={draft}
         onChangeText={setDraft}
@@ -127,7 +129,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         ]}
         onPress={onSend}
         disabled={sending || !draft.trim()}
-        accessibilityLabel="Trimite mesajul"
+        accessibilityLabel={tr('chat.sendMessageA11y')}
       >
         <Ionicons
           name="send-outline"
@@ -140,7 +142,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
 
   return (
     <Screen
-      title={isClient ? 'Chat' : 'Chat cu clientul'}
+      title={isClient ? 'Chat' : tr('chat.clientChatTitle')}
       subtitle={counterpartyName}
       onBack={back}
       scroll={false}
@@ -151,20 +153,20 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       <View style={styles.body}>
         {error ? (
           <View style={styles.centerContent}>
-            <Callout tone="danger" title="A apărut o eroare">
+            <Callout tone="danger" title={tr('chat.errorTitle')}>
               {error}
             </Callout>
             <View style={styles.centerRow}>
-              <Button variant="secondary" label="Incarca din nou" onPress={load} />
+              <Button variant="secondary" label={tr('ui.retryDefault')} onPress={load} />
             </View>
           </View>
         ) : messages.length === 0 ? (
           <View style={styles.centerContent}>
             <EmptyState
               icon="chatbubbles-outline"
-              title="Niciun mesaj încă"
-              description="Fiecare parte poate trimite primul mesaj."
-              action={<Button variant="secondary" label="Intoarce" onPress={back} />}
+              title={tr('chat.noMessages')}
+              description={tr('chat.firstMessageHint')}
+              action={<Button variant="secondary" label={tr('chat.goBack')} onPress={back} />}
             />
           </View>
         ) : (

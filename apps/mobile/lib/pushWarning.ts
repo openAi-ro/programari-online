@@ -1,3 +1,5 @@
+import { trKey } from './i18n';
+
 /** Mesaj pentru client când popup-urile push nu pot ajunge. Pur — testabil în node. */
 
 export type PushWarning = {
@@ -16,24 +18,25 @@ export function pushWarningForResult(input: {
   if (reason === 'simulator') return null;
   if (reason === 'permission_denied') {
     return {
-      title: 'Activează notificările',
-      description:
-        'Ai oprit notificările, deci răspunsul business-ului (aprobat/respins) nu-ți apare ca popup. Activează-le din setările telefonului.',
+      title: trKey('push.deniedTitle'),
+      description: trKey('push.deniedDesc'),
       action: 'settings',
     };
   }
-  if (reason === 'web_unsupported' || reason.includes('Expo Go')) {
+  if (
+    reason === 'web_unsupported' ||
+    reason === 'expo_go_no_remote_push' ||
+    reason.includes('Expo Go')
+  ) {
     return {
-      title: 'Instalează aplicația pentru popup-uri',
-      description:
-        'Pe web / Expo Go nu ajung notificări push. Instalează APK-ul ca răspunsurile business-ului să-ți apară pe ecran.',
+      title: trKey('push.installTitle'),
+      description: trKey('push.installDesc'),
       action: 'install',
     };
   }
   return {
-    title: 'Notificările nu sunt active',
-    description:
-      'Nu am putut înregistra acest telefon pentru popup-uri. Verifică notificările din Setări.',
+    title: trKey('push.offTitle'),
+    description: trKey('push.offDesc'),
     action: null,
   };
 }

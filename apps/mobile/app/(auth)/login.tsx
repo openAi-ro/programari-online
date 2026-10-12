@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { Screen, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { InstallQrCard } from '@/components/InstallQrCard';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { getAppVersionLabel } from '@/lib/appVersion';
@@ -10,6 +11,7 @@ import { peekPendingAuthRedirect } from '@/lib/auth-redirect';
 
 export default function LoginScreen() {
   const t = useTheme();
+  const tr = useT();
   const pendingBook = peekPendingAuthRedirect();
 
   return (
@@ -28,7 +30,7 @@ export default function LoginScreen() {
         <Pressable
           onPress={() => router.replace(pendingBook as never)}
           accessibilityRole="button"
-          accessibilityLabel="Înapoi la programare"
+          accessibilityLabel={tr('auth.backToBooking')}
           style={({ pressed }) => [
             styles.backBook,
             {
@@ -40,14 +42,14 @@ export default function LoginScreen() {
         >
           <Ionicons name="arrow-back" size={18} color={t.colors.accentSoftText} />
           <Text style={[styles.backBookText, { color: t.colors.accentSoftText }]}>
-            Înapoi la programare
+            {tr('auth.backToBooking')}
           </Text>
         </Pressable>
       ) : null}
       <Pressable
         onPress={() => router.push('/(auth)/client')}
         accessibilityRole="button"
-        accessibilityLabel="Creează sau deschide cont client"
+        accessibilityLabel={tr('auth.openClientAccount')}
         style={({ pressed }) => [
           styles.roleCard,
           {
@@ -62,7 +64,7 @@ export default function LoginScreen() {
           <Ionicons name="person-outline" size={26} color={t.colors.accentSoftText} />
         </View>
         <View style={styles.flex}>
-          <Text style={[styles.roleTitle, { color: t.colors.accent }]}>Creează cont client</Text>
+          <Text style={[styles.roleTitle, { color: t.colors.accent }]}>{tr('auth.createClientAccount')}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={t.colors.textFaint} />
       </Pressable>
@@ -70,7 +72,7 @@ export default function LoginScreen() {
       <Pressable
         onPress={() => router.push('/(auth)/business')}
         accessibilityRole="button"
-        accessibilityLabel="Creează sau deschide cont business"
+        accessibilityLabel={tr('auth.openBusinessAccount')}
         style={({ pressed }) => [
           styles.roleCard,
           {
@@ -85,7 +87,7 @@ export default function LoginScreen() {
           <Ionicons name="storefront-outline" size={26} color={t.colors.accentSoftText} />
         </View>
         <View style={styles.flex}>
-          <Text style={[styles.roleTitle, { color: t.colors.accent }]}>Creează cont business</Text>
+          <Text style={[styles.roleTitle, { color: t.colors.accent }]}>{tr('auth.createBusinessAccount')}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={t.colors.textFaint} />
       </Pressable>

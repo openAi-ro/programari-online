@@ -25,6 +25,9 @@ assert(denied?.action === 'settings', 'permisiune refuzată → setări');
 const expo = pushWarningForResult({ token: null, reason: 'Expo Go (SDK 53+) nu suporta push' });
 assert(expo?.action === 'install', 'Expo Go → instalare APK');
 
+const expoCode = pushWarningForResult({ token: null, reason: 'expo_go_no_remote_push' });
+assert(expoCode?.action === 'install', 'expo_go_no_remote_push → instalare APK');
+
 const web = pushWarningForResult({ token: null, reason: 'web_unsupported' });
 assert(web?.action === 'install', 'web → instalare APK');
 

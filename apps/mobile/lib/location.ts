@@ -1,5 +1,6 @@
 import { Linking, Platform, Share } from 'react-native';
 
+import { trKey } from './i18n';
 import type { BusinessProfile } from '@/lib/types';
 
 export type BusinessLocation = {
@@ -175,7 +176,7 @@ export async function openDrive(location: BusinessLocation): Promise<boolean> {
 export async function openDriveChooser(location: BusinessLocation): Promise<boolean> {
   if (!hasLocation(location)) return false;
 
-  const addressLabel = formatAddress(location) ?? 'Navighează către business';
+  const addressLabel = formatAddress(location) ?? trKey('loc.navigateTo');
   const httpsUrl = buildHttpsDriveUrl(location);
   const appleUrl = buildAppleMapsUrl(location);
   const geoUrl = buildAndroidGeoDriveUrl(location);

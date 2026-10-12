@@ -18,6 +18,8 @@ import {
   messageApproved,
   messageRejected,
   notifyClientChannels,
+  notifyLocale,
+  parseNotifyLang,
 } from '../_shared/notify.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
@@ -39,11 +41,12 @@ type Payload = {
   old_record?: AppointmentRow | null;
   id?: string;
   appointment_id?: string;
+  lang?: string;
 };
 
-function formatWhen(iso: string, timezone: string): string {
+function formatWhen(iso: string, timezone: string, lang: 'ro' | 'en'): string {
   try {
-    return new Intl.DateTimeFormat('ro-RO', {
+    return new Intl.DateTimeFormat(notifyLocale(lang), {
       timeZone: timezone,
       dateStyle: 'medium',
       timeStyle: 'short',
@@ -132,24 +135,28 @@ Deno.serve(async (req) => {
 
   const businessName = business?.name ?? 'business';
   const timezone = business?.timezone ?? 'Europe/Bucharest';
-  const whenLabel = formatWhen(live.start_at, timezone);
-
-  const copy =
-    live.status === 'approved'
-      ? messageApproved(businessName, whenLabel)
-      : messageRejected(businessName, whenLabel);
 
   let wantsDecision = true;
   let wantsWhatsapp = true;
+  let clientLang: string | undefined;
   if (live.client_user_id) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('notify_decision, notify_whatsapp')
+      .select('notify_decision, notify_whatsapp, language')
       .eq('id', live.client_user_id)
       .maybeSingle();
     wantsDecision = profile?.notify_decision !== false;
     wantsWhatsapp = profile?.notify_whatsapp !== false;
+    clientLang = (profile as { language?: string } | null)?.language;
   }
+
+  const lang = parseNotifyLang(clientLang ?? payload.lang);
+  const whenLabel = formatWhen(live.start_at, timezone, lang);
+
+  const copy =
+    live.status === 'approved'
+      ? messageApproved(businessName, whenLabel, lang)
+      : messageRejected(businessName, whenLabel, lang);
 
   const results = wantsDecision
     ? await notifyClientChannels({

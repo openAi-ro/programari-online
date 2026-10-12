@@ -10,15 +10,16 @@ import { formatAddress, type BusinessLocation } from '@/lib/location';
 import { formatPhoneDisplay } from '@/lib/phone';
 import type { DayHours, DayKey, WorkingHours } from '@/lib/types';
 import { formatPublicLocation } from '@/lib/visitCard';
+import { trKey, useT, type TrKey } from '@/lib/i18n';
 
-const DAY_ORDER: { key: DayKey; short: string }[] = [
-  { key: 'mon', short: 'Lun' },
-  { key: 'tue', short: 'Mar' },
-  { key: 'wed', short: 'Mie' },
-  { key: 'thu', short: 'Joi' },
-  { key: 'fri', short: 'Vin' },
-  { key: 'sat', short: 'Sâm' },
-  { key: 'sun', short: 'Dum' },
+const DAY_ORDER: { key: DayKey; dayKey: TrKey }[] = [
+  { key: 'mon', dayKey: 'days.mon' },
+  { key: 'tue', dayKey: 'days.tue' },
+  { key: 'wed', dayKey: 'days.wed' },
+  { key: 'thu', dayKey: 'days.thu' },
+  { key: 'fri', dayKey: 'days.fri' },
+  { key: 'sat', dayKey: 'days.sat' },
+  { key: 'sun', dayKey: 'days.sun' },
 ];
 
 function daySignature(day: DayHours): string {
@@ -37,12 +38,12 @@ export function summarizeWorkingHours(hours: WorkingHours): string[] {
     while (i < DAY_ORDER.length && daySignature(hours[DAY_ORDER[i].key]) === sig) {
       i += 1;
     }
-    const from = DAY_ORDER[start].short;
-    const to = DAY_ORDER[i - 1].short;
+    const from = trKey(DAY_ORDER[start].dayKey);
+    const to = trKey(DAY_ORDER[i - 1].dayKey);
     const label = start === i - 1 ? from : `${from}–${to}`;
     const day = hours[DAY_ORDER[start].key];
     if (day.closed) {
-      lines.push(`${label}: închis`);
+      lines.push(`${label}: ${trKey('card.closedDay')}`);
     } else {
       lines.push(`${label}: ${day.start}–${day.end}`);
     }
@@ -91,11 +92,12 @@ export function BusinessVisitCard({
   publicMode = false,
 }: BusinessVisitCardProps) {
   const t = useTheme();
+  const tr = useT();
   const address = formatAddress(location);
   const publicPlace = formatPublicLocation(location.city, location.county);
   const hoursLines = summarizeWorkingHours(workingHours);
   const qrValue = publicCode ? getWebBookingUrl(publicCode) : '';
-  const displayName = name.trim() || 'Business fără nume';
+  const displayName = name.trim() || tr('card.unnamedBusiness');
   const phoneLabel = phone ? formatPhoneDisplay(phone) : null;
 
   return (
@@ -115,7 +117,7 @@ export function BusinessVisitCard({
             <Image
               source={{ uri: logoUrl }}
               style={[styles.logo, { borderColor: t.colors.border }]}
-              accessibilityLabel={`Logo ${displayName}`}
+              accessibilityLabel={tr('card.logoOf', { name: displayName })}
             />
           ) : (
             <View style={[styles.mark, { backgroundColor: t.colors.accentSoft }]}>
@@ -147,7 +149,7 @@ export function BusinessVisitCard({
               </Text>
             ) : (
               <Text style={[styles.meta, { color: t.colors.warning }]}>
-                Completează adresa pentru hartă
+                {tr('card.completeAddress')}
               </Text>
             )}
           </View>
@@ -174,7 +176,7 @@ export function BusinessVisitCard({
               <View style={[styles.qrPlaceholder, { width: qrSize, height: qrSize }]}>
                 <Ionicons name="qr-code-outline" size={28} color={t.colors.textFaint} />
                 <Text style={[styles.qrHint, { color: t.colors.textFaint }]}>
-                  Salvează pentru QR
+                  {tr('card.saveForQr')}
                 </Text>
               </View>
             )}
@@ -184,7 +186,7 @@ export function BusinessVisitCard({
               style={[styles.qrCaption, { color: t.colors.textFaint }]}
               numberOfLines={2}
             >
-              Scan QR → programare · cod {publicCode}
+              {tr('card.scanQr', { code: publicCode })}
             </Text>
           ) : null}
         </View>
@@ -197,7 +199,7 @@ export function BusinessVisitCard({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            phoneLabel ? `Sună ${phoneLabel}` : 'Telefon lipsă — adaugă din Setări'
+            phoneLabel ? tr('card.callNumber', { number: phoneLabel }) : tr('card.phoneMissing')
           }
           disabled={!phone}
           onPress={() => {
@@ -212,7 +214,7 @@ export function BusinessVisitCard({
             <Ionicons name="call" size={16} color={t.colors.warm} />
           </View>
           <View style={styles.rowBody}>
-            <Text style={[styles.rowLabel, { color: t.colors.textMuted }]}>Telefon</Text>
+            <Text style={[styles.rowLabel, { color: t.colors.textMuted }]}>{tr('card.phone')}</Text>
             <Text
               style={[
                 styles.rowValue,
@@ -220,7 +222,7 @@ export function BusinessVisitCard({
               ]}
               numberOfLines={1}
             >
-              {phoneLabel ?? 'Adaugă telefonul din Setări'}
+              {phoneLabel ?? tr('card.addPhoneSettings')}
             </Text>
           </View>
         </Pressable>
@@ -232,7 +234,7 @@ export function BusinessVisitCard({
               <Ionicons name="time" size={16} color={t.colors.accent} />
             </View>
             <View style={styles.rowBody}>
-              <Text style={[styles.rowLabel, { color: t.colors.textMuted }]}>Program</Text>
+              <Text style={[styles.rowLabel, { color: t.colors.textMuted }]}>{tr('card.hours')}</Text>
               {hoursLines.map((line) => (
                 <Text
                   key={line}
@@ -249,7 +251,7 @@ export function BusinessVisitCard({
 
       {videoUrl ? (
         <View style={styles.videoWrap}>
-          <PromoVideo videoUrl={videoUrl} title={`Prezentare ${displayName}`} />
+          <PromoVideo videoUrl={videoUrl} title={tr('card.presentation', { name: displayName })} />
         </View>
       ) : null}
     </View>
@@ -265,11 +267,11 @@ export function missingVisitCardFields(input: {
   publicCode: string | null;
 }): string[] {
   const missing: string[] = [];
-  if (!input.name.trim()) missing.push('denumirea firmei');
-  if (!input.phone) missing.push('numărul de telefon (Setări)');
-  if (!input.hasAddress) missing.push('adresa (județ / localitate / stradă)');
-  if (!input.hasCoords) missing.push('marcajul pe hartă (pin)');
-  if (!input.publicCode) missing.push('salvează business-ul pentru codul QR');
+  if (!input.name.trim()) missing.push(trKey('card.missingName'));
+  if (!input.phone) missing.push(trKey('card.missingPhone'));
+  if (!input.hasAddress) missing.push(trKey('card.missingAddress'));
+  if (!input.hasCoords) missing.push(trKey('card.missingPin'));
+  if (!input.publicCode) missing.push(trKey('card.missingSave'));
   return missing;
 }
 

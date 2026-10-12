@@ -32,6 +32,7 @@ import {
 import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import { formatAddress, locationFromBusiness } from '@/lib/location';
+import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { markWaitlistBooked } from '@/lib/notify-client';
 import { normalizeWalkinContact } from '@/lib/walkinRules';
@@ -45,6 +46,7 @@ import type { BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
 export default function PublicBookScreen() {
   const t = useTheme();
   const goBack = useBack();
+  const tr = useT();
   const { publicCode } = useLocalSearchParams<{ publicCode: string }>();
   const code = String(publicCode ?? '').trim();
   const [session, setSession] = useState<Session | null>(null);
@@ -106,7 +108,7 @@ export default function PublicBookScreen() {
     (async () => {
       setError(null);
       if (!code) {
-        setError('Cod business invalid.');
+        setError(trKey('book.badCode'));
         setLoading(false);
         return;
       }
@@ -121,7 +123,7 @@ export default function PublicBookScreen() {
         return;
       }
       if (!data) {
-        setError('Business-ul nu a fost găsit.');
+        setError(trKey('book.notFound'));
         setLoading(false);
         return;
       }
@@ -240,7 +242,7 @@ export default function PublicBookScreen() {
       return;
     }
     if (!business || !selected) {
-      setError('Alege un slot.');
+      setError(trKey('book.pickSlot'));
       return;
     }
     setBooking(true);
@@ -280,30 +282,30 @@ export default function PublicBookScreen() {
     setSelected(null);
     await loadSlots();
     if (appointment?.loyalty_redeemed) {
-      setMessage('Ședință cadou (loialitate). Cererea a fost trimisă.');
+      setMessage(trKey('book.giftSent'));
     } else if (appointment?.status === 'approved') {
       setMessage(
         appointment.payment_status === 'unpaid'
-          ? `Programarea e confirmată. Avans: ${formatLei(appointment.deposit_ron)}.`
-          : 'Programarea a fost confirmată automat.'
+          ? trKey('book.confirmedDeposit', { amount: formatLei(appointment.deposit_ron) })
+          : trKey('book.confirmedAuto')
       );
     } else {
       setMessage(
         appointment?.payment_status === 'unpaid'
-          ? `Cererea a fost trimisă. Avans: ${formatLei(appointment.deposit_ron)}. Așteaptă confirmarea.`
-          : 'Cererea a fost trimisă. Așteaptă confirmarea.'
+          ? trKey('book.sentDeposit', { amount: formatLei(appointment.deposit_ron) })
+          : trKey('book.sentPending')
       );
     }
   }
 
   async function handleGuestBook() {
     if (!business || !selected) {
-      setError('Alege un slot.');
+      setError(trKey('book.pickSlot'));
       return;
     }
     const name = guestName.trim();
     if (!name) {
-      setError('Scrie numele pentru rezervare.');
+      setError(trKey('pub.nameRequired'));
       return;
     }
     const { contact, error: contactErr } = normalizeWalkinContact(guestPhone, guestEmail);
@@ -337,8 +339,8 @@ export default function PublicBookScreen() {
     await loadSlots();
     setMessage(
       created?.status === 'approved'
-        ? 'Programarea a fost confirmată.'
-        : 'Cererea a fost trimisă. Vei fi contactat pentru confirmare.'
+        ? trKey('pub.confirmed')
+        : trKey('pub.sentContact')
     );
   }
 
@@ -362,21 +364,21 @@ export default function PublicBookScreen() {
       setError(mapBookingRpcError(err.message));
       return;
     }
-    setMessage('Te-am pus pe lista de așteptare. Te anunțăm dacă se eliberează un loc.');
+    setMessage(trKey('pub.waitlisted'));
   }
 
   if (loading) {
-    return <SkeletonScreen title="Programare" onBack={goBack} blocks={5} label="Se încarcă agenda…" />;
+    return <SkeletonScreen title={tr('pub.title')} onBack={goBack} blocks={5} label={tr('pub.loading')} />;
   }
 
   if (!business) {
     return (
-      <Screen title="Programare" onBack={goBack}>
+      <Screen title={tr('pub.title')} onBack={goBack}>
         <ErrorState
-          title="Nu am găsit business-ul"
-          description={error ?? 'Cod invalid.'}
+          title={tr('pub.bizMissing')}
+          description={error ?? tr('pub.badCodeShort')}
           action={
-            <Button label="Înapoi la cont" onPress={goBack} icon="arrow-back-outline" />
+            <Button label={tr('pub.backToAccount')} onPress={goBack} icon="arrow-back-outline" />
           }
         />
       </Screen>
@@ -389,7 +391,7 @@ export default function PublicBookScreen() {
   return (
     <Screen
       title={business.name}
-      subtitle="Programare online"
+      subtitle={tr('pub.online')}
       onBack={goBack}
       footer={
         <>
@@ -398,11 +400,11 @@ export default function PublicBookScreen() {
           {!session ? (
             <>
             <View style={{ gap: 12 }}>
-              <Field label="Numele tău" placeholder="Nume și prenume" value={guestName} onChangeText={setGuestName} />
-              <Field label="Telefon" placeholder="07…" keyboardType="phone-pad" value={guestPhone} onChangeText={setGuestPhone} />
-              <Field label="Email (opțional)" placeholder="nume@exemplu.ro" keyboardType="email-address" autoCapitalize="none" value={guestEmail} onChangeText={setGuestEmail} />
+              <Field label={tr('set.displayNamePh')} placeholder={tr('pub.guestNamePh')} value={guestName} onChangeText={setGuestName} />
+              <Field label={tr('cal.phone')} placeholder="07…" keyboardType="phone-pad" value={guestPhone} onChangeText={setGuestPhone} />
+              <Field label={tr('cal.email')} placeholder={tr('pub.guestEmailPh')} keyboardType="email-address" autoCapitalize="none" value={guestEmail} onChangeText={setGuestEmail} />
               <Button
-                label={booking ? 'Se trimite…' : 'Rezervă ca invitat'}
+                label={booking ? tr('common.sending') : tr('pub.bookGuest')}
                 icon="paper-plane-outline"
                 onPress={() => void handleGuestBook()}
                 loading={booking}
@@ -411,7 +413,7 @@ export default function PublicBookScreen() {
             </View>
             <View style={{ height: 12 }} />
             <Button
-              label="Am deja cont — intră în cont"
+              label={tr('pub.haveAccount')}
               icon="log-in-outline"
               onPress={goLogin}
             />
@@ -419,7 +421,7 @@ export default function PublicBookScreen() {
           ) : (
             <>
               <Button
-                label={booking ? 'Se trimite…' : 'Trimite cererea'}
+                label={booking ? tr('common.sending') : tr('book.sendRequest')}
                 icon="paper-plane-outline"
                 onPress={() => void handleBook()}
                 loading={booking}
@@ -427,7 +429,7 @@ export default function PublicBookScreen() {
               />
               {noSlots && !dayBlocked ? (
                 <Button
-                  label={waitlistBusy ? 'Se salvează…' : 'Anunță-mă dacă se eliberează'}
+                  label={waitlistBusy ? tr('cli.saving') : tr('pub.notifyMe')}
                   variant="secondary"
                   icon="notifications-outline"
                   loading={waitlistBusy}
@@ -462,11 +464,11 @@ export default function PublicBookScreen() {
           ) : null}
           {rating && rating.review_count > 0 ? (
             <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
-              ★ {Number(rating.avg_rating).toFixed(1)} · {rating.review_count} recenzii
+              ★ {Number(rating.avg_rating).toFixed(1)} · {rating.review_count} {tr('book.reviewMany')}
             </Text>
           ) : (
             <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
-              Fără recenzii încă
+              {tr('book.noReviews')}
             </Text>
           )}
           <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
@@ -487,26 +489,26 @@ export default function PublicBookScreen() {
               ))
             : null}
         </View>
-        <Badge tone="accent">{slots.length} libere</Badge>
+        <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
       </View>
 
       <LocationCard location={locationFromBusiness(business)} />
 
       {(business.deposit_ron ?? 0) > 0 ? (
-        <Callout tone="info" title="Avans">
-          La rezervare se cere un avans de {formatLei(business.deposit_ron)}.
+        <Callout tone="info" title={tr('book.deposit')}>
+          {tr('book.depositDesc', { amount: formatLei(business.deposit_ron) })}
         </Callout>
       ) : null}
 
       {(business.loyalty_every ?? 0) >= 2 ? (
-        <Callout tone="accent" title="Loialitate">
-          A {business.loyalty_every}-a ședință confirmată e gratuită.
+        <Callout tone="accent" title={tr('book.loyalty')}>
+          {tr('book.loyaltyDesc', { n: business.loyalty_every ?? 0 })}
         </Callout>
       ) : null}
 
       {staffList.length > 1 ? (
         <>
-          <SectionTitle>1. Specialist</SectionTitle>
+          <SectionTitle>{tr('pub.stepStaff')}</SectionTitle>
           <View style={styles.serviceList}>
             {staffList.map((s) => {
               const on = s.id === staffId;
@@ -537,7 +539,7 @@ export default function PublicBookScreen() {
 
       {services.length > 0 ? (
         <>
-          <SectionTitle>2. Serviciu</SectionTitle>
+          <SectionTitle>{tr('pub.stepService')}</SectionTitle>
           <View style={styles.serviceList}>
             {services.map((s) => {
               const on = s.id === serviceId;
@@ -577,16 +579,16 @@ export default function PublicBookScreen() {
         </>
       ) : null}
 
-      <SectionTitle>3. Dată</SectionTitle>
+      <SectionTitle>{tr('pub.stepDate')}</SectionTitle>
       <DatePickerField
-        label="Data programării"
+        label={tr('book.dateLabel')}
         value={dateLocal}
         onChange={setDateLocal}
         minimumDate={minDate}
         maximumDate={maxDate}
       />
 
-      <SectionTitle>4. Oră</SectionTitle>
+      <SectionTitle>{tr('pub.stepTime')}</SectionTitle>
       {slotsLoading ? (
         <View style={styles.slotsLoading}>
           <ActivityIndicator color={t.colors.accent} />
@@ -598,8 +600,8 @@ export default function PublicBookScreen() {
           onSelect={setSelected}
           emptyLabel={
             dayBlocked
-              ? 'Această zi este blocată (concediu / sărbătoare).'
-              : `Nu există sloturi libere pe ${dateLocal}. Alege altă dată (preaviz minim ${Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60))}h).`
+              ? tr('book.dayBlocked')
+              : tr('book.noSlots', { date: dateLocal, h: Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60)) })
           }
         />
       )}

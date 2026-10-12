@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Callout, Screen, SkeletonScreen } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { resolveAppMode, type AppMode } from '@/lib/appMode';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +21,7 @@ export const unstable_settings = {
 };
 
 export default function BusinessLayout() {
+  const tr = useT();
   const [mode, setMode] = useState<AppMode | null>(null);
 
   useEffect(() => {
@@ -42,24 +44,23 @@ export default function BusinessLayout() {
   }, []);
 
   if (!mode) {
-    return <SkeletonScreen blocks={3} label="Se verifică tipul contului…" />;
+    return <SkeletonScreen blocks={3} label={tr('biz.checkingAccount')} />;
   }
 
   if (mode === 'client') {
     return (
       <Screen>
-        <Callout tone="danger" title="Cont de client">
-          Acest ecran e doar pentru conturile de business. Contul tău e de client, așa că nu
-          are agendă, cereri sau clienți de administrat.
+        <Callout tone="danger" title={tr('biz.clientAccount')}>
+          {tr('biz.clientOnly')}
         </Callout>
         <View style={styles.actions}>
           <Button
-            label="Înapoi la programările mele"
+            label={tr('biz.backToMyBookings')}
             icon="arrow-back"
             onPress={() => router.replace('/(app)/home')}
           />
           <Button
-            label="Setări cont"
+            label={tr('biz.accountSettings')}
             variant="secondary"
             icon="person-circle-outline"
             onPress={() => router.replace('/(app)/settings')}

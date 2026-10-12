@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,8 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { STATUS_META } from '@/lib/status';
+import { statusMeta } from '@/lib/status';
+import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { mapBookingRpcError } from '@/lib/bookingRules';
 import { listBusyRanges } from '@/lib/bookingRpc';
@@ -38,6 +39,7 @@ function toYmd(d: Date): string {
 export default function BusinessCalendarScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,7 +69,7 @@ export default function BusinessCalendarScreen() {
     } = await supabase.auth.getUser();
     if (!user) {
       setLoading(false);
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return;
     }
     const { data: biz, error: bErr } = await supabase
@@ -217,7 +219,7 @@ export default function BusinessCalendarScreen() {
 
   async function saveWalkin() {
     if (!business || !walkinSlot) {
-      setWalkinError('Alege un slot liber din calendar.');
+      setWalkinError(trKey('cal.pickSlot'));
       return;
     }
     const { contact, error: contactErr } = normalizeWalkinContact(walkinPhone, walkinEmail);
@@ -247,7 +249,7 @@ export default function BusinessCalendarScreen() {
       return;
     }
     const label = formatInTimeZone(new Date(walkinSlot.startUtc), business.timezone, 'HH:mm');
-    setWalkinOk(`Programare adăugată la ${label}.`);
+    setWalkinOk(trKey('cal.addedAt', { label }));
     setWalkinSlot(null);
     setWalkinPhone('');
     setWalkinEmail('');
@@ -256,16 +258,16 @@ export default function BusinessCalendarScreen() {
   }
 
   if (loading && !business) {
-    return <SkeletonScreen title="Calendar" onBack={back} blocks={5} label="Se încarcă agenda…" />;
+    return <SkeletonScreen title={tr('cal.title')} onBack={back} blocks={5} label={tr('cal.loading')} />;
   }
 
   if (!business) {
     return (
-      <Screen title="Calendar" onBack={back}>
+      <Screen title={tr('cal.title')} onBack={back}>
         <EmptyState
           icon="calendar-outline"
-          title="Configurează mai întâi business-ul"
-          description="Calendarul pe zile apare după ce salvezi agenda."
+          title={tr('svc.setupFirst')}
+          description={tr('cal.setupDesc')}
         />
       </Screen>
     );
@@ -273,26 +275,26 @@ export default function BusinessCalendarScreen() {
 
   return (
     <Screen
-      title="Calendar"
+      title={tr('cal.title')}
       subtitle={business.name}
       onBack={back}
       footer={
         <View style={styles.footer}>
           {error ? <Callout tone="danger">{error}</Callout> : null}
           <Button
-            label={blocked ? 'Deblochează ziua' : 'Blochează ziua (concediu)'}
+            label={blocked ? tr('cal.unblockDay') : tr('cal.blockDay')}
             icon={blocked ? 'lock-open-outline' : 'lock-closed-outline'}
             variant={blocked ? 'secondary' : 'danger'}
             loading={saving}
             onPress={() => void toggleBlockDay()}
           />
           <Button
-            label="Adaugă programare (walk-in)"
+            label={tr('cal.addWalkin')}
             icon="add-circle-outline"
             onPress={() => void openWalkin()}
           />
           <Button
-            label="Vezi cererile"
+            label={tr('cal.viewRequests')}
             variant="secondary"
             icon="hourglass-outline"
             onPress={() => router.push('/(app)/business/(tabs)/requests')}
@@ -300,7 +302,7 @@ export default function BusinessCalendarScreen() {
         </View>
       }
     >
-      <DatePickerField label="Ziua" value={dateLocal} onChange={setDateLocal} />
+      <DatePickerField label={tr('cal.day')} value={dateLocal} onChange={setDateLocal} />
 
       {staffList.length > 1 ? (
         <View style={styles.filters}>
@@ -321,7 +323,7 @@ export default function BusinessCalendarScreen() {
                 fontSize: fontSize.sm,
               }}
             >
-              Toți
+              {tr('cal.all')}
             </Text>
           </Pressable>
           {staffList.map((s) => {
@@ -354,25 +356,25 @@ export default function BusinessCalendarScreen() {
       ) : null}
 
       {blocked ? (
-        <Callout tone="warning" title="Zi blocată">
-          Clienții nu pot alege sloturi în această zi. Programările existente rămân vizibile.
+        <Callout tone="warning" title={tr('cal.blockedDay')}>
+          {tr('cal.blockedBody')}
         </Callout>
       ) : null}
 
       {rows.length === 0 ? (
         <EmptyState
           icon="sunny-outline"
-          title={blocked ? 'Zi închisă, fără programări' : 'Nicio programare în această zi'}
+          title={blocked ? tr('cal.closedDay') : tr('cal.noAppts')}
           description={
             blocked
-              ? 'Poți debloca ziua dacă vrei să primești din nou cereri.'
-              : 'Când apar cereri pending sau confirmate, le vezi aici pe ore.'
+              ? tr('cal.closedDesc')
+              : tr('cal.noApptsDesc')
           }
           compact
         />
       ) : (
         rows.map((a) => {
-          const meta = STATUS_META[a.status];
+          const meta = statusMeta(a.status);
           const start = formatInTimeZone(new Date(a.start_at), business.timezone, 'HH:mm');
           const end = formatInTimeZone(new Date(a.end_at), business.timezone, 'HH:mm');
           const contact = [a.client_email, a.client_phone].filter(Boolean).join(' · ');
@@ -396,13 +398,13 @@ export default function BusinessCalendarScreen() {
               <View style={styles.itemBody}>
                 <View style={styles.itemHead}>
                   <Text style={[styles.itemTitle, { color: t.colors.text }]} numberOfLines={1}>
-                    {a.service_name ?? 'Ședință'}
+                    {a.service_name ?? tr('cli.session')}
                     {a.staff_name ? ` · ${a.staff_name}` : ''}
                   </Text>
                   <Badge tone={meta.tone}>{meta.label}</Badge>
                 </View>
                 {a.no_show ? (
-                  <Text style={[styles.contact, { color: t.colors.danger }]}>Nu s-a prezentat</Text>
+                  <Text style={[styles.contact, { color: t.colors.danger }]}>{tr('cli.noShow')}</Text>
                 ) : null}
                 {contact ? (
                   <View style={styles.contactRow}>
@@ -428,12 +430,12 @@ export default function BusinessCalendarScreen() {
           <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
             <View style={styles.modalHead}>
               <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
-                Programare manuala · {dateLocal}
+                {tr('cal.walkinTitle', { date: dateLocal })}
               </Text>
               <Pressable
                 onPress={() => !walkinSaving && setWalkinOpen(false)}
                 accessibilityRole="button"
-                accessibilityLabel="Închide"
+                accessibilityLabel={tr('common.close')}
                 hitSlop={8}
               >
                 <Ionicons name="close" size={22} color={t.colors.textMuted} />
@@ -444,7 +446,7 @@ export default function BusinessCalendarScreen() {
               {walkinOk ? <Callout tone="success">{walkinOk}</Callout> : null}
               {services.length > 0 ? (
                 <>
-                  <SectionTitle>Serviciu · {walkinDuration} min</SectionTitle>
+                  <SectionTitle>{tr('cal.serviceMin', { mins: walkinDuration })}</SectionTitle>
                   <View style={styles.filters}>
                     {services.map((s) => {
                       const on = walkinServiceId === s.id;
@@ -480,7 +482,7 @@ export default function BusinessCalendarScreen() {
               ) : null}
               {staffList.length > 0 ? (
                 <>
-                  <SectionTitle>Specialist</SectionTitle>
+                  <SectionTitle>{tr('team.specialist')}</SectionTitle>
                   <View style={styles.filters}>
                     {staffList.map((s) => {
                       const on = walkinStaffId === s.id;
@@ -514,12 +516,12 @@ export default function BusinessCalendarScreen() {
                   </View>
                 </>
               ) : null}
-              <SectionTitle>Slot liber</SectionTitle>
+              <SectionTitle>{tr('req.freeSlot')}</SectionTitle>
               {walkinSlotsLoading ? (
-                <Text style={{ color: t.colors.textMuted }}>Se calculează sloturile…</Text>
+                <Text style={{ color: t.colors.textMuted }}>{tr('req.calcSlots')}</Text>
               ) : walkinSlots.length === 0 ? (
                 <Text style={{ color: t.colors.textMuted }}>
-                  Nu mai sunt sloturi libere in {dateLocal}. Schimbă serviciul sau ziua.
+                  {tr('cal.noSlots', { date: dateLocal })}
                 </Text>
               ) : (
                 <View style={styles.slotGrid}>
@@ -551,16 +553,16 @@ export default function BusinessCalendarScreen() {
                   })}
                 </View>
               )}
-              <SectionTitle>Contact client</SectionTitle>
+              <SectionTitle>{tr('cal.contact')}</SectionTitle>
               <Field
-                label="Telefon"
+                label={tr('cal.phone')}
                 placeholder="07…"
                 keyboardType="phone-pad"
                 value={walkinPhone}
                 onChangeText={setWalkinPhone}
               />
               <Field
-                label="Email (opțional)"
+                label={tr('cal.email')}
                 placeholder="client@exemplu.ro"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -568,13 +570,13 @@ export default function BusinessCalendarScreen() {
                 onChangeText={setWalkinEmail}
               />
               <Text style={[styles.walkinHint, { color: t.colors.textFaint }]}>
-                Minim un contact. Programarea se salvează direct confirmată, fără avans.
+                {tr('cal.walkinHint')}
               </Text>
             </ScrollView>
             <ButtonRow>
               <View style={styles.actionFlex}>
                 <Button
-                  label="Închide"
+                  label={tr('common.close')}
                   variant="secondary"
                   size="sm"
                   disabled={walkinSaving}
@@ -583,7 +585,7 @@ export default function BusinessCalendarScreen() {
               </View>
               <View style={styles.actionFlex}>
                 <Button
-                  label="Salvează"
+                  label={tr('common.save')}
                   icon="checkmark"
                   variant="primary"
                   size="sm"

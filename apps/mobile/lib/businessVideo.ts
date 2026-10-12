@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { supabase } from '@/lib/supabase';
+import { trKey } from '@/lib/i18n';
 import {
   PROMO_VIDEO_BUCKET,
   resolveVideoExtension,
@@ -18,7 +19,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 
 /**
  * Încarcă video-ul de prezentare în storage și întoarce URL-ul public.
- * Aruncă Error cu mesaj în română (afișabil direct în UI).
+ * Aruncă Error cu mesaj localizat (afișabil direct în UI).
  */
 export async function uploadBusinessVideo(
   localUri: string,
@@ -26,7 +27,7 @@ export async function uploadBusinessVideo(
   opts?: { durationMs?: number | null; mimeType?: string | null }
 ): Promise<string> {
   const cacheRoot = FileSystem.cacheDirectory;
-  if (!cacheRoot) throw new Error('Cache-ul local nu e disponibil pe acest dispozitiv.');
+  if (!cacheRoot) throw new Error(trKey('media.cacheUnavailable'));
 
   const info = await FileSystem.getInfoAsync(localUri);
   // MIME-ul raportat de picker e mai sigur decât extensia din URI:
@@ -39,7 +40,7 @@ export async function uploadBusinessVideo(
     extension: ext,
   });
   if (err) throw new Error(err);
-  if (!ext) throw new Error('Nu am putut determina formatul video-ului.');
+  if (!ext) throw new Error(trKey('media.videoFormat'));
 
   const dest = `${cacheRoot}promo-${Date.now()}.${ext}`;
   try {
@@ -53,7 +54,7 @@ export async function uploadBusinessVideo(
       FileSystem.readAsStringAsync(localUri, { encoding: 'base64' })
     );
   } catch {
-    throw new Error('Nu am putut citi video-ul de pe telefon. Alege-l din nou din galerie.');
+    throw new Error(trKey('media.videoUnreadable'));
   } finally {
     try {
       await FileSystem.deleteAsync(dest, { idempotent: true });
@@ -63,7 +64,7 @@ export async function uploadBusinessVideo(
   }
   const buffer = base64ToArrayBuffer(base64);
   if (buffer.byteLength < 100) {
-    throw new Error('Video-ul citit e gol. Încearcă alt fișier.');
+    throw new Error(trKey('media.videoEmpty'));
   }
   const path = `${businessId}/${Date.now()}.${ext}`;
   const { error: upErr } = await supabase.storage
@@ -71,7 +72,7 @@ export async function uploadBusinessVideo(
     .upload(path, buffer, { contentType: videoContentType(ext), upsert: true });
   if (upErr) {
     if (/bucket|not found|does not exist/i.test(upErr.message)) {
-      throw new Error('Spațiul video lipsește pe server. Aplică migrările (supabase db push) și reîncearcă.');
+      throw new Error(trKey('media.videoBucket'));
     }
     throw upErr;
   }

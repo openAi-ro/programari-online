@@ -13,5 +13,9 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    // tsx-only bridge test: imports Deno edge-function copy, which tsc cannot model.
+    "lib/i18n.test.ts"
   ]
 }

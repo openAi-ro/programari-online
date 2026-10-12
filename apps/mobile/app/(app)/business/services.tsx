@@ -16,6 +16,7 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatDuration, formatRon } from '@/lib/format';
+import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { Service } from '@/lib/types';
@@ -32,6 +33,7 @@ const EMPTY_DRAFT: Draft = { name: '', description: '', duration: '60', price: '
 export default function BusinessServicesScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export default function BusinessServicesScreen() {
     } = await supabase.auth.getUser();
     if (!user) {
       setLoading(false);
-      setError('Nu ești autentificat.');
+      setError(trKey('req.notAuthed'));
       return;
     }
     const { data: biz, error: bErr } = await supabase
@@ -113,15 +115,15 @@ export default function BusinessServicesScreen() {
     const duration = parseInt(draft.duration, 10);
     const price = Number(String(draft.price).replace(',', '.'));
     if (!name) {
-      setError('Introdu numele serviciului.');
+      setError(trKey('svc.nameRequired'));
       return;
     }
     if (!Number.isFinite(duration) || duration < 5 || duration > 480) {
-      setError('Durata trebuie să fie între 5 și 480 minute.');
+      setError(trKey('svc.badDuration'));
       return;
     }
     if (!Number.isFinite(price) || price < 0) {
-      setError('Prețul trebuie să fie 0 sau mai mare.');
+      setError(trKey('svc.badPrice'));
       return;
     }
     setSaving(true);
@@ -143,7 +145,7 @@ export default function BusinessServicesScreen() {
         return;
       }
       setEditingId(null);
-      setMessage('Serviciu adăugat.');
+      setMessage(trKey('svc.added'));
       await load();
       return;
     }
@@ -163,7 +165,7 @@ export default function BusinessServicesScreen() {
       return;
     }
     setEditingId(null);
-    setMessage('Serviciu actualizat.');
+    setMessage(trKey('svc.updated'));
     await load();
   }
 
@@ -183,21 +185,21 @@ export default function BusinessServicesScreen() {
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
-        title="Servicii"
-        subtitle="Cât durează și cât costă"
+        title={tr('svc.title')}
+        subtitle={tr('svc.subtitle')}
         onBack={back}
-        label="Se încarcă serviciile…"
+        label={tr('svc.loading')}
       />
     );
   }
 
   if (!businessId) {
     return (
-      <Screen title="Servicii" onBack={back}>
+      <Screen title={tr('svc.title')} onBack={back}>
         <EmptyState
           icon="cut-outline"
-          title="Configurează mai întâi business-ul"
-          description="Serviciile (tuns, vopsit, consultație) se adaugă după ce ai o agendă."
+          title={tr('svc.setupFirst')}
+          description={tr('svc.setupFirstDesc')}
         />
       </Screen>
     );
@@ -205,21 +207,21 @@ export default function BusinessServicesScreen() {
 
   return (
     <Screen
-      title="Servicii"
-      subtitle="Cât durează și cât costă"
+      title={tr('svc.title')}
+      subtitle={tr('svc.subtitle')}
       onBack={back}
       footer={
         editingId ? (
           <View style={styles.footer}>
             {error ? <Callout tone="danger">{error}</Callout> : null}
             <Button
-              label={saving ? 'Se salvează…' : editingId === 'new' ? 'Adaugă serviciul' : 'Salvează'}
+              label={saving ? tr('cli.saving') : editingId === 'new' ? tr('svc.addIt') : tr('common.save')}
               icon="checkmark"
               loading={saving}
               onPress={() => void saveDraft()}
             />
             <Button
-              label="Renunță"
+              label={tr('svc.discard')}
               variant="secondary"
               onPress={() => {
                 setEditingId(null);
@@ -231,35 +233,35 @@ export default function BusinessServicesScreen() {
           <View style={styles.footer}>
             {error ? <Callout tone="danger">{error}</Callout> : null}
             {message ? <Callout tone="success">{message}</Callout> : null}
-            <Button label="Adaugă serviciu" icon="add" onPress={startNew} />
+            <Button label={tr('svc.add')} icon="add" onPress={startNew} />
           </View>
         )
       }
     >
       {editingId ? (
         <>
-          <SectionTitle>{editingId === 'new' ? 'Serviciu nou' : 'Editează serviciul'}</SectionTitle>
+          <SectionTitle>{editingId === 'new' ? tr('svc.newSvc') : tr('svc.editSvc')}</SectionTitle>
           <Field
-            label="Nume"
+            label={tr('svc.name')}
             value={draft.name}
             onChangeText={(name) => setDraft((d) => ({ ...d, name }))}
-            placeholder="Tuns, vopsit, consultație…"
+            placeholder={tr('svc.namePh')}
             icon="cut-outline"
             autoCapitalize="sentences"
           />
           <Field
-            label="Descriere importantă"
+            label={tr('svc.desc')}
             value={draft.description}
             onChangeText={(description) => setDraft((d) => ({ ...d, description }))}
-            placeholder="Ex: ce include, ce să aducă clientul…"
+            placeholder={tr('svc.descPh')}
             icon="document-text-outline"
             multiline
             numberOfLines={3}
             autoCapitalize="sentences"
-            hint="Vizibilă clienților când aleg serviciul."
+            hint={tr('svc.descHint')}
           />
           <Field
-            label="Durată (minute)"
+            label={tr('svc.duration')}
             value={draft.duration}
             onChangeText={(duration) => setDraft((d) => ({ ...d, duration }))}
             placeholder="60"
@@ -267,13 +269,13 @@ export default function BusinessServicesScreen() {
             icon="time-outline"
           />
           <Field
-            label="Preț (lei)"
+            label={tr('svc.price')}
             value={draft.price}
             onChangeText={(price) => setDraft((d) => ({ ...d, price }))}
             placeholder="0"
             keyboardType="decimal-pad"
             icon="cash-outline"
-            hint="0 = preț la fața locului, comunicat clientului de tine."
+            hint={tr('svc.priceHint')}
           />
         </>
       ) : null}
@@ -281,8 +283,8 @@ export default function BusinessServicesScreen() {
       {rows.length === 0 && !editingId ? (
         <EmptyState
           icon="cut-outline"
-          title="Niciun serviciu"
-          description="Adaugă cel puțin un serviciu ca clienții să aleagă durata corectă."
+          title={tr('svc.empty')}
+          description={tr('svc.emptyDesc')}
         />
       ) : (
         rows.map((s) => (
@@ -306,14 +308,14 @@ export default function BusinessServicesScreen() {
               ) : null}
               <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
                 {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
-                {s.active ? '' : ' · inactiv'}
+                {s.active ? '' : ` · ${tr('svc.inactive')}`}
               </Text>
             </Pressable>
             <View style={styles.rowRight}>
               <Toggle
                 value={s.active}
                 onValueChange={() => void toggleActive(s)}
-                accessibilityLabel={s.active ? 'Dezactivează' : 'Activează'}
+                accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
               />
               <Pressable onPress={() => startEdit(s)} hitSlop={8}>
                 <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />

@@ -1,4 +1,5 @@
 import { generateFreeSlots } from './slots';
+import { trKey } from './i18n';
 import type { Appointment, BreakHours, BusinessProfile, Staff, WorkingHours } from './types';
 
 export function toYmd(d: Date): string {
@@ -113,100 +114,100 @@ export function paymentLabel(
 
 export function mapBookingRpcError(message: string): string {
   if (message.includes('booking_empty_result') || /appointment_status|42804/.test(message)) {
-    return 'Programarea nu s-a salvat. Încearcă din nou.';
+    return trKey('book.errNotSaved');
   }
   if (message.includes('contact_required')) {
-    return 'Contul trebuie să aibă email sau telefon.';
+    return trKey('book.errContactRequired');
   }
   if (message.includes('too_many_guest')) {
-    return 'Ai deja 3 programări active la acest business. Sună pentru detalii.';
+    return trKey('book.errTooManyGuest');
   }
   if (message.includes('slot_taken')) {
-    return 'Slotul tocmai a fost rezervat. Alege altul.';
+    return trKey('book.errSlotTaken');
   }
   if (message.includes('not_authenticated')) {
-    return 'Trebuie să fii autentificat.';
+    return trKey('auth.errMustSignIn');
   }
   if (message.includes('too_soon')) {
-    return 'Prea aproape de oră — alege un slot mai târziu (preaviz minim).';
+    return trKey('book.errTooSoon');
   }
   if (message.includes('too_far')) {
-    return 'Data e prea departe în viitor pentru acest business.';
+    return trKey('book.errTooFar');
   }
   if (message.includes('day_blocked')) {
-    return 'Business-ul nu primește programări în această zi.';
+    return trKey('book.errDayBlocked');
   }
   if (message.includes('service_not_found')) {
-    return 'Serviciul nu mai este disponibil.';
+    return trKey('book.errServiceGone');
   }
   if (message.includes('too_late')) {
-    return 'Prea târziu pentru anulare sau reprogramare. Contactează business-ul.';
+    return trKey('book.errTooLate');
   }
   if (message.includes('cannot_cancel')) {
-    return 'Această programare nu mai poate fi anulată.';
+    return trKey('book.errCannotCancel');
   }
   if (message.includes('cannot_reschedule')) {
-    return 'Această programare nu mai poate fi reprogramată.';
+    return trKey('book.errCannotReschedule');
   }
   if (message.includes('cannot_confirm')) {
-    return 'Nu poți confirma prezența pentru această programare.';
+    return trKey('book.errCannotConfirm');
   }
   if (message.includes('cannot_leave')) {
-    return 'Nu mai poți ieși din lista de așteptare.';
+    return trKey('book.errCannotLeave');
   }
   if (message.includes('client_blocked')) {
-    return 'Acest business te-a blocat. Nu poți face programări noi.';
+    return trKey('book.errClientBlocked');
   }
   if (message.includes('cannot_mark_noshow')) {
-    return 'Poți marca absența doar după ora programării, pe o ședință confirmată.';
+    return trKey('book.errCannotNoShow');
   }
   if (message.includes('cannot_mark_paid')) {
-    return 'Avansul nu mai poate fi marcat ca plătit.';
+    return trKey('book.errCannotPaid');
   }
   if (message.includes('cannot_waive')) {
-    return 'Avansul nu mai poate fi scutit.';
+    return trKey('book.errCannotWaive');
   }
   if (message.includes('staff_not_found')) {
-    return 'Specialistul nu mai este disponibil.';
+    return trKey('book.errStaffGone');
   }
   if (message.includes('not_business_owner')) {
-    return 'Doar owner-ul business-ului poate adăuga programări manuale.';
+    return trKey('book.errNotOwner');
   }
   if (message.includes('walkin_contact_required')) {
-    return 'Adaugă un telefon sau un email pentru client.';
+    return trKey('book.errWalkinContact');
   }
   if (message.includes('walkin_slot_required')) {
-    return 'Alege un slot liber din calendar.';
+    return trKey('book.errWalkinSlot');
   }
   if (message.includes('invalid_phone')) {
-    return 'Numărul de telefon nu pare valid.';
+    return trKey('book.errBadPhone');
   }
   if (message.includes('invalid_email')) {
-    return 'Adresa de email nu pare validă.';
+    return trKey('book.errBadEmail');
   }
   if (message.includes('invalid_range')) {
-    return 'Intervalul ales nu este valid.';
+    return trKey('book.errBadRange');
   }
   if (message.includes('cannot_move')) {
-    return 'Această programare nu mai poate fi mutată.';
+    return trKey('book.errCannotMove');
   }
   if (message.includes('move_slot_required')) {
-    return 'Alege un slot liber pentru mutare.';
+    return trKey('book.errMoveSlot');
   }
   if (message.includes('move_in_past')) {
-    return 'Nu poți muta o programare în trecut.';
+    return trKey('book.errMovePast');
   }
   if (message.includes('move_same_slot')) {
-    return 'Alege alt slot decât cel curent.';
+    return trKey('book.errMoveSame');
   }
   if (message.includes('move_notify_failed')) {
-    return 'Mutarea s-a salvat, dar notificarea clientului a eșuat.';
+    return trKey('book.errMoveNotify');
   }
   if (message.includes('cannot_review')) {
-    return 'Poți lăsa recenzie după o vizită confirmată.';
+    return trKey('book.errCannotReview');
   }
   if (message.includes('invalid_rating')) {
-    return 'Alege un rating de la 1 la 5.';
+    return trKey('book.errBadRating');
   }
   return message;
 }

@@ -1,4 +1,5 @@
 /** Reguli pure pentru video-ul de prezentare — testabile în node. */
+import { trKey } from './i18n';
 
 export const PROMO_VIDEO_BUCKET = 'business-videos';
 export const PROMO_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
@@ -22,21 +23,21 @@ export type VideoAssetInfo = {
   extension: string | null;
 };
 
-/** Mesaj de eroare în română sau null dacă assetul e acceptat. */
+/** Mesaj de eroare localizat sau null dacă assetul e acceptat. */
 export function validatePromoVideoAsset(asset: VideoAssetInfo): string | null {
   const ext = (asset.extension ?? '').toLowerCase();
   if (!ext || !ALLOWED_EXT.has(ext)) {
-    const primit = asset.extension ? ` (am primit formatul „${asset.extension}")` : '';
-    return `Folosește un video MP4, MOV sau WebM${primit}. Dacă ai filmat cu telefonul, alege fișierul din galerie.`;
+    const received = asset.extension ? trKey('media.receivedFormat', { ext: asset.extension }) : '';
+    return trKey('media.videoBadFormat', { received });
   }
   if (asset.sizeBytes != null && asset.sizeBytes > PROMO_VIDEO_MAX_BYTES) {
-    return 'Video-ul e prea mare (maxim 50 MB). Alege unul mai scurt.';
+    return trKey('media.videoTooBig');
   }
   if (
     asset.durationMs != null &&
     asset.durationMs > PROMO_VIDEO_MAX_SECONDS * 1000
   ) {
-    return 'Video-ul e prea lung (maxim 90 de secunde).';
+    return trKey('media.videoTooLong');
   }
   return null;
 }

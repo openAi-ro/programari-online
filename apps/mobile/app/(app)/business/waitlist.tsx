@@ -11,6 +11,7 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { WaitlistEntry } from '@/lib/types';
@@ -23,6 +24,7 @@ type Row = WaitlistEntry & {
 export default function BusinessWaitlistScreen() {
   const t = useTheme();
   const back = useBack();
+  const tr = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,22 +89,22 @@ export default function BusinessWaitlistScreen() {
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
-        title="Listă de așteptare"
-        subtitle="Clienți care vor un loc eliberat"
+        title={tr('wl.title')}
+        subtitle={tr('wl.subtitle')}
         onBack={back}
-        label="Se încarcă lista de așteptare…"
+        label={tr('wl.loading')}
       />
     );
   }
 
   return (
-    <Screen title="Listă de așteptare" subtitle="Clienți care vor un loc eliberat" onBack={back}>
+    <Screen title={tr('wl.title')} subtitle={tr('wl.subtitle')} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
       {rows.length === 0 ? (
         <EmptyState
           icon="hourglass-outline"
-          title="Lista e goală"
-          description="Când o zi e plină, clienții se pot înscrie și sunt anunțați la anulare."
+          title={tr('wl.empty')}
+          description={tr('wl.emptyDesc')}
         />
       ) : (
         rows.map((row) => {
@@ -119,10 +121,10 @@ export default function BusinessWaitlistScreen() {
               <Text style={[styles.meta, { color: t.colors.textMuted }]}>
                 {row.staff?.name ? `${row.staff.name} · ` : ''}
                 {row.services?.name ? `${row.services.name} · ` : ''}
-                {contact || 'Client'}
+                {contact || tr('wl.client')}
               </Text>
               <Button
-                label="Scoate de pe listă"
+                label={tr('wl.remove')}
                 variant="secondary"
                 size="sm"
                 onPress={() => void remove(row.id)}

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/components/ui';
+import { useT, type TrKey } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { markNavStart } from '@/lib/navTiming';
 
@@ -17,7 +18,7 @@ type TabBarNavProps = {
 
 const TABS: {
   key: TabKey;
-  label: string;
+  labelKey: TrKey;
   icon: keyof typeof Ionicons.glyphMap;
   /** Fallback href when not rendered as Tabs tabBar (legacy / outside tabs). */
   href: string;
@@ -26,7 +27,7 @@ const TABS: {
 }[] = [
   {
     key: 'home',
-    label: 'Acasă',
+    labelKey: 'bizTabs.home',
     icon: 'home-outline',
     href: '/(app)/business/(tabs)',
     routeName: 'index',
@@ -41,7 +42,7 @@ const TABS: {
   },
   {
     key: 'requests',
-    label: 'Cereri',
+    labelKey: 'bizTabs.requests',
     icon: 'file-tray-full-outline',
     href: '/(app)/business/(tabs)/requests',
     routeName: 'requests',
@@ -49,7 +50,7 @@ const TABS: {
   },
   {
     key: 'clients',
-    label: 'Clienți',
+    labelKey: 'bizTabs.clients',
     icon: 'people-outline',
     href: '/(app)/business/(tabs)/clients',
     routeName: 'clients',
@@ -57,7 +58,7 @@ const TABS: {
   },
   {
     key: 'reports',
-    label: 'Rapoarte',
+    labelKey: 'bizTabs.reports',
     icon: 'stats-chart-outline',
     href: '/(app)/business/(tabs)/reports',
     routeName: 'reports',
@@ -65,7 +66,7 @@ const TABS: {
   },
   {
     key: 'settings',
-    label: 'Setări',
+    labelKey: 'bizTabs.settings',
     icon: 'settings-outline',
     href: '/(app)/business/(tabs)/settings',
     routeName: 'settings',
@@ -90,6 +91,7 @@ export function BusinessTabBar({
   onRequestsFocus?: () => void;
 } & TabBarNavProps) {
   const t = useTheme();
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const pathname = usePathname() || '';
   const fromTabs = Boolean(state && navigation);
@@ -124,7 +126,7 @@ export function BusinessTabBar({
             key={tab.key}
             accessibilityRole="button"
             accessibilityLabel={
-              tab.key === 'requests' ? 'Cereri programări' : tab.label
+              tab.key === 'requests' ? tr('bizTabs.requestsA11y') : tr(tab.labelKey)
             }
             onPress={() => {
               if (active) {
@@ -158,7 +160,7 @@ export function BusinessTabBar({
               ) : null}
             </View>
             <Text style={[styles.label, { color }]} numberOfLines={1}>
-              {tab.label}
+              {tr(tab.labelKey)}
             </Text>
           </Pressable>
         );

@@ -2,6 +2,7 @@ import type { AuthError, Session } from '@supabase/supabase-js';
 
 import { supabase } from './supabase';
 import { getPublicWebOrigin } from './webBase';
+import { trKey } from './i18n';
 
 /**
  * Where Supabase activation / reset emails redirect after click.
@@ -83,7 +84,7 @@ export async function completeAuthFromUrl(url: string): Promise<{
     return {
       session: null,
       recovery,
-      error: e instanceof Error ? e.message : 'Nu am putut activa contul din link.',
+      error: e instanceof Error ? e.message : trKey('auth.errActivateLink'),
     };
   }
 }
@@ -113,7 +114,7 @@ export function isDuplicateSignupUser(user: { identities?: { id?: string }[] | n
   return (user.identities?.length ?? 0) === 0;
 }
 
-/** Map Supabase auth errors to Romanian UI messages. */
+/** Map Supabase auth errors to localized UI messages. */
 export function mapAuthError(error: AuthError | Error | null | undefined): string | null {
   if (!error) return null;
   const raw = (error.message || '').toLowerCase();
@@ -122,46 +123,46 @@ export function mapAuthError(error: AuthError | Error | null | undefined): strin
     raw.includes('phone provider') ||
     (raw.includes('sms') && raw.includes('not'))
   ) {
-    return 'Login cu telefon nu e activ pe server. Folosește email + parolă.';
+    return trKey('auth.errPhoneProvider');
   }
   if (raw.includes('email rate limit') || raw.includes('rate limit')) {
-    return 'Prea multe încercări. Așteaptă câteva minute.';
+    return trKey('auth.errRateLimit');
   }
   if (
     raw.includes('invalid login') ||
     raw.includes('invalid credentials') ||
     raw.includes('invalid password')
   ) {
-    return 'Email sau parolă greșită.';
+    return trKey('auth.errInvalidLogin');
   }
   if (raw.includes('user already registered') || raw.includes('already been registered')) {
-    return 'Contul există deja. Folosește „Intră în cont” cu parola ta.';
+    return trKey('auth.errAlreadyRegistered');
   }
   if (raw.includes('already confirmed') || raw.includes('email is already confirmed')) {
-    return 'Contul e deja activat. Folosește „Intră în cont”.';
+    return trKey('auth.errAlreadyConfirmed');
   }
   if (raw.includes('password') && raw.includes('at least')) {
-    return 'Parola trebuie să aibă cel puțin 6 caractere.';
+    return trKey('auth.passwordMinLength');
   }
   if (raw.includes('email not confirmed') || raw.includes('email_not_confirmed')) {
-    return 'Contul nu e activat. Deschide emailul și apasă linkul de activare, apoi încearcă din nou.';
+    return trKey('auth.errNotConfirmed');
   }
   if (raw.includes('confirm') && raw.includes('email')) {
-    return 'Contul nu e activat. Deschide emailul și apasă linkul de activare, apoi încearcă din nou.';
+    return trKey('auth.errNotConfirmed');
   }
   if (
     raw.includes('same email rate') ||
     raw.includes('for security purposes') ||
     raw.includes('only request this after')
   ) {
-    return 'Prea multe cereri pentru acest email. Așteaptă câteva minute și încearcă din nou.';
+    return trKey('auth.errEmailRateLimit');
   }
   if (
     raw.includes('weak password') ||
     raw.includes('password should be') ||
     (raw.includes('password') && (raw.includes('too short') || raw.includes('too weak')))
   ) {
-    return 'Parola e prea slabă. Folosește cel puțin 6 caractere.';
+    return trKey('auth.errWeakPassword');
   }
   if (
     raw.includes('expired') ||
@@ -169,10 +170,10 @@ export function mapAuthError(error: AuthError | Error | null | undefined): strin
     raw.includes('flow state') ||
     (raw.includes('recovery') && (raw.includes('invalid') || raw.includes('expired')))
   ) {
-    return 'Linkul a expirat sau nu mai e valid. Cere un link nou.';
+    return trKey('auth.errExpiredLink');
   }
   if (raw.includes('invalid otp') || raw.includes('token')) {
-    return 'Link sau cod invalid. Folosește linkul din cel mai recent email.';
+    return trKey('auth.errInvalidToken');
   }
   return error.message;
 }

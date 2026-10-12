@@ -8,7 +8,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageTest, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
+import { messageTest, parseNotifyLang, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 Deno.serve(async (req) => {
@@ -43,17 +43,24 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'unauthorized' }, 401);
   }
 
+  const body = await req.json().catch(() => ({} as { lang?: string }));
   const { data: profile } = await userClient
     .from('profiles')
-    .select('phone, email, notify_whatsapp')
+    .select('phone, email, notify_whatsapp, language')
     .eq('id', user.id)
     .maybeSingle();
+  const lang = parseNotifyLang(
+    (profile as { language?: string } | null)?.language ?? body.lang
+  );
 
   if (profile?.notify_whatsapp === false) {
     return jsonResponse(
       {
         error: 'whatsapp_disabled',
-        hint: 'Activează caseta WhatsApp în Setări ca să trimiți mesaje pe acest număr.',
+        hint:
+          lang === 'en'
+            ? 'Enable the WhatsApp toggle in Settings to send messages to this number.'
+            : 'Activează caseta WhatsApp în Setări ca să trimiți mesaje pe acest număr.',
       },
       400
     );
@@ -66,13 +73,16 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: 'phone_required',
-        hint: 'Adaugă numărul de telefon în Setări (format 07xx sau +40...).',
+        hint:
+          lang === 'en'
+            ? 'Add the phone number in Settings (07xx or +40... format).'
+            : 'Adaugă numărul de telefon în Setări (format 07xx sau +40...).',
       },
       400
     );
   }
 
-  const copy = messageTest();
+  const copy = messageTest(lang);
   const result = await sendWhatsApp(phone, copy.text);
 
   if (!result.ok && !result.stub) {
@@ -82,7 +92,7 @@ Deno.serve(async (req) => {
         error: 'whatsapp_send_failed',
         phone,
         result,
-        hint: whatsappUserHint(result),
+        hint: whatsappUserHint(result, lang),
       },
       502
     );
@@ -93,7 +103,9 @@ Deno.serve(async (req) => {
     phone,
     result,
     hint: result.stub
-      ? 'WhatsApp nu e configurat pe server — mesajul a fost doar logat (WHATSAPP_STUB). Setează secrets Meta sau Twilio.'
+      ? lang === 'en'
+        ? 'WhatsApp is not configured on the server — the message was only logged (WHATSAPP_STUB). Set the Meta or Twilio secrets.'
+        : 'WhatsApp nu e configurat pe server — mesajul a fost doar logat (WHATSAPP_STUB). Setează secrets Meta sau Twilio.'
       : undefined,
   });
 });

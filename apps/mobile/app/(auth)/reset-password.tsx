@@ -17,8 +17,10 @@ import {
 } from '@/components/ui';
 import { spacing } from '@/constants/theme';
 import { getSession, mapAuthError, updatePassword } from '@/lib/auth';
+import { useT } from '@/lib/i18n';
 
 export default function ResetPasswordScreen() {
+  const tr = useT();
   const [checking, setChecking] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [password, setPassword] = useState('');
@@ -43,11 +45,11 @@ export default function ResetPasswordScreen() {
   async function handleSubmit() {
     setError(null);
     if (!password || password.length < 6) {
-      setError('Parola trebuie să aibă cel puțin 6 caractere.');
+      setError(tr('auth.passwordMinLength'));
       return;
     }
     if (password !== confirm) {
-      setError('Parolele nu coincid.');
+      setError(tr('auth.passwordsMismatch'));
       return;
     }
 
@@ -65,26 +67,26 @@ export default function ResetPasswordScreen() {
   }
 
   if (checking) {
-    return <LoadingScreen label="Se verifică sesiunea…" />;
+    return <LoadingScreen label={tr('auth.checkingSession')} />;
   }
 
   if (!hasSession) {
     return (
-      <Screen title="Parolă nouă" onBack={() => router.replace('/(auth)/login')}>
+      <Screen title={tr('auth.newPassword')} onBack={() => router.replace('/(auth)/login')}>
         <ErrorState
           icon="link-outline"
-          title="Link invalid sau expirat"
-          description="Deschide din nou linkul din emailul de resetare pe acest dispozitiv. Dacă a expirat, cere un link nou."
+          title={tr('auth.badLinkTitle')}
+          description={tr('auth.badLinkDesc')}
           action={
             <Button
-              label="Cere un link nou"
+              label={tr('auth.requestNewLink')}
               icon="mail-outline"
               onPress={() => router.replace('/(auth)/forgot-password')}
             />
           }
         />
         <Button
-          label="Înapoi la autentificare"
+          label={tr('auth.backToLogin')}
           variant="ghost"
           onPress={() => router.replace('/(auth)/login')}
           style={styles.back}
@@ -95,27 +97,27 @@ export default function ResetPasswordScreen() {
 
   const form = (
     <Screen
-        title="Parolă nouă"
+        title={tr('auth.newPassword')}
         onBack={() => router.replace('/(auth)/login')}
         scroll
         bottomInset={spacing['3xl']}
       >
         <Field
-          label="Parolă nouă"
+          label={tr('auth.newPassword')}
           icon="lock-closed-outline"
           secureTextEntry
           autoComplete="new-password"
-          placeholder="Minim 6 caractere"
+          placeholder={tr('auth.min6Chars')}
           value={password}
           onChangeText={setPassword}
           editable={!loading && !done}
         />
         <Field
-          label="Confirmă parola"
+          label={tr('auth.confirmPassword')}
           icon="lock-closed-outline"
           secureTextEntry
           autoComplete="new-password"
-          placeholder="Repetă parola"
+          placeholder={tr('auth.repeatPassword')}
           value={confirm}
           onChangeText={setConfirm}
           editable={!loading && !done}
@@ -125,12 +127,12 @@ export default function ResetPasswordScreen() {
 
         {error ? <Callout tone="danger">{error}</Callout> : null}
         {done ? (
-          <Callout tone="success">Parola a fost actualizată. Te ducem în app…</Callout>
+          <Callout tone="success">{tr('auth.passwordUpdated')}</Callout>
         ) : null}
 
         {!done ? (
           <Button
-            label="Salvează parola"
+            label={tr('auth.savePassword')}
             icon="checkmark-circle-outline"
             onPress={handleSubmit}
             loading={loading}

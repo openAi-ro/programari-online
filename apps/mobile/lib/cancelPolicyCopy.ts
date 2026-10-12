@@ -1,4 +1,6 @@
-/** Short Romanian line shown before cancel confirm. */
+import { trKey } from './i18n';
+
+/** Short policy line shown before cancel confirm, in the current language. */
 export function cancelPolicyLine(opts?: {
   cancelNoticeMinutes?: number | null;
   paymentStatus?: string | null;
@@ -12,18 +14,18 @@ export function cancelPolicyLine(opts?: {
       const h = mins / 60;
       parts.push(
         h === 1
-          ? 'Anularea e permisă cu cel puțin 1 oră înainte.'
-          : `Anularea e permisă cu cel puțin ${h} ore înainte.`
+          ? trKey('cancelPolicy.hourOne')
+          : trKey('cancelPolicy.hours', { h })
       );
     } else if (mins >= 60) {
       const h = Math.floor(mins / 60);
       const m = mins % 60;
-      parts.push(`Anularea e permisă cu cel puțin ${h}h ${m}min înainte.`);
+      parts.push(trKey('cancelPolicy.hoursMins', { h, m }));
     } else {
-      parts.push(`Anularea e permisă cu cel puțin ${mins} minute înainte.`);
+      parts.push(trKey('cancelPolicy.minutes', { mins }));
     }
   } else {
-    parts.push('Anularea e definitivă — slotul se eliberează imediat.');
+    parts.push(trKey('cancelPolicy.instant'));
   }
 
 

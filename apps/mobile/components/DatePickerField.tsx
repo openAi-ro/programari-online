@@ -13,6 +13,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 
 import { useTheme } from '@/components/ui';
+import { localeTag, useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 
 type Props = {
@@ -37,10 +38,10 @@ function toYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function formatRo(ymd: string): string {
+function formatLocalized(ymd: string): string {
   const d = parseYmd(ymd);
   try {
-    return d.toLocaleDateString('ro-RO', {
+    return d.toLocaleDateString(localeTag(), {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -58,12 +59,14 @@ function formatRo(ymd: string): string {
 export function DatePickerField({
   value,
   onChange,
-  label = 'Data',
+  label,
   minimumDate,
   maximumDate,
 }: Props) {
   const t = useTheme();
+  const tr = useT();
   const [open, setOpen] = useState(false);
+  const shownLabel = label ?? tr('pick.dateLabel');
   const dateValue = useMemo(() => parseYmd(value), [value]);
 
   function apply(next: Date) {
@@ -102,7 +105,7 @@ export function DatePickerField({
   if (Platform.OS === 'web') {
     return (
       <View style={styles.wrap}>
-        {label ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{label}</Text> : null}
+        {shownLabel ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{shownLabel}</Text> : null}
         {field(
           <>
             <Ionicons name="calendar-outline" size={17} color={t.colors.accent} />
@@ -133,7 +136,7 @@ export function DatePickerField({
 
   return (
     <View style={styles.wrap}>
-      {label ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{label}</Text> : null}
+      {shownLabel ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{shownLabel}</Text> : null}
       {field(
         <>
           <Ionicons
@@ -142,7 +145,7 @@ export function DatePickerField({
             color={open ? t.colors.accent : t.colors.accent}
           />
           <Text style={[styles.fieldText, { color: t.colors.text }]} numberOfLines={1}>
-            {formatRo(value)}
+            {formatLocalized(value)}
           </Text>
           <Ionicons name="chevron-down" size={17} color={t.colors.textFaint} />
         </>,
@@ -178,7 +181,7 @@ export function DatePickerField({
               <View style={styles.modalBar}>
                 <View style={[styles.modalGrabber, { backgroundColor: t.colors.borderStrong }]} />
               </View>
-              <Text style={[styles.modalTitle, { color: t.colors.text }]}>Alege data</Text>
+              <Text style={[styles.modalTitle, { color: t.colors.text }]}>{tr('pick.dateTitle')}</Text>
               <DateTimePicker
                 value={dateValue}
                 mode="date"
@@ -201,7 +204,7 @@ export function DatePickerField({
                 ]}
                 onPress={() => setOpen(false)}
               >
-                <Text style={[styles.modalBtnText, { color: t.colors.onAccent }]}>Gata</Text>
+                <Text style={[styles.modalBtnText, { color: t.colors.onAccent }]}>{tr('pick.done')}</Text>
               </Pressable>
             </View>
           </Pressable>

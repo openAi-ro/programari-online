@@ -9,11 +9,13 @@ import {
 import { router } from 'expo-router';
 
 import { Button, Callout, Field, Screen, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import { mapAuthError, resetPasswordForEmail } from '@/lib/auth';
 
 export default function ForgotPasswordScreen() {
   const t = useTheme();
+  const tr = useT();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -23,7 +25,7 @@ export default function ForgotPasswordScreen() {
     setError(null);
     const e = email.trim();
     if (!e) {
-      setError('Introdu adresa de email.');
+      setError(tr('auth.enterEmail'));
       return;
     }
 
@@ -40,13 +42,13 @@ export default function ForgotPasswordScreen() {
 
   const form = (
     <Screen
-        title="Resetare parolă"
+        title={tr('auth.resetPassword')}
         onBack={() => router.replace('/(auth)/login')}
         scroll
         bottomInset={spacing['3xl']}
       >
         <Text style={[styles.lead, { color: t.colors.textMuted }]}>
-          Introdu emailul contului. Îți trimitem un link pentru a seta o parolă nouă.
+          {tr('auth.forgotLead')}
         </Text>
 
         <Field
@@ -67,14 +69,14 @@ export default function ForgotPasswordScreen() {
         {error ? <Callout tone="danger">{error}</Callout> : null}
         {sent ? (
           <Callout tone="success">
-            Dacă există un cont cu acest email, vei primi un link de resetare. Verifică și
-            folderul Spam. Deschide linkul pe același dispozitiv pe care folosești app-ul.
+            {tr('auth.forgotSent')}
+            
           </Callout>
         ) : null}
 
         {!sent ? (
           <Button
-            label="Trimite link de resetare"
+            label={tr('auth.sendResetLink')}
             icon="send-outline"
             onPress={handleSubmit}
             loading={loading}
@@ -83,7 +85,7 @@ export default function ForgotPasswordScreen() {
         ) : null}
 
         <Button
-          label="Înapoi la autentificare"
+          label={tr('auth.backToLogin')}
           variant="ghost"
           icon="arrow-back-outline"
           onPress={() => router.replace('/(auth)/login')}

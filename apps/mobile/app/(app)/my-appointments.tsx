@@ -37,6 +37,7 @@ import { ensureChatConversation, sendMessage } from '@/lib/chatRpc';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
+import { trKey, useT } from '@/lib/i18n';
 
 type Row = Appointment & {
   business_profiles?: Pick<
@@ -57,6 +58,7 @@ type Row = Appointment & {
 type Filter = 'all' | 'upcoming' | 'past';
 
 export default function MyAppointmentsScreen() {
+  const tr = useT();
   const t = useTheme();
   const back = useBack();
   const router = useRouter();
@@ -76,7 +78,7 @@ export default function MyAppointmentsScreen() {
     } = await supabase.auth.getUser();
     if (!user) {
       setLoading(false);
-      setError('Nu ești autentificat.');
+      setError(trKey('auth.notSignedIn'));
       return;
     }
 
@@ -217,7 +219,7 @@ export default function MyAppointmentsScreen() {
 
   async function sendQuickMessage(item: Row, text: string) {
     const { conversation, error: cErr } = await ensureChatConversation(item.business_id);
-    if (cErr || !conversation) { setError(cErr ?? 'Nu s-a putut deschide chatul.'); return; }
+    if (cErr || !conversation) { setError(cErr ?? trKey('chat.noChat')); return; }
     const { error: mErr } = await sendMessage(conversation.id, text);
     if (mErr) setError(mErr);
   }
@@ -253,10 +255,10 @@ export default function MyAppointmentsScreen() {
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
-        title="Programările mele"
-        subtitle="Ce ai rezervat și ce urmează"
+        title={tr('home.cardMyBookings')}
+        subtitle={tr('my.subtitle')}
         onBack={back}
-        label="Se încarcă programările…"
+        label={tr('my.loading')}
       />
     );
   }
@@ -265,7 +267,7 @@ export default function MyAppointmentsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-    <Screen title="Programările mele" subtitle="Ce ai rezervat și ce urmează" onBack={back} scroll={false}>
+    <Screen title={tr('home.cardMyBookings')} subtitle={tr('my.subtitle')} onBack={back} scroll={false}>
       <FlatList
         data={shown}
         keyExtractor={(item) => item.id}
@@ -286,20 +288,20 @@ export default function MyAppointmentsScreen() {
               value={filter}
               onChange={setFilter}
               options={[
-                { value: 'all', label: 'Toate' },
-                { value: 'upcoming', label: 'Viitoare' },
-                { value: 'past', label: 'Trecute' },
+                { value: 'all', label: tr('my.all') },
+                { value: 'upcoming', label: tr('my.upcoming') },
+                { value: 'past', label: tr('my.past') },
               ]}
             />
             {error ? (
-              <Callout tone="danger" title="A apărut o eroare">
+              <Callout tone="danger" title={tr('chat.errorTitle')}>
                 {error}
               </Callout>
             ) : null}
             {reviewingId ? (
               <View style={{ gap: spacing.md }}>
-                <Callout tone="accent" title="Recenzie">
-                  Alege stelele, apoi salvează.
+                <Callout tone="accent" title={tr('my.review')}>
+                  {tr('my.pickStars')}
                 </Callout>
                 <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                   {[1, 2, 3, 4, 5].map((n) => (
@@ -309,14 +311,14 @@ export default function MyAppointmentsScreen() {
                   ))}
                 </View>
                 <Field
-                  label="Comentariu (opțional)"
+                  label={tr('my.commentLabel')}
                   value={reviewComment}
                   onChangeText={setReviewComment}
-                  placeholder="Cum a fost vizita?"
+                  placeholder={tr('my.commentPlaceholder')}
                 />
-                <Button label="Trimite recenzia" onPress={() => void saveReview()} />
+                <Button label={tr('my.sendReview')} onPress={() => void saveReview()} />
                 <Button
-                  label="Renunță"
+                  label={tr('appt.giveUp')}
                   variant="secondary"
                   onPress={() => {
                     setReviewingId(null);
@@ -332,21 +334,21 @@ export default function MyAppointmentsScreen() {
             icon="calendar-clear-outline"
             title={
               rows.length === 0
-                ? 'Nu ai programări încă'
+                ? tr('my.emptyNone')
                 : filter === 'upcoming'
-                  ? 'Nicio programare viitoare'
-                  : 'Nicio programare trecută'
+                  ? tr('my.emptyUpcoming')
+                  : tr('my.emptyPast')
             }
             description={
               rows.length === 0
-                ? 'Scanează QR-ul salonului sau folosește linkul / codul public de rezervare.'
-                : 'Schimbă filtrul ca să vezi celelalte programări.'
+                ? tr('my.emptyNoneDesc')
+                : tr('my.emptyFilteredDesc')
             }
             action={
               rows.length === 0 ? (
                 <View style={{ gap: spacing.sm, alignItems: 'stretch', width: '100%' }}>
                   <Button
-                    label="Scanează QR"
+                    label={tr('home.scanQr')}
                     icon="qr-code-outline"
                     onPress={() => router.push('/(app)/scan' as never)}
                   />
@@ -359,7 +361,7 @@ export default function MyAppointmentsScreen() {
                     }}
                     numberOfLines={2}
                   >
-                    Sau deschide un link public / introdu codul pe ecranul Acasă.
+                    {tr('my.openLinkHint')}
                   </Text>
                 </View>
               ) : undefined
@@ -373,12 +375,14 @@ export default function MyAppointmentsScreen() {
             localLabel={localLabel(item)}
             cancelNoticeMinutes={item.business_profiles?.cancel_notice_minutes}
             onShare={() => {
-              const biz = item.business_profiles?.name ?? 'salon';
+              const biz = item.business_profiles?.name ?? tr('my.salonFallback');
               const when = localLabel(item);
               void Share.share({
-                message: `Programare la ${biz}: ${when}${
-                  item.service_name ? ` · ${item.service_name}` : ''
-                }`,
+                message: tr('my.shareMsg', {
+                  biz,
+                  when,
+                  service: item.service_name ? ` · ${item.service_name}` : '',
+                }),
               });
             }}
             onCancel={() => cancelAppointment(item)}
@@ -406,12 +410,12 @@ export default function MyAppointmentsScreen() {
                 : undefined
             }
             reviewLabel={
-              reviewsByApt[item.id] ? `Recenzia ta: ${reviewsByApt[item.id].rating} ★` : undefined
+              reviewsByApt[item.id] ? tr('my.yourReview', { rating: reviewsByApt[item.id].rating }) : undefined
             }
             onAddToCalendar={() =>
               void addAppointmentToCalendar({
                 id: item.id,
-                title: `Programare la ${item.business_profiles?.name ?? 'business'}`,
+                title: tr('my.calTitle', { name: item.business_profiles?.name ?? 'business' }),
                 description: item.service_name ?? undefined,
                 startIso: item.start_at,
                 endIso: item.end_at,

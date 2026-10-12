@@ -18,9 +18,9 @@ import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 type Admin = ReturnType<typeof createClient>;
 
-function formatTimeLocal(iso: string, timezone: string): string {
+function formatTimeLocal(iso: string, timezone: string, lang: 'ro' | 'en'): string {
   try {
-    return new Intl.DateTimeFormat('ro-RO', {
+    return new Intl.DateTimeFormat(notifyLocale(lang), {
       timeZone: timezone,
       hour: '2-digit',
       minute: '2-digit',
@@ -64,7 +64,7 @@ async function processWindow(
   if (clientIds.length) {
     const { data: profiles } = await admin
       .from('profiles')
-      .select('id, notify_reminders, notify_whatsapp')
+      .select('id, notify_reminders, notify_whatsapp, language')
       .in('id', clientIds);
     for (const p of profiles ?? []) {
       notifyByUser[p.id as string] = p.notify_reminders !== false;
@@ -97,11 +97,11 @@ async function processWindow(
 
     const businessName = business?.name ?? 'business';
     const timezone = business?.timezone ?? 'Europe/Bucharest';
-    const timeLocal = formatTimeLocal(appt.start_at, timezone);
+    const lang: 'ro' | 'en' = appt.client_user_id ? (langByUser[appt.client_user_id] ?? 'ro') : 'ro';
     const copy =
       opts.kind === '24h'
-        ? messageReminder24h(businessName, timeLocal, timezone)
-        : messageReminder(businessName, timeLocal, timezone);
+        ? messageReminder24h(businessName, timeLocal, timezone, lang)
+        : messageReminder(businessName, timeLocal, timezone, lang);
 
     try {
       const wantsWhatsapp =

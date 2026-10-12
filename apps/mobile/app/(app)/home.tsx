@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Redirect, router, useFocusEffect, useSegments } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -32,7 +32,8 @@ import {
   type BusinessLocation,
 } from '@/lib/location';
 import { presentLocalBookingNotification } from '@/lib/notifications';
-import { STATUS_META } from '@/lib/status';
+import { statusMeta } from '@/lib/status';
+import { trKey, useT, type TrKey } from '@/lib/i18n';
 import { appointmentNextHint } from '@/lib/appointmentNextHint';
 import {
   getFavoriteIds,
@@ -89,19 +90,20 @@ type RecentBusiness = {
 };
 
 
-const GUIDE_STEPS = [
-  'Configurează agenda (nume, program, servicii)',
-  'Deschide QR-ul sau copiază linkul public',
-  'Clienții rezervă din browser sau din app',
-  '„Cereri” — aprobi sau respingi programarea',
+const GUIDE_STEPS: TrKey[] = [
+  'home.guide1',
+  'home.guide2',
+  'home.guide3',
+  'home.guide4',
 ];
 
 function pendingBannerTitle(count: number): string {
-  if (count === 1) return 'Ai 1 cerere în așteptare';
-  return `Ai ${count} cereri în așteptare`;
+  if (count === 1) return trKey('home.pendingOne');
+  return trKey('home.pendingMany', { count });
 }
 
 export default function HomeScreen() {
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const inBusinessTabs = (segments as readonly string[]).includes('(tabs)');
@@ -479,10 +481,10 @@ export default function HomeScreen() {
         if (seenPendingRef.current.has(row.id)) return;
         seenPendingRef.current.add(row.id);
         setPendingCount((c) => c + 1);
-        const contact = row.client_email || row.client_phone || 'Client nou';
+        const contact = row.client_email || row.client_phone || trKey('home.newClient');
         void presentLocalBookingNotification({
-          title: 'Cerere nouă de programare',
-          body: `Ai o cerere de la ${contact}. Deschide Cereri pentru a răspunde.`,
+          title: trKey('notif.newBookingTitle'),
+          body: trKey('home.pendingPushBody', { contact }),
           appointmentId: row.id,
           businessId: row.business_id,
         });
@@ -498,7 +500,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={{ flex: 1 }}>
-        <SkeletonScreen blocks={4} label="Se încarcă agenda…" />
+        <SkeletonScreen blocks={4} label={tr('home.loadingAgenda')} />
       </View>
     );
   }
@@ -569,6 +571,7 @@ function ClientHome({
   onAttendanceConfirmed: () => void;
 }) {
   const t = useTheme();
+  const tr = useT();
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -590,7 +593,7 @@ function ClientHome({
     setCodeError(null);
     const extracted = extractPublicCode(code.trim());
     if (!extracted) {
-      setCodeError('Introdu codul sau linkul de rezervare al business-ului.');
+      setCodeError(tr('home.enterCode'));
       return;
     }
     router.push(`/(app)/book/${extracted}` as never);
@@ -611,15 +614,15 @@ function ClientHome({
     onAttendanceConfirmed();
   }
 
-  const nextStatus = next ? STATUS_META[next.status] : null;
+  const nextStatus = next ? statusMeta(next.status) : null;
 
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
     <Screen bottomInset={bottomInset}>
       <View style={styles.hero}>
-        <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>Cont client</Text>
+        <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>{tr('home.clientAccount')}</Text>
         <Text style={[styles.heroTitle, { color: t.colors.text }]} numberOfLines={1}>
-          Programări
+          {tr('home.title')}
         </Text>
       </View>
 
@@ -657,7 +660,7 @@ function ClientHome({
             </View>
             <View style={styles.flex}>
               <Text style={[styles.nextLabel, { color: t.colors.textMuted }]}>
-                Următoarea programare
+                {tr('home.nextAppointment')}
               </Text>
               <Text style={[styles.nextBiz, { color: t.colors.text }]} numberOfLines={1}>
                 {next.businessName}
@@ -673,8 +676,8 @@ function ClientHome({
               {formatInTimeZone(new Date(next.start_at), next.timezone, 'dd.MM.yyyy · HH:mm')}
             </Text>
             <Text style={[styles.nextHint, { color: t.colors.textMuted }]} numberOfLines={1}>
-              până la {formatInTimeZone(new Date(next.end_at), next.timezone, 'HH:mm')} · ora
-              locală a business-ului
+              {tr('home.untilLocal', { time: formatInTimeZone(new Date(next.end_at), next.timezone, 'HH:mm') })}
+
             </Text>
             <Text style={[styles.nextHint, { color: t.colors.textMuted }]} numberOfLines={2}>
               {appointmentNextHint(next.status, {
@@ -693,7 +696,7 @@ function ClientHome({
             {next.status === 'approved' && !next.attendanceConfirmed ? (
               <View style={styles.nextAction}>
                 <Button
-                  label="Confirmă că ajung"
+                  label={tr('appt.confirmAttendance')}
                   variant="success"
                   size="md"
                   icon="checkmark-circle-outline"
@@ -707,7 +710,7 @@ function ClientHome({
             {next.publicCode ? (
               <View style={styles.nextAction}>
                 <Button
-                  label="Rezervă din nou"
+                  label={tr('home.bookAgain')}
                   variant="primary"
                   size="md"
                   icon="refresh-outline"
@@ -732,7 +735,7 @@ function ClientHome({
             {canDriveNext && nextLocation ? (
               <View style={styles.nextAction}>
                 <Button
-                  label="Condu acum"
+                  label={tr('appt.driveNow')}
                   variant="secondary"
                   size="md"
                   icon="navigate-outline"
@@ -744,7 +747,7 @@ function ClientHome({
             ) : null}
             <View style={styles.nextAction}>
               <Button
-                label="Vezi detalii"
+                label={tr('home.seeDetails')}
                 variant="secondary"
                 size="md"
                 icon="arrow-forward"
@@ -758,24 +761,24 @@ function ClientHome({
       ) : (
         <EmptyState
           icon="calendar-outline"
-          title="Nicio programare viitoare"
-          description="Folosește butonul Scanează QR de mai jos sau introdu codul / linkul public."
+          title={tr('home.noUpcoming')}
+          description={tr('home.noUpcomingDesc')}
         />
       )}
 
       <Banner
         tone="accent"
         icon="scan-outline"
-        title="Rezervă un loc"
-        description="Scanează QR-ul de la salon sau introdu codul public."
-        actionLabel="Scanează QR"
+        title={tr('home.bookSpot')}
+        description={tr('home.bookSpotDesc')}
+        actionLabel={tr('home.scanQr')}
         onPress={() => router.push('/(app)/scan')}
       />
 
       <Field
-        label="Cod sau link de rezervare"
+        label={tr('home.codeLabel')}
         icon="keypad-outline"
-        placeholder="ex. salon12 sau link /b/…"
+        placeholder={tr('home.codePlaceholder')}
         autoCapitalize="none"
         autoCorrect={false}
         value={code}
@@ -792,7 +795,7 @@ function ClientHome({
         </Body>
       ) : null}
       <Button
-        label="Deschide programarea"
+        label={tr('home.openBooking')}
         icon="calendar-outline"
         onPress={openByCode}
         style={styles.codeSubmit}
@@ -800,7 +803,7 @@ function ClientHome({
 
       {recentBusinesses.length > 0 ? (
         <>
-          <SectionTitle>Saloane recente</SectionTitle>
+          <SectionTitle>{tr('home.recentSalons')}</SectionTitle>
           {recentBusinesses.slice(0, 6).map((biz) => (
             <BizCardRow
               key={biz.id}
@@ -808,11 +811,11 @@ function ClientHome({
               favorited={favoriteIds.includes(biz.id)}
               hint={[
                 biz.lastServiceName,
-                `Ultima vizită: ${formatInTimeZone(
-                  new Date(biz.lastVisitAt),
-                  biz.timezone,
-                  'dd.MM.yyyy'
-                )}`,
+                tr('home.lastVisit', {
+                  date: formatInTimeZone(new Date(biz.lastVisitAt), biz.timezone, 'dd.MM.yyyy'),
+
+
+                }),
                 biz.city,
               ]
                 .filter(Boolean)
@@ -826,7 +829,7 @@ function ClientHome({
 
       {loyalty.length > 0 ? (
         <>
-          <SectionTitle>Fidelitate</SectionTitle>
+          <SectionTitle>{tr('home.loyalty')}</SectionTitle>
           {loyalty.map((card) => (
             <LoyaltyRow key={card.businessId} card={card} />
           ))}
@@ -850,13 +853,14 @@ function BusinessHome({
   bottomInset: number;
 }) {
   const t = useTheme();
+  const tr = useT();
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
     <Screen bottomInset={bottomInset}>
       <View style={styles.hero}>
-        <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>Cont business</Text>
+        <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>{tr('home.businessAccount')}</Text>
         <Text style={[styles.heroTitle, { color: t.colors.text }]} numberOfLines={1}>
-          Programări
+          {tr('home.title')}
         </Text>
         {email ? (
           <View style={styles.accountRow}>
@@ -875,9 +879,9 @@ function BusinessHome({
           <Banner
             tone="accent"
             icon="rocket-outline"
-            title="Începe prin a-ți configura agenda"
-            description="Timezone, durată ședință, program de lucru și pauză — apoi primești un cod QR."
-            actionLabel="Configurează"
+            title={tr('home.setupTitle')}
+            description={tr('home.setupDesc')}
+            actionLabel={tr('home.setupCta')}
             onPress={() => router.push('/(app)/business/setup')}
           />
           <Guide />
@@ -889,8 +893,8 @@ function BusinessHome({
               tone="warm"
               icon="alert-circle-outline"
               title={pendingBannerTitle(pendingCount)}
-              description="Aprobă sau respinge cererile înainte să expire."
-              actionLabel="Vezi cererile"
+              description={tr('home.decideBeforeExpire')}
+              actionLabel={tr('home.seeRequests')}
               onPress={() => router.push('/(app)/business/(tabs)/requests')}
             />
           ) : null}
@@ -910,7 +914,7 @@ function BusinessHome({
               />
               <View style={styles.flex}>
                 <Text style={[styles.bizLabel, { color: t.colors.textMuted }]}>
-                  Business-ul tău
+                  {tr('home.yourBusiness')}
                 </Text>
                 <Text style={[styles.bizName, { color: t.colors.text }]} numberOfLines={1}>
                   {business.name}
@@ -919,14 +923,14 @@ function BusinessHome({
             </View>
 
             <View style={[styles.codeBox, { backgroundColor: t.colors.surfaceMuted }]}>
-              <Text style={[styles.codeLabel, { color: t.colors.textMuted }]}>Cod public</Text>
+              <Text style={[styles.codeLabel, { color: t.colors.textMuted }]}>{tr('home.publicCode')}</Text>
               <Text style={[styles.code, { color: t.colors.text }]} selectable>
                 {business.public_code}
               </Text>
             </View>
 
             <Button
-              label="Vezi QR / partajează"
+              label={tr('home.qrShare')}
               icon="qr-code-outline"
               onPress={() => router.push('/(app)/business/qr')}
             />
@@ -934,15 +938,15 @@ function BusinessHome({
         </>
       )}
 
-      <SectionTitle>Programări</SectionTitle>
+      <SectionTitle>{tr('home.title')}</SectionTitle>
 
       <Card
         icon="hourglass-outline"
-        title="Cereri programări"
+        title={tr('home.cardRequests')}
         hint={
           pendingCount > 0
             ? pendingBannerTitle(pendingCount)
-            : 'Aprobă sau respinge cererile în așteptare'
+            : tr('home.cardRequestsHint')
         }
         iconTone="warm"
         chevron
@@ -950,92 +954,92 @@ function BusinessHome({
       />
       <Card
         icon='chatbubbles-outline'
-        title='Mesaje clienti'
-        hint='Chat cu clientii'
+        title={tr('home.cardMessages')}
+        hint={tr('home.cardMessagesHint')}
         iconTone='neutral'
         chevron
         onPress={() => router.push('/(app)/business/chat' as never)}
       />
       <Card
         icon="calendar-outline"
-        title="Calendar pe zi"
-        hint="Programări pe ore, blochează concediul"
+        title={tr('home.cardCalendar')}
+        hint={tr('home.cardCalendarHint')}
         chevron
         onPress={() => router.push('/(app)/business/calendar' as never)}
       />
       <Card
         icon="notifications-outline"
-        title="Listă de așteptare"
-        hint="Clienți anunțați când se eliberează un loc"
+        title={tr('home.cardWaitlist')}
+        hint={tr('home.cardWaitlistHint')}
         chevron
         onPress={() => router.push('/(app)/business/waitlist' as never)}
       />
 
-      <SectionTitle>Clienți și echipă</SectionTitle>
+      <SectionTitle>{tr('home.clientsTeam')}</SectionTitle>
 
       <Card
         icon="people-outline"
-        title="Clienți"
-        hint="Istoric, vizite, note interne"
+        title={tr('home.cardClients')}
+        hint={tr('home.cardClientsHint')}
         chevron
         onPress={() => router.push('/(app)/business/(tabs)/clients' as never)}
       />
       <Card
         icon="people-circle-outline"
-        title="Echipă"
-        hint="Specialiști și program propriu"
+        title={tr('home.cardTeam')}
+        hint={tr('home.cardTeamHint')}
         chevron
         onPress={() => router.push('/(app)/business/staff' as never)}
       />
 
-      <SectionTitle>Business</SectionTitle>
+      <SectionTitle>{tr('home.businessSection')}</SectionTitle>
 
       <Card
         icon="cut-outline"
-        title="Servicii"
-        hint="Nume, durată, preț"
+        title={tr('home.cardServices')}
+        hint={tr('home.cardServicesHint')}
         chevron
         onPress={() => router.push('/(app)/business/services' as never)}
       />
       <Card
         icon="stats-chart-outline"
-        title="Rapoarte"
-        hint="Venit, no-show, top servicii"
+        title={tr('home.cardReports')}
+        hint={tr('home.cardReportsHint')}
         chevron
         onPress={() => router.push('/(app)/business/(tabs)/reports' as never)}
       />
       <Card
         icon="settings-outline"
-        title="Configurare business"
-        hint="Nume, program, reguli, zile blocate"
+        title={tr('home.cardSetup')}
+        hint={tr('home.cardSetupHint')}
         chevron
         onPress={() => router.push('/(app)/business/setup')}
       />
 
 
-      <SectionTitle>Ca client</SectionTitle>
+      <SectionTitle>{tr('home.asClient')}</SectionTitle>
 
       <Card
         icon="scan-outline"
-        title="Rezervă ca client"
-        hint="Scanează QR-ul altui business ca să te programezi acolo"
+        title={tr('home.cardBookAsClient')}
+        hint={tr('home.cardBookAsClientHint')}
         chevron
         onPress={() => router.push('/(app)/scan')}
       />
       <Card
         icon="calendar-outline"
-        title="Programările mele"
-        hint="Vezi, anulează sau reprogramează la alte business-uri"
+        title={tr('home.cardMyBookings')}
+        hint={tr('home.cardMyBookingsHint')}
         chevron
         onPress={() => router.push('/(app)/my-appointments' as never)}
       />
 
-      <SectionTitle>Cont</SectionTitle>
+      <SectionTitle>{tr('tabs.account')}</SectionTitle>
 
       <Card
         icon="person-circle-outline"
-        title="Setări"
-        hint="Profil, WhatsApp, notificări push, deconectare"
+        title={tr('bizTabs.settings')}
+        hint={tr('home.cardSettingsHint')}
         iconTone="neutral"
         chevron
         onPress={() => router.push('/(app)/business/(tabs)/settings' as never)}
@@ -1047,6 +1051,7 @@ function BusinessHome({
 
 function LoyaltyRow({ card }: { card: LoyaltyCard }) {
   const t = useTheme();
+  const tr = useT();
   const nextIsFree = card.untilFree === 1;
   const completed = card.every - card.untilFree;
   const progress = Math.min(1, Math.max(0, completed / card.every));
@@ -1064,18 +1069,18 @@ function LoyaltyRow({ card }: { card: LoyaltyCard }) {
             {card.businessName}
           </Text>
           <Text style={[styles.loyaltyMeta, { color: t.colors.textMuted }]} numberOfLines={1}>
-            {completed} din {card.every} până la gratis · {card.visitCount} vizite
+            {tr('home.loyaltyProgress', { done: completed, every: card.every, visits: card.visitCount })}
           </Text>
         </View>
         {nextIsFree ? (
           <Badge tone="success" icon="gift-outline">
-            Următoarea e gratuită
+            {tr('home.nextFree')}
           </Badge>
         ) : (
           <Badge tone="accent">
             {card.untilFree === 1
-              ? '1 vizită până la cadou'
-              : `${card.untilFree} vizite până la cadou`}
+              ? tr('home.oneVisitGift')
+              : tr('home.visitsGift', { n: card.untilFree })}
           </Badge>
         )}
       </View>
@@ -1097,6 +1102,7 @@ function LoyaltyRow({ card }: { card: LoyaltyCard }) {
 
 function Guide() {
   const t = useTheme();
+  const tr = useT();
   return (
     <View
       style={[
@@ -1106,7 +1112,7 @@ function Guide() {
       ]}
     >
       <Text style={[styles.guideTitle, { color: t.colors.text }]}>
-        Cum începi ca business
+        {tr('home.guideTitle')}
       </Text>
       {GUIDE_STEPS.map((step, i) => (
         <View key={step} style={styles.guideStep}>
@@ -1115,7 +1121,7 @@ function Guide() {
               {i + 1}
             </Text>
           </View>
-          <Text style={[styles.guideText, { color: t.colors.textMuted }]}>{step}</Text>
+          <Text style={[styles.guideText, { color: t.colors.textMuted }]}>{tr(step)}</Text>
         </View>
       ))}
     </View>

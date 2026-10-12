@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Badge, useTheme } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatBizHint } from '@/lib/discover';
 import type { PublicBusiness } from '@/lib/discover';
@@ -25,6 +26,7 @@ export function SalonRow({
   onPress: () => void;
 }) {
   const t = useTheme();
+  const tr = useT();
   const [imgFailed, setImgFailed] = useState(false);
   const showLogo = Boolean(item.logo_url) && !imgFailed;
   const hint = formatBizHint(item, { distanceKm: item.distanceKm ?? null });
@@ -33,7 +35,7 @@ export function SalonRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Deschide ${item.name}`}
+      accessibilityLabel={tr('browse.openBiz', { name: item.name })}
       style={({ pressed }) => [
         styles.row,
         {
@@ -50,7 +52,7 @@ export function SalonRow({
             source={{ uri: item.logo_url as string }}
             style={styles.logo}
             onError={() => setImgFailed(true)}
-            accessibilityLabel={`Logo ${item.name}`}
+            accessibilityLabel={tr('card.logoOf', { name: item.name })}
           />
         ) : (
           <Ionicons name="storefront-outline" size={22} color={t.colors.accent} />
@@ -68,7 +70,7 @@ export function SalonRow({
         {openNow === true ? (
           <View style={styles.badgeRow}>
             <Badge tone="success" dot>
-              Deschis acum
+              {tr('browse.openNow')}
             </Badge>
           </View>
         ) : null}
