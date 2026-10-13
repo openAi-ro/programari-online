@@ -55,3 +55,8 @@ scripts/_*.sql
 *.bak
 trajectory-*.json
 /favicon.png
+# Local Lua scratch (unrelated to project, kept on disk only)
+.luarc.json
+/Muse spark 1.4.3.md
+/Proba Auto Recul fix.lua
+/.tools/
