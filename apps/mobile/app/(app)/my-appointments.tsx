@@ -33,7 +33,6 @@ import {
 import { useBack } from '@/lib/nav';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { invokeRefundDeposit } from '@/lib/payments';
-import { ensureChatConversation, sendMessage } from '@/lib/chatRpc';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
@@ -248,13 +247,6 @@ export default function MyAppointmentsScreen() {
     await load();
   }
 
-
-  async function sendQuickMessage(item: Row, text: string) {
-    const { conversation, error: cErr } = await ensureChatConversation(item.business_id);
-    if (cErr || !conversation) { setError(cErr ?? trKey('chat.noChat')); return; }
-    const { error: mErr } = await sendMessage(conversation.id, text);
-    if (mErr) setError(mErr);
-  }
 
   async function saveReview() {
     if (!reviewingId) return;
@@ -508,7 +500,6 @@ export default function MyAppointmentsScreen() {
                   ) ?? undefined
                 : undefined
             }
-            onQuickMessage={(txt) => sendQuickMessage(item, txt)}
           />
         )}
       />
