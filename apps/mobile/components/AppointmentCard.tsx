@@ -473,7 +473,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onCancelSeries && appointment.recurring_series_id ? (
+        {onCancelSeries && appointment.recurring_series_id && (status === 'pending' || status === 'approved') ? (
           <Button
             label={`${tr('appt.series')} · ${tr('appt.cancelSeries')}`}
             icon="repeat-outline"
