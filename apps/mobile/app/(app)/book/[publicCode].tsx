@@ -394,7 +394,8 @@ export default function BookScreen() {
   }, [business, dateLocal, durationMinutes, rescheduleId, staffId, selectedStaff]);
 
   useEffect(() => {
-    if (step === 'slot' || step === 'confirm' || step === 'date') {
+    // Nu reincarca pe 'confirm': loadSlots() reseteaza ora aleasa si blocheaza trimiterea.
+    if (step === 'slot' || step === 'date') {
       void loadSlots();
     }
   }, [loadSlots, step]);
