@@ -20,6 +20,7 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   DEFAULT_AUTO_APPROVE_RETURNING,
   DEFAULT_BREAK_HOURS,
+  DEFAULT_DEPOSIT_RON,
   DEFAULT_BUFFER_MINUTES,
   DEFAULT_CANCEL_NOTICE_MINUTES,
   DEFAULT_LOYALTY_EVERY,
@@ -40,6 +41,7 @@ import {
   localitateCanonica,
   localitatiPentruJudet,
 } from '@/lib/roGeo';
+import { getSelectedBusinessId, setSelectedBusinessId } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/withTimeout';
 import {
@@ -47,7 +49,8 @@ import {
   categoryLabel,
   categoryLabelForKey,
 } from '@/lib/browseCategories';
-import { trKey, useT } from '@/lib/i18n';
+import { COUNTRY_TIMEZONES, countryByCode, countryByName, countryCodeOf, countryNames, DEFAULT_COUNTRY_CODE } from '@/lib/countries';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
 
 /**
@@ -146,6 +149,7 @@ export default function BusinessSetupScreen() {
   const back = useBack();
   const tr = useT();
   const router = useRouter();
+  const { lang } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [geoBusy, setGeoBusy] = useState(false);
@@ -166,6 +170,9 @@ export default function BusinessSetupScreen() {
   const [autoApprove, setAutoApprove] = useState(DEFAULT_AUTO_APPROVE_RETURNING);
   const [blockAfter, setBlockAfter] = useState(String(DEFAULT_NO_SHOW_BLOCK_AFTER));
   const [loyaltyEvery, setLoyaltyEvery] = useState(String(DEFAULT_LOYALTY_EVERY));
+  const [depositRon, setDepositRon] = useState(String(DEFAULT_DEPOSIT_RON));
+  const [myBusinesses, setMyBusinesses] = useState<BusinessProfile[]>([]);
+  const [country, setCountry] = useState(DEFAULT_COUNTRY_CODE);
   const [county, setCounty] = useState('');
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
@@ -173,6 +180,7 @@ export default function BusinessSetupScreen() {
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [openSections, setOpenSections] = useState({ schedule: true, booking: true, more: false });
   const [blockDateDraft, setBlockDateDraft] = useState(todayYmd);
   const [blockRangeStart, setBlockRangeStart] = useState(todayYmd);
   const [blockRangeEnd, setBlockRangeEnd] = useState(todayYmd);
@@ -216,9 +224,13 @@ export default function BusinessSetupScreen() {
         .from('business_profiles')
         .select('*')
         .eq('owner_user_id', user.id)
-        .maybeSingle();
+        .order('created_at', { ascending: true });
       if (data) {
-        const b = data as BusinessProfile;
+        const rows = (data ?? []) as BusinessProfile[];
+        setMyBusinesses(rows);
+        const selectedBizId = await getSelectedBusinessId();
+        const b = rows.find((r) => r.id === selectedBizId) ?? rows[0];
+        if (b) {
         setExistingId(b.id);
         setPublicCode(b.public_code);
         setName(b.name);
@@ -236,9 +248,12 @@ export default function BusinessSetupScreen() {
         setAutoApprove(Boolean(b.auto_approve_returning));
         setBlockAfter(String(b.no_show_block_after ?? DEFAULT_NO_SHOW_BLOCK_AFTER));
         setLoyaltyEvery(String(b.loyalty_every ?? DEFAULT_LOYALTY_EVERY));
+        setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
 
         // Adresele vechi aveau doar orașul; deducem județul din nomenclator.
-        const judet = judetCanonic(b.county) || judetPentruLocalitate(b.city);
+        setCountry(countryCodeOf(b.country));
+    const judet = judetCanonic(b.county) || judetPentruLocalitate(b.city);
+        setCountry(countryCodeOf(b.country));
         setCounty(judet);
         setCity(localitateCanonica(judet, b.city) || b.city || '');
         setAddress(b.address ?? '');
@@ -246,6 +261,7 @@ export default function BusinessSetupScreen() {
         setLatitude(b.latitude != null ? String(b.latitude) : '');
         setLongitude(b.longitude != null ? String(b.longitude) : '');
         setBlockedDates(Array.isArray(b.blocked_dates) ? b.blocked_dates : []);
+        }
       }
     }
     return () => {
@@ -309,6 +325,37 @@ export default function BusinessSetupScreen() {
   }
 
 
+  function switchBusiness(b: BusinessProfile) {
+    void setSelectedBusinessId(b.id);
+    setExistingId(b.id);
+    setPublicCode(b.public_code);
+    setName(b.name);
+    setCategory(typeof b.category === 'string' ? b.category : '');
+    setTimezone(b.timezone || DEFAULT_TIMEZONE);
+    setDuration(String(b.session_duration_minutes));
+    setWorkingHours(b.working_hours);
+    setBreakHours(b.break_hours ?? DEFAULT_BREAK_HOURS);
+    setMinNoticeHours(String((b.min_notice_minutes ?? DEFAULT_MIN_NOTICE_MINUTES) / 60));
+    setBufferMinutes(String(b.buffer_minutes ?? DEFAULT_BUFFER_MINUTES));
+    setMaxAdvanceDays(String(b.max_advance_days ?? DEFAULT_MAX_ADVANCE_DAYS));
+    setCancelNoticeHours(String((b.cancel_notice_minutes ?? DEFAULT_CANCEL_NOTICE_MINUTES) / 60));
+    setAutoApprove(Boolean(b.auto_approve_returning));
+    setBlockAfter(String(b.no_show_block_after ?? DEFAULT_NO_SHOW_BLOCK_AFTER));
+    setLoyaltyEvery(String(b.loyalty_every ?? DEFAULT_LOYALTY_EVERY));
+    setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
+    setCountry(countryCodeOf(b.country));
+    const judet = judetCanonic(b.county) || judetPentruLocalitate(b.city);
+    setCounty(judet);
+    setCity(localitateCanonica(judet, b.city) || b.city || '');
+    setAddress(b.address ?? '');
+    setMapsUrl(b.maps_url ?? '');
+    setLatitude(b.latitude != null ? String(b.latitude) : '');
+    setLongitude(b.longitude != null ? String(b.longitude) : '');
+    setBlockedDates(Array.isArray(b.blocked_dates) ? b.blocked_dates : []);
+    setMessage(null);
+    setError(null);
+  }
+
   async function handleSave() {
     setError(null);
     setMessage(null);
@@ -344,6 +391,11 @@ export default function BusinessSetupScreen() {
     }
     if (!Number.isFinite(cancelNotice) || cancelNotice < 0 || cancelNotice > 10080) {
       setError(trKey('setup.badCancelNotice'));
+      return;
+    }
+    const deposit = Number(String(depositRon).replace(',', '.'));
+    if (!Number.isFinite(deposit) || deposit < 0 || deposit > 100000) {
+      setError(trKey('svc.badPrice'));
       return;
     }
     const blockN = parseInt(blockAfter, 10);
@@ -391,6 +443,7 @@ export default function BusinessSetupScreen() {
       auto_approve_returning: autoApprove,
       no_show_block_after: blockN,
       loyalty_every: loyalty,
+      deposit_ron: deposit,
     };
 
     setSaving(true);
@@ -413,7 +466,8 @@ export default function BusinessSetupScreen() {
           session_duration_minutes: minutes,
           working_hours: workingHours,
           break_hours: breakHours,
-          county: county.trim() || null,
+          country,
+          county: country === 'RO' ? county.trim() || null : null,
           city: city.trim() || null,
           address: address.trim() || null,
           maps_url: mapsUrl.trim() || null,
@@ -444,7 +498,8 @@ export default function BusinessSetupScreen() {
         session_duration_minutes: minutes,
         working_hours: workingHours,
         break_hours: breakHours,
-        county: county.trim() || null,
+        country,
+        county: country === 'RO' ? county.trim() || null : null,
         city: city.trim() || null,
         address: address.trim() || null,
         maps_url: mapsUrl.trim() || null,
@@ -537,6 +592,16 @@ export default function BusinessSetupScreen() {
         </View>
       }
     >
+      {myBusinesses.length > 1 ? (
+        <PickerField
+          label={tr('biz.activeBusiness')}
+          value={myBusinesses.find((b) => b.id === existingId)?.name ?? ''}
+          options={myBusinesses.map((b) => b.name)}
+          onChange={(label) => { const b = myBusinesses.find((x) => x.name === label); if (b) switchBusiness(b); }}
+          placeholder={tr('biz.activeBusiness')}
+          icon="swap-horizontal-outline"
+        />
+      ) : null}
       <Field
         label={tr('setup.bizName')}
         value={name}
@@ -566,19 +631,44 @@ export default function BusinessSetupScreen() {
         hint={tr('setup.sessionHint')}
       />
       <Field
-        label="Timezone (IANA)"
+        label="Timezone IANA (avansat)"
         value={timezone}
+        editable
         onChangeText={setTimezone}
         placeholder="Europe/Bucharest"
         icon="globe-outline"
-        autoCapitalize="none"
-        hint={tr('setup.tzHint')}
+      />
+      <PickerField
+        label="Timezone"
+        value={timezone}
+        options={COUNTRY_TIMEZONES}
+        onChange={setTimezone}
+        placeholder="Europe/Bucharest"
+        icon="globe-outline"
+                hint={tr('setup.tzHint')}
       />
 
       <SectionTitle>{tr('setup.location')}</SectionTitle>
       <Callout tone="info" title={tr('setup.bizAddress')}>
         {tr('setup.addrHint', { myLoc: tr('setup.useMyLoc') })}
       </Callout>
+      <PickerField
+        label={tr('setup.country')}
+        value={(lang === 'en' ? countryByCode(country)?.nameEn : countryByCode(country)?.nameRo) ?? ''}
+        options={countryNames(lang)}
+        onChange={(label) => {
+          const next = countryByName(label, lang);
+          if (!next) return;
+          setCountry(next.code);
+          setTimezone(next.timezone);
+          if (next.code !== 'RO') setCounty('');
+        }}
+        placeholder={tr('setup.country')}
+        icon="flag-outline"
+        hint={tr('setup.countryHint')}
+      />
+      {country === 'RO' ? (
+        <>
       <PickerField
         label={tr('setup.county')}
         value={county}
@@ -600,6 +690,17 @@ export default function BusinessSetupScreen() {
         disabled={!county}
         hint={county ? undefined : tr('setup.localityHint')}
       />
+        </>
+      ) : (
+        <Field
+          label={tr('setup.cityFree')}
+          value={city}
+          onChangeText={setCity}
+          placeholder="London / Berlin / Chișinău"
+          icon="business-outline"
+          autoCapitalize="words"
+        />
+      )}
       <Field
         label={tr('setup.street')}
         value={address}
@@ -635,7 +736,12 @@ export default function BusinessSetupScreen() {
         </Text>
       )}
 
-      <WorkingHoursForm value={workingHours} onChange={setWorkingHours} />
+            <Pressable onPress={() => setOpenSections((s) => ({ ...s, schedule: !s.schedule }))} accessibilityRole="button">
+        <SectionTitle>{tr('setup.secSchedule')}</SectionTitle>
+      </Pressable>
+      {openSections.schedule ? (
+        <>
+<WorkingHoursForm value={workingHours} onChange={setWorkingHours} />
 
       <View
         style={[
@@ -682,7 +788,24 @@ export default function BusinessSetupScreen() {
         </View>
       ) : null}
 
-      <SectionTitle>{tr('setup.rules')}</SectionTitle>
+      <Field
+        label={tr('setup.depositLabel')}
+        value={depositRon}
+        onChangeText={setDepositRon}
+        placeholder={tr('setup.depositPh')}
+        keyboardType="decimal-pad"
+        icon="cash-outline"
+        hint={tr('setup.depositHint')}
+      />
+
+      
+        </>
+      ) : null}
+      <Pressable onPress={() => setOpenSections((s) => ({ ...s, booking: !s.booking }))} accessibilityRole="button">
+        <SectionTitle>{tr('setup.secBooking')}</SectionTitle>
+      </Pressable>
+      {openSections.booking ? (
+        <>
       <Field
         label={tr('setup.minNotice')}
         value={minNoticeHours}
@@ -719,7 +842,15 @@ export default function BusinessSetupScreen() {
         hint={tr('setup.cancelHint')}
       />
 
-      <SectionTitle>{tr('setup.discipline')}</SectionTitle>
+      
+        </>
+      ) : null}
+      <Pressable onPress={() => setOpenSections((s) => ({ ...s, more: !s.more }))} accessibilityRole="button">
+        <SectionTitle>{tr('setup.secMore')}</SectionTitle>
+      </Pressable>
+      {openSections.more ? (
+        <>
+<SectionTitle>{tr('setup.discipline')}</SectionTitle>
       <View
         style={[
           styles.breakRow,
@@ -865,6 +996,9 @@ export default function BusinessSetupScreen() {
         </Text>
       )}
 
+
+        </>
+      ) : null}
       {publicCode ? (
         <Callout tone="accent" title={tr('setup.pubCode', { code: publicCode ?? '' })}>
           {tr('setup.pubCodeHint')}

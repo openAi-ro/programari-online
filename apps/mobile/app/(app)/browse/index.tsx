@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -33,7 +33,8 @@ import {
   type BrowseCategory,
 } from '@/lib/browseCategories';
 import { useBack } from '@/lib/nav';
-import { trKey, useT } from '@/lib/i18n';
+import { countryByName, countryCodeOf, countryName, countryNames } from '@/lib/countries';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
 import {
   JUDETE,
   localitatiPentruJudet,
@@ -148,12 +149,16 @@ export default function BrowseScreen() {
   const [rows, setRows] = useState<PublicBusiness[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [selectedCounty, setSelectedCounty] = useState<string | null>(null);
   const [selectedLocality, setSelectedLocality] = useState<string | null>(null);
 
   // Nomenclator complet RO (nu doar județele din business-urile încărcate).
   const allCounties = trKey('browse.allCounties');
   const allLocalities = trKey('browse.allLocalities');
+  const { lang } = useLanguage();
+  const allCountries = trKey('browse.allCountries');
+  const countryOptions = useMemo(() => [allCountries, ...countryNames(lang)], [allCountries, lang]);
   const countyOptions = useMemo(() => [allCounties, ...JUDETE], [allCounties]);
   const localityOptions = useMemo(
     () =>
@@ -173,6 +178,9 @@ export default function BrowseScreen() {
       ) {
         return false;
       }
+      if (selectedCountryCode) {
+        if (countryCodeOf(r.country) !== selectedCountryCode) return false;
+      }
       if (selectedCounty) {
         if (normalizeRo(r.county) !== normalizeRo(selectedCounty)) return false;
       }
@@ -181,7 +189,7 @@ export default function BrowseScreen() {
       }
       return true;
     },
-    [q, selectedCounty, selectedLocality]
+    [q, selectedCountryCode, selectedCounty, selectedLocality]
   );
 
   const categoryCounts = useMemo(() => {
@@ -193,7 +201,11 @@ export default function BrowseScreen() {
     return map;
   }, [rows, matchesFilters]);
 
-  const hasActiveFilters = q.trim() !== '' || selectedCounty != null || selectedLocality != null;
+  const hasActiveFilters =
+    q.trim() !== '' ||
+    selectedCountryCode != null ||
+    selectedCounty != null ||
+    selectedLocality != null;
 
   const searchResults = useMemo(() => {
     if (!hasActiveFilters) return [] as PublicBusiness[];
@@ -241,6 +253,18 @@ export default function BrowseScreen() {
     [router]
   );
 
+  const onCountryChange = useCallback(
+    (next: string) => {
+      const picked =
+        next === trKey('browse.allCountries') ? null : countryByName(next, lang);
+      setSelectedCountryCode(picked ? picked.code : null);
+      if (picked && picked.code !== 'RO') {
+        setSelectedCounty(null);
+        setSelectedLocality(null);
+      }
+    },
+    [lang]
+  );
   const onCountyChange = useCallback((next: string) => {
     const county = next === trKey('browse.allCounties') ? null : next;
     setSelectedCounty(county);
@@ -287,6 +311,18 @@ export default function BrowseScreen() {
             />
 
             <PickerField
+              label={tr('browse.country')}
+              value={
+                selectedCountryCode ? countryName(selectedCountryCode, lang) : allCountries
+              }
+              options={countryOptions}
+              onChange={onCountryChange}
+              placeholder={tr('browse.country')}
+              icon="flag-outline"
+            />
+            {(!selectedCountryCode || selectedCountryCode === 'RO') ? (
+              <>
+            <PickerField
               label={tr('browse.county')}
               value={selectedCounty ?? allCounties}
               options={countyOptions}
@@ -312,6 +348,9 @@ export default function BrowseScreen() {
                   : tr('browse.localityHint')
               }
             />
+
+              </>
+            ) : null}
 
             <View style={styles.actions}>
               <Button label={tr('tabs.search')} icon="search-outline" onPress={onSearch} size="sm" />
@@ -366,7 +405,8 @@ export default function BrowseScreen() {
                   size="sm"
                   onPress={() => {
                     setQ('');
-                    setSelectedCounty(null);
+                    setSelectedCountryCode(null);
+                  setSelectedCounty(null);
                     setSelectedLocality(null);
                   }}
                 />

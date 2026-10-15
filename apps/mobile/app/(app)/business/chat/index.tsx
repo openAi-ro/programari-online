@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Callout, EmptyState, ListLoadingScreen, Screen, useTheme } from '@/components/ui';
 import { spacing } from '@/constants/theme';
-import { fetchLatestMessages, listConversations } from '@/lib/chatRpc';
+import { fetchLatestMessages, fetchUnreadCounts, listConversations } from '@/lib/chatRpc';
 import { useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
@@ -19,6 +19,7 @@ export default function BusinessChatListScreen() {
   const [rows, setRows] = useState<ChatConversation[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [latest, setLatest] = useState<Record<string, ChatMessage | null>>({});
+  const [unread, setUnread] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -29,6 +30,7 @@ export default function BusinessChatListScreen() {
     const ids = res.conversations.map((c) => c.id);
     const lat = await fetchLatestMessages(ids);
     setLatest(lat.latest);
+    setUnread(await fetchUnreadCounts());
     const r = await supabase.rpc('list_business_clients');
     if (!r.error) {
       const map: Record<string, string> = {};
@@ -57,6 +59,7 @@ export default function BusinessChatListScreen() {
               <View style={styles.flex}>
                 <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>{labels[item.client_user_id] ?? tr('wl.client')}</Text>
                 <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id]?.body ?? tr('chat.openConvo')}</Text>
+                {(unread[item.id] ?? 0) > 0 ? (<View style={[styles.unreadBadge, { backgroundColor: t.colors.danger }]}><Text style={styles.unreadText}>{unread[item.id]}</Text></View>) : null}
               </View>
             </Pressable>
           )}
@@ -68,9 +71,11 @@ export default function BusinessChatListScreen() {
 
 const styles = StyleSheet.create({
   list: { gap: spacing.sm },
-  row: { borderWidth: 1, borderRadius: 12, padding: 12 },
+  row: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   flex: { flex: 1, gap: 2 },
   name: { fontSize: 15, fontWeight: '700' },
   preview: { fontSize: 13 },
+  unreadBadge: { alignSelf: 'flex-start', minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, marginTop: 4 },
+  unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 });
 

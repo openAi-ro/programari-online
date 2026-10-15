@@ -40,6 +40,62 @@ export async function ensureChatConversation(
 /**
  * Send a message to a conversation. Requires the caller to be a participant.
  */
+/**
+ * Conversation between the caller's business and a specific client.
+ * Business-side counterpart of ensureChatConversation: the conversation is
+ * (business, client), never (business, owner).
+ */
+export async function ensureChatConversationForClient(
+  businessId: string,
+  clientUserId: string
+): Promise<{ conversation: ChatConversation | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('ensure_chat_conversation_for_client', {
+    p_business_id: businessId,
+    p_client_user_id: clientUserId,
+  });
+
+  if (error) {
+    return { conversation: null, error: rpcErrorText(error) };
+  }
+
+  if (Array.isArray(data)) {
+    return { conversation: (data[0] ?? null) as ChatConversation | null, error: null };
+  }
+
+  const conversation = data as ChatConversation | null;
+  if (!conversation?.id) {
+    return { conversation: null, error: 'conversation_not_created' };
+  }
+  return { conversation, error: null };
+}
+
+/** Unread message count per conversation for the current user (v38). */
+export async function fetchUnreadCounts(): Promise<Record<string, number>> {
+  const { data, error } = await supabase.rpc('chat_unread_counts');
+  if (error || !Array.isArray(data)) return {};
+  const out: Record<string, number> = {};
+  for (const row of data as { conversation_id: string; unread: number | string }[]) {
+    const n = Number(row.unread) || 0;
+    if (n > 0) out[row.conversation_id] = n;
+  }
+  return out;
+}
+
+/** Total unread across all of the current user's conversations. */
+export async function fetchUnreadTotal(): Promise<number> {
+  const counts = await fetchUnreadCounts();
+  return Object.values(counts).reduce((sum, n) => sum + n, 0);
+}
+
+/** Mark a conversation as read by the current participant (v38). */
+export async function markConversationRead(conversationId: string): Promise<void> {
+  if (!conversationId) return;
+  const { error } = await supabase.rpc('mark_chat_conversation_read', {
+    p_conversation: conversationId,
+  });
+  if (error) console.warn('mark_chat_conversation_read failed', error.message);
+}
+
 export async function sendMessage(
   conversationId: string,
   body: string

@@ -24,6 +24,7 @@ import {
 import { missingVisitCardFields } from '@/components/BusinessVisitCard';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { deleteMyAccount, exportMyData } from '@/lib/accountData';
 import { mapAuthError, signOut, updatePassword } from '@/lib/auth';
 import { getAppVersionLabel } from '@/lib/appVersion';
 import { parseAccountKind } from '@/lib/accountKind';
@@ -907,6 +908,28 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleExportData() {
+    setError(null);
+    const res = await exportMyData();
+    if (!res.ok) setError(trKey('set.exportFailed'));
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(trKey('set.deleteAccount'), trKey('set.deleteAccountBody'), [
+      { text: trKey('common.cancel'), style: 'cancel' },
+      {
+        text: trKey('set.deleteAccountConfirm'),
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setError(null);
+            const res = await deleteMyAccount();
+            if (!res.ok) setError(trKey('set.deleteAccountFailed'));
+          })();
+        },
+      },
+    ]);
+  }
   async function handleLogout() {
     setError(null);
     const { error: err } = await signOut();
@@ -1678,7 +1701,20 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(app)/chat' as never)}
         />
       ) : null}
+            <SettingRow
+        icon="download-outline"
+        title={tr('set.exportData')}
+        description={tr('set.accountData')}
+        onPress={() => void handleExportData()}
+      />
       <SettingRow
+        icon="trash-outline"
+        title={tr('set.deleteAccount')}
+        description={tr('set.deleteAccountBody')}
+        onPress={handleDeleteAccount}
+        danger
+      />
+<SettingRow
         icon="log-out-outline"
         title={tr('set.logout')}
         description={tr('set.logoutHint')}

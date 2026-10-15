@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -19,8 +19,17 @@ import { useBack } from '@/lib/nav';
 import { statusLabel } from '@/lib/status';
 import { mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { formatInTimeZone } from '@/lib/timezone';
+import { ensureChatConversationForClient } from '@/lib/chatRpc';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
+
+function phoneOf(contact: string): string {
+  const c = (contact ?? '').trim();
+  if (!c || c.includes('@')) return '';
+  const digits = c.replace(/\D/g, '');
+  return digits.length >= 9 ? c : '';
+}
 
 export default function BusinessClientsScreen() {
   useEffect(() => {
@@ -53,11 +62,12 @@ export default function BusinessClientsScreen() {
     } else {
       setRows((data ?? []) as BusinessClientRow[]);
     }
-    const { data: biz } = await supabase
-      .from('business_profiles')
-      .select('no_show_block_after, loyalty_every')
-      .limit(1)
-      .maybeSingle();
+    const {
+      data: { user: me },
+    } = await supabase.auth.getUser();
+    const { data: biz } = me
+      ? await fetchMyBusinessResult(me.id)
+      : { data: null };
     if (typeof biz?.no_show_block_after === 'number') {
       setBlockAfter(biz.no_show_block_after);
     }
@@ -104,6 +114,19 @@ export default function BusinessClientsScreen() {
       .order('start_at', { ascending: false })
       .limit(20);
     setHistory((data ?? []) as Appointment[]);
+  }
+
+  async function openChat(row: BusinessClientRow) {
+    setError(null);
+    const { conversation, error: cErr } = await ensureChatConversationForClient(
+      row.business_id,
+      row.client_user_id
+    );
+    if (cErr || !conversation) {
+      setError(cErr ?? tr('cli.chatFailed'));
+      return;
+    }
+    router.push(`/(app)/business/chat/${conversation.id}` as never);
   }
 
   async function saveNote(row: BusinessClientRow) {
@@ -234,6 +257,15 @@ export default function BusinessClientsScreen() {
                       {noteBusy ? tr('cli.saving') : tr('cli.saveNote')}
                     </Text>
                   </Pressable>
+                  <View style={styles.contactRow}>
+                    {phoneOf(row.contact) ? (
+                      <>
+                        <Button label={tr('cli.call')} size="sm" variant="secondary" icon="call-outline" onPress={() => void Linking.openURL('tel:' + phoneOf(row.contact))} />
+                        <Button label={tr('cli.whatsapp')} size="sm" variant="secondary" icon="logo-whatsapp" onPress={() => void Linking.openURL('https://wa.me/' + phoneOf(row.contact).replace(/\D/g, ''))} />
+                      </>
+                    ) : null}
+                    <Button label={tr('cli.chat')} size="sm" variant="secondary" icon="chatbubble-outline" onPress={() => void openChat(row)} />
+                  </View>
                   {history.map((a) => (
                     <Text key={a.id} style={[styles.hist, { color: t.colors.textMuted }]}>
                       {formatInTimeZone(new Date(a.start_at), 'Europe/Bucharest', 'dd.MM.yyyy HH:mm')}
@@ -289,5 +321,6 @@ const styles = StyleSheet.create({
   },
   saveNoteText: { fontSize: fontSize.sm, fontWeight: '700' },
   hist: { fontSize: fontSize.sm },
+  contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   link: { fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.xs },
 });

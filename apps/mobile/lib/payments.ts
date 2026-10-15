@@ -43,6 +43,15 @@ export function mapPayError(error: string): string {
   return error;
 }
 
+/** Business renunta la avansul neplatit al unei programari (RPC waive_deposit). */
+export async function invokeWaiveDeposit(
+  appointmentId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('waive_deposit', { p_appointment_id: appointmentId });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function invokeRefundDeposit(appointmentId: string): Promise<void> {
   const { error } = await supabase.functions.invoke('refund-deposit', {
     body: { appointment_id: appointmentId },

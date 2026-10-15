@@ -1,13 +1,16 @@
 import { useCallback, useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import {
+  Button,
   Callout,
   EmptyState,
   Screen,
   SectionTitle,
   SkeletonScreen,
+  Segmented,
   SkeletonStatGrid,
   useTheme,
 } from '@/components/ui';
@@ -44,13 +47,15 @@ export default function BusinessReportsScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [days, setDays] = useState(30);
 
   const load = useCallback(async () => {
     setError(null);
-    const { data, error: err } = await supabase.rpc('business_report', { p_days: 30 });
+    const { data, error: err } = await supabase.rpc('business_report', { p_days: days });
     if (err) {
       setError(err.message);
       setReport(null);
@@ -58,7 +63,11 @@ export default function BusinessReportsScreen() {
       setReport((data ?? null) as Report | null);
     }
     setLoading(false);
-  }, []);
+  }, [days]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,6 +114,7 @@ export default function BusinessReportsScreen() {
       <Screen title={tr('rep.title')} subtitle={tr('rep.lastDays').replace('{days}', String(report.days))} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
+      <Segmented value={String(days)} onChange={(v) => setDays(Number(v))} options={[{ value: '7', label: '7' }, { value: '30', label: '30' }, { value: '90', label: '90' }]} />
       <View style={styles.grid}>
         <Stat label={tr('rep.confirmed')} value={String(report.approved)} color={t.colors.text} />
         <Stat label={tr('rep.revenue')} value={formatLei(report.revenue_ron)} color={t.colors.text} />
@@ -119,9 +129,12 @@ export default function BusinessReportsScreen() {
           color={t.colors.text}
         />
         <Stat label={tr('rep.cancelled')} value={String(report.cancelled)} color={t.colors.textMuted} />
+        <Stat label={tr('rep.pending')} value={String(report.pending)} color={t.colors.textMuted} />
+        <Stat label={tr('rep.deposits')} value={formatLei(report.deposits_ron)} color={t.colors.text} />
         <Stat label={tr('rep.gifts')} value={String(report.loyalty_redeemed)} color={t.colors.text} />
       </View>
 
+      <Button label={tr('rev.seeAll')} variant="secondary" icon="star-outline" onPress={() => router.push('/(app)/business/reviews' as never)} />
       <SectionTitle>{tr('rep.topServices')}</SectionTitle>
       {(report.top_services ?? []).length === 0 ? (
         <EmptyState compact title={tr('rep.noBookings')} />

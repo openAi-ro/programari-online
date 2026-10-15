@@ -41,6 +41,7 @@ import {
   type BrowseCategory,
 } from '@/lib/browseCategories';
 import { useBack } from '@/lib/nav';
+import { countryByName, countryCodeOf, countryName, countryNames } from '@/lib/countries';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
 import {
   JUDETE,
@@ -74,6 +75,7 @@ export default function CategoryResultsScreen() {
   const [rows, setRows] = useState<PublicBusiness[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [selectedCounty, setSelectedCounty] = useState<string | null>(null);
   const [selectedLocality, setSelectedLocality] = useState<string | null>(null);
   const [nearMe, setNearMe] = useState(false);
@@ -107,6 +109,10 @@ export default function CategoryResultsScreen() {
   }, [rows, category]);
 
   // Nomenclator complet RO (toate județele), nu doar cele din business-urile încărcate.
+  const countryOptions = useMemo(
+    () => [trKey('browse.allCountries'), ...countryNames(lang)],
+    [lang]
+  );
   const countyOptions = useMemo(() => [trKey('browse.allCounties'), ...JUDETE], [lang]);
   const localityOptions = useMemo(
     () =>
@@ -126,6 +132,9 @@ export default function CategoryResultsScreen() {
           r.public_code.toLowerCase().includes(qq)
       );
     }
+    if (selectedCountryCode) {
+      list = list.filter((r) => countryCodeOf(r.country) === selectedCountryCode);
+    }
     if (selectedCounty) {
       const needle = normalizeRo(selectedCounty);
       list = list.filter((r) => normalizeRo(r.county) === needle);
@@ -143,13 +152,25 @@ export default function CategoryResultsScreen() {
         ? withDistances(list, coords)
         : list.map((r) => ({ ...r, distanceKm: null as number | null }));
     return sortBusinesses(withDist, sort, (r) => r.distanceKm);
-  }, [categoryRows, q, selectedCounty, selectedLocality, openOnly, nearMe, coords, sort]);
+  }, [categoryRows, q, selectedCountryCode, selectedCounty, selectedLocality, openOnly, nearMe, coords, sort]);
 
   const onSearch = useCallback(() => {
     setLoading(true);
     void load({ q: q.trim() || undefined });
   }, [load, q]);
 
+  const onCountryChange = useCallback(
+    (next: string) => {
+      const picked =
+        next === trKey('browse.allCountries') ? null : countryByName(next, lang);
+      setSelectedCountryCode(picked ? picked.code : null);
+      if (picked && picked.code !== 'RO') {
+        setSelectedCounty(null);
+        setSelectedLocality(null);
+      }
+    },
+    [lang]
+  );
   const onCountyChange = useCallback((next: string) => {
     const county = next === trKey('browse.allCounties') ? null : next;
     setSelectedCounty(county);
@@ -255,6 +276,16 @@ export default function CategoryResultsScreen() {
               />
 
               <PickerField
+                label={tr('browse.country')}
+                value={selectedCountryCode ? countryName(selectedCountryCode, lang) : trKey('browse.allCountries')}
+                options={countryOptions}
+                onChange={onCountryChange}
+                placeholder={tr('browse.country')}
+                icon="flag-outline"
+              />
+              {(!selectedCountryCode || selectedCountryCode === 'RO') ? (
+                <>
+              <PickerField
                 label={tr('browse.county')}
                 value={selectedCounty ?? trKey('browse.allCounties')}
                 options={countyOptions}
@@ -280,6 +311,9 @@ export default function CategoryResultsScreen() {
                     : tr('browse.localityHint')
                 }
               />
+
+                </>
+              ) : null}
 
               <View style={styles.actions}>
                 <Button

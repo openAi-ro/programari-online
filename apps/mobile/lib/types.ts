@@ -45,6 +45,8 @@ export type BusinessProfile = {
   no_show_block_after: number;
   loyalty_every: number;
   /** Locație — toate opționale; cardul de hartă apare doar dacă există date. */
+  /** Cod ISO tara (RO/GB/MD/...); implicit RO. */
+  country?: string | null;
   county?: string | null;
   city?: string | null;
   address?: string | null;
@@ -99,6 +101,8 @@ export type Appointment = {
   staff_id?: string | null;
   staff_name?: string | null;
   loyalty_redeemed?: boolean;
+  /** Serie saptamanala (v38); null pentru programari simple. */
+  recurring_series_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -126,6 +130,8 @@ export type Review = {
   rating: number;
   comment: string;
   created_at: string;
+  owner_reply?: string | null;
+  owner_reply_at?: string | null;
 };
 
 export type FreeSlot = {
@@ -169,6 +175,8 @@ export type ChatConversation = {
   client_user_id: string;
   last_message_at: string | null;
   created_at: string;
+  client_last_read_at?: string | null;
+  owner_last_read_at?: string | null;
 };
 
 export type ChatMessage = {

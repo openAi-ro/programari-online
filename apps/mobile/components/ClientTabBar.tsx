@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/components/ui';
+import { fetchUnreadTotal } from '@/lib/chatRpc';
 import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 
@@ -68,6 +70,14 @@ export function ClientTabBar({
   const tr = useT();
   const insets = useSafeAreaInsets();
   const pathname = usePathname() || '';
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => { const n = await fetchUnreadTotal(); if (!cancelled) setChatUnread(n); };
+    void refresh();
+    const iv = setInterval(() => void refresh(), 60_000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [pathname]);
 
   return (
     <View
@@ -82,7 +92,7 @@ export function ClientTabBar({
     >
       {TABS.map((tab) => {
         const active = tab.match(pathname);
-        const count = badges?.[tab.key] ?? 0;
+        const count = (badges?.[tab.key] ?? 0) + (tab.key === 'account' ? chatUnread : 0);
         const color = active ? t.colors.accent : t.colors.textMuted;
         return (
           <Pressable

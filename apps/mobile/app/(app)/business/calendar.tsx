@@ -13,6 +13,7 @@ import {
   Field,
   Screen,
   SectionTitle,
+  Segmented,
   SkeletonScreen,
   useTheme,
 } from '@/components/ui';
@@ -24,6 +25,7 @@ import { mapBookingRpcError } from '@/lib/bookingRules';
 import { listBusyRanges } from '@/lib/bookingRpc';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { generateFreeSlots } from '@/lib/slots';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import { createWalkinAppointment } from '@/lib/walkin';
 import { normalizeWalkinContact, validateWalkinInput } from '@/lib/walkinRules';
@@ -36,6 +38,18 @@ function toYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function addDaysYmd(ymd: string, days: number): string {
+  const d = new Date(ymd + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return toYmd(d);
+}
+
+function mondayOfYmd(ymd: string): string {
+  const d = new Date(ymd + 'T12:00:00');
+  const dow = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dow);
+  return toYmd(d);
+}
 export default function BusinessCalendarScreen() {
   const t = useTheme();
   const back = useBack();
@@ -46,6 +60,7 @@ export default function BusinessCalendarScreen() {
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [rows, setRows] = useState<Appointment[]>([]);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
   const [staffList, setStaffList] = useState<{ id: string; name: string; color: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -72,11 +87,7 @@ export default function BusinessCalendarScreen() {
       setError(trKey('req.notAuthed'));
       return;
     }
-    const { data: biz, error: bErr } = await supabase
-      .from('business_profiles')
-      .select('*')
-      .eq('owner_user_id', user.id)
-      .maybeSingle();
+    const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
       setError(bErr.message);
       setLoading(false);
@@ -97,7 +108,10 @@ export default function BusinessCalendarScreen() {
       .eq('active', true)
       .order('sort_order', { ascending: true });
     setStaffList((team ?? []) as { id: string; name: string; color: string }[]);
-    const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, profile.timezone);
+    const rangeStart = viewMode === 'week' ? mondayOfYmd(dateLocal) : dateLocal;
+    const rangeEnd = viewMode === 'week' ? addDaysYmd(rangeStart, 6) : dateLocal;
+    const { startUtc } = localDayBoundsUtc(rangeStart, profile.timezone);
+    const { endUtc } = localDayBoundsUtc(rangeEnd, profile.timezone);
     let query = supabase
       .from('appointments')
       .select('*')
@@ -114,7 +128,7 @@ export default function BusinessCalendarScreen() {
       setRows((data ?? []) as Appointment[]);
     }
     setLoading(false);
-  }, [dateLocal, staffFilter]);
+  }, [dateLocal, staffFilter, viewMode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -302,6 +316,7 @@ export default function BusinessCalendarScreen() {
         </View>
       }
     >
+      <Segmented value={viewMode} onChange={(v) => setViewMode(v as 'day' | 'week')} options={[{ value: 'day', label: tr('cal.viewDay') }, { value: 'week', label: tr('cal.viewWeek') }]} />
       <DatePickerField label={tr('cal.day')} value={dateLocal} onChange={setDateLocal} />
 
       {staffList.length > 1 ? (
@@ -381,7 +396,14 @@ export default function BusinessCalendarScreen() {
           return (
             <Pressable
               key={a.id}
-              onPress={() => router.push('/(app)/business/(tabs)/requests')}
+              onPress={() => {
+                if (viewMode === 'week') {
+                  setDateLocal(formatInTimeZone(new Date(a.start_at), business.timezone, 'yyyy-MM-dd'));
+                  setViewMode('day');
+                } else {
+                  router.push('/(app)/business/(tabs)/requests');
+                }
+              }}
               style={({ pressed }) => [
                 styles.item,
                 {
@@ -392,6 +414,11 @@ export default function BusinessCalendarScreen() {
               ]}
             >
               <View style={[styles.timeCol, { borderRightColor: t.colors.border }]}>
+                {viewMode === 'week' ? (
+                  <Text style={[styles.timeEnd, { color: t.colors.accent }]}>
+                    {formatInTimeZone(new Date(a.start_at), business.timezone, 'dd.MM')}
+                  </Text>
+                ) : null}
                 <Text style={[styles.timeStart, { color: t.colors.text }]}>{start}</Text>
                 <Text style={[styles.timeEnd, { color: t.colors.textFaint }]}>{end}</Text>
               </View>

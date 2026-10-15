@@ -14,7 +14,7 @@ import { trKey, useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { presentLocalChatNotification } from '@/lib/notifications';
 import { formatLocalTime } from '@/lib/timezone';
-import { listMessages, sendMessage } from '@/lib/chatRpc';
+import { listMessages, markConversationRead, sendMessage } from '@/lib/chatRpc';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import { useFocusEffect } from 'expo-router';
@@ -80,6 +80,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     const { messages: fetched, error: msgErr } = await listMessages(conversationId);
     if (msgErr) { setLoading(false); setError(msgErr); return; }
     setMessages(fetched);
+    void markConversationRead(conversationId);
     seenIdsRef.current = new Set(fetched.map((m) => m.id));
     setLoading(false);
     setTimeout(() => scrollToBottom(false), 50);

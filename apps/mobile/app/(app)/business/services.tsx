@@ -18,6 +18,7 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatDuration, formatRon } from '@/lib/format';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import type { Service } from '@/lib/types';
 
@@ -42,6 +43,7 @@ export default function BusinessServicesScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -53,11 +55,7 @@ export default function BusinessServicesScreen() {
       setError(trKey('req.notAuthed'));
       return;
     }
-    const { data: biz, error: bErr } = await supabase
-      .from('business_profiles')
-      .select('id, session_duration_minutes')
-      .eq('owner_user_id', user.id)
-      .maybeSingle();
+    const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
       setError(bErr.message);
       setLoading(false);
@@ -182,6 +180,26 @@ export default function BusinessServicesScreen() {
     await load();
   }
 
+  async function moveService(s: Service, dir: -1 | 1) {
+    const idx = rows.findIndex((r) => r.id === s.id);
+    const other = rows[idx + dir];
+    if (!other) return;
+    setError(null);
+    const a = await supabase.from('services').update({ sort_order: other.sort_order, updated_at: new Date().toISOString() }).eq('id', s.id);
+    if (a.error) { setError(a.error.message); return; }
+    const b = await supabase.from('services').update({ sort_order: s.sort_order, updated_at: new Date().toISOString() }).eq('id', other.id);
+    if (b.error) { setError(b.error.message); return; }
+    await load();
+  }
+
+  async function deleteService(s: Service) {
+    setError(null);
+    const { error: err } = await supabase.from('services').delete().eq('id', s.id);
+    setPendingDeleteId(null);
+    if (err) { setError(err.message); return; }
+    if (editingId === s.id) setEditingId(null);
+    await load();
+  }
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
@@ -312,6 +330,15 @@ export default function BusinessServicesScreen() {
               </Text>
             </Pressable>
             <View style={styles.rowRight}>
+              <Pressable onPress={() => void moveService(s, -1)} hitSlop={8} accessibilityLabel={tr('common.moveUp')}>
+                <Ionicons name="arrow-up" size={18} color={t.colors.textMuted} />
+              </Pressable>
+              <Pressable onPress={() => void moveService(s, 1)} hitSlop={8} accessibilityLabel={tr('common.moveDown')}>
+                <Ionicons name="arrow-down" size={18} color={t.colors.textMuted} />
+              </Pressable>
+              <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} hitSlop={8} accessibilityLabel={tr('common.deleteHard')}>
+                <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
+              </Pressable>
               <Toggle
                 value={s.active}
                 onValueChange={() => void toggleActive(s)}
@@ -321,6 +348,12 @@ export default function BusinessServicesScreen() {
                 <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
               </Pressable>
             </View>
+            {pendingDeleteId === s.id ? (
+              <View style={styles.confirmBox}>
+                <Text style={[styles.rowMeta, { color: t.colors.danger }]}>{tr('common.deleteConfirm')}</Text>
+                <Button label={tr('common.deleteHard')} size="sm" variant="danger" onPress={() => void deleteService(s)} />
+              </View>
+            ) : null}
           </View>
         ))
       )}
@@ -332,6 +365,7 @@ const styles = StyleSheet.create({
   footer: { gap: spacing.md },
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.lg,
@@ -343,4 +377,5 @@ const styles = StyleSheet.create({
   rowDesc: { fontSize: fontSize.sm, marginTop: 2 },
   rowMeta: { fontSize: fontSize.sm },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  confirmBox: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
 });

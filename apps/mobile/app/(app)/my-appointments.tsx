@@ -65,11 +65,13 @@ export default function MyAppointmentsScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [reviewsByApt, setReviewsByApt] = useState<Record<string, Review>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+  const [myWaitlist, setMyWaitlist] = useState<Array<{ id: string; desired_date: string; status: string; business_id: string }>>([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -163,6 +165,13 @@ export default function MyAppointmentsScreen() {
         .in('appointment_id', aptIds);
       for (const r of (revs ?? []) as Review[]) map[r.appointment_id] = r;
     }
+    const { data: wl } = await supabase
+      .from('waitlist')
+      .select('id, desired_date, status, business_id')
+      .eq('client_user_id', user.id)
+      .in('status', ['active', 'notified'])
+      .order('desired_date', { ascending: true });
+    setMyWaitlist((wl ?? []) as Array<{ id: string; desired_date: string; status: string; business_id: string }>);
     setReviewsByApt(map);
     setLoading(false);
   }, []);
@@ -181,6 +190,29 @@ export default function MyAppointmentsScreen() {
     return `${start} – ${end}`;
   }
 
+  async function leaveMyWaitlist(id: string) {
+    setError(null);
+    const { error: err } = await supabase.rpc('leave_waitlist', { p_waitlist_id: id });
+    if (err) {
+      setError(mapBookingRpcError(err.message));
+      return;
+    }
+    await load();
+  }
+  async function cancelSeries(item: Row) {
+    if (!item.recurring_series_id) return;
+    setError(null);
+    setSuccess(null);
+    const { data, error: err } = await supabase.rpc('cancel_recurring_series', {
+      p_series_id: item.recurring_series_id,
+    });
+    if (err) {
+      setError(mapBookingRpcError(err.message));
+      return;
+    }
+    setSuccess(trKey('appt.seriesCancelled', { count: Number(data ?? 0) }));
+    await load();
+  }
   async function cancelAppointment(item: Row) {
     setError(null);
     const { error: err } = await supabase.rpc('cancel_appointment', {
@@ -298,6 +330,44 @@ export default function MyAppointmentsScreen() {
                 {error}
               </Callout>
             ) : null}
+            {success ? (
+              <Callout tone="success">
+                {success}
+              </Callout>
+            ) : null}
+            {myWaitlist.length > 0 ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={{ fontWeight: '800', color: t.colors.text }}>{tr('wl.myTitle')}</Text>
+                {myWaitlist.map((w) => (
+                  <View
+                    key={w.id}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.sm,
+                      borderWidth: 1,
+                      borderColor: t.colors.border,
+                      borderRadius: 12,
+                      padding: 10,
+                      backgroundColor: t.colors.surface,
+                    }}
+                  >
+                    <Text style={{ flex: 1, color: t.colors.text }}>
+                      {rows.find((r) => r.business_id === w.business_id)?.business_profiles?.name ?? ''}
+                      {' · '}
+                      {w.desired_date}
+                      {w.status === 'notified' ? ` · ${tr('wl.statusNotified')}` : ''}
+                    </Text>
+                    <Button
+                      label={tr('wl.leave')}
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => void leaveMyWaitlist(w.id)}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : null}
             {reviewingId ? (
               <View style={{ gap: spacing.md }}>
                 <Callout tone="accent" title={tr('my.review')}>
@@ -386,6 +456,7 @@ export default function MyAppointmentsScreen() {
               });
             }}
             onCancel={() => cancelAppointment(item)}
+            onCancelSeries={item.recurring_series_id ? () => void cancelSeries(item) : undefined}
             canCancel={canClientCancel(item, item.business_profiles)}
             canReschedule={
               canClientReschedule(item, item.business_profiles) &&

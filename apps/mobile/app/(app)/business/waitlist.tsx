@@ -13,6 +13,9 @@ import {
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
+import { getWebBookingUrl } from '@/lib/bookingLink';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
+import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { supabase } from '@/lib/supabase';
 import type { WaitlistEntry } from '@/lib/types';
 
@@ -28,6 +31,9 @@ export default function BusinessWaitlistScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [bizCode, setBizCode] = useState('');
+  const [notifyBusyId, setNotifyBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -38,11 +44,8 @@ export default function BusinessWaitlistScreen() {
       setLoading(false);
       return;
     }
-    const { data: biz } = await supabase
-      .from('business_profiles')
-      .select('id')
-      .eq('owner_user_id', user.id)
-      .maybeSingle();
+    const { data: biz } = await fetchMyBusinessResult(user.id);
+    if (biz) setBizCode(biz.public_code ?? '');
     if (!biz) {
       setRows([]);
       setLoading(false);
@@ -52,14 +55,14 @@ export default function BusinessWaitlistScreen() {
       .from('waitlist')
       .select('*, services(name), staff(name)')
       .eq('business_id', biz.id)
-      .eq('status', 'active')
+      .in('status', ['active', 'notified'])
       .order('desired_date', { ascending: true });
     if (err) {
       const plain = await supabase
         .from('waitlist')
         .select('*')
         .eq('business_id', biz.id)
-        .eq('status', 'active')
+        .in('status', ['active', 'notified'])
         .order('desired_date', { ascending: true });
       if (plain.error) setError(plain.error.message);
       else setRows((plain.data ?? []) as Row[]);
@@ -76,6 +79,27 @@ export default function BusinessWaitlistScreen() {
     }, [load])
   );
 
+  async function notifyRow(row: Row) {
+    setError(null);
+    setSuccess(null);
+    setNotifyBusyId(row.id);
+    const res = await invokeWaitlistNotify({
+      business_id: row.business_id,
+      desired_date: row.desired_date,
+      booking_url: bizCode ? getWebBookingUrl(bizCode) : '',
+    });
+    setNotifyBusyId(null);
+    if (!res.ok) {
+      setError(tr('wl.notifyFailed'));
+      return;
+    }
+    await supabase
+      .from('waitlist')
+      .update({ status: 'notified', notified_at: new Date().toISOString() })
+      .eq('id', row.id);
+    setSuccess(tr('wl.notifiedOk'));
+    await load();
+  }
   async function remove(id: string) {
     setError(null);
     const { error: err } = await supabase.rpc('leave_waitlist', { p_waitlist_id: id });
@@ -100,6 +124,7 @@ export default function BusinessWaitlistScreen() {
   return (
     <Screen title={tr('wl.title')} subtitle={tr('wl.subtitle')} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
+      {success ? <Callout tone="success">{success}</Callout> : null}
       {rows.length === 0 ? (
         <EmptyState
           icon="hourglass-outline"
@@ -123,6 +148,16 @@ export default function BusinessWaitlistScreen() {
                 {row.services?.name ? `${row.services.name} · ` : ''}
                 {contact || tr('wl.client')}
               </Text>
+              {row.status === 'notified' ? (
+                <Text style={[styles.meta, { color: t.colors.accent }]}>{tr('wl.statusNotified')}</Text>
+              ) : null}
+              <Button
+                label={tr('wl.notify')}
+                variant="secondary"
+                size="sm"
+                loading={notifyBusyId === row.id}
+                onPress={() => void notifyRow(row)}
+              />
               <Button
                 label={tr('wl.remove')}
                 variant="secondary"

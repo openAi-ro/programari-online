@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 
 import { StaffBadge } from '@/components/StaffBadge';
+import { BreakHoursForm } from '@/components/BreakHoursForm';
 import { WorkingHoursForm } from '@/components/WorkingHoursForm';
 import {
   Button,
@@ -22,6 +23,7 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { DEFAULT_BREAK_HOURS, DEFAULT_WORKING_HOURS, STAFF_COLORS } from '@/lib/defaults';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
 
@@ -52,6 +54,7 @@ export default function BusinessStaffScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [photoBusy, setPhotoBusy] = useState(false);
 
@@ -65,11 +68,7 @@ export default function BusinessStaffScreen() {
       setError(trKey('req.notAuthed'));
       return;
     }
-    const { data: biz, error: bErr } = await supabase
-      .from('business_profiles')
-      .select('id')
-      .eq('owner_user_id', user.id)
-      .maybeSingle();
+    const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
       setError(bErr.message);
       setLoading(false);
@@ -245,6 +244,26 @@ export default function BusinessStaffScreen() {
     await load();
   }
 
+  async function moveStaff(s: Staff, dir: -1 | 1) {
+    const idx = rows.findIndex((r) => r.id === s.id);
+    const other = rows[idx + dir];
+    if (!other) return;
+    setError(null);
+    const a = await supabase.from('staff').update({ sort_order: other.sort_order, updated_at: new Date().toISOString() }).eq('id', s.id);
+    if (a.error) { setError(a.error.message); return; }
+    const b = await supabase.from('staff').update({ sort_order: s.sort_order, updated_at: new Date().toISOString() }).eq('id', other.id);
+    if (b.error) { setError(b.error.message); return; }
+    await load();
+  }
+
+  async function deleteStaff(s: Staff) {
+    setError(null);
+    const { error: err } = await supabase.from('staff').delete().eq('id', s.id);
+    setPendingDeleteId(null);
+    if (err) { setError(err.message); return; }
+    if (editingId === s.id) setEditingId(null);
+    await load();
+  }
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
@@ -374,10 +393,16 @@ export default function BusinessStaffScreen() {
             />
           </View>
           {draft.customHours ? (
+            <>
             <WorkingHoursForm
               value={draft.workingHours}
               onChange={(workingHours) => setDraft((d) => ({ ...d, workingHours }))}
             />
+            <BreakHoursForm
+              value={draft.breakHours}
+              onChange={(breakHours) => setDraft((d) => ({ ...d, breakHours }))}
+            />
+            </>
           ) : null}
         </>
       ) : null}
@@ -409,6 +434,15 @@ export default function BusinessStaffScreen() {
                 {s.active ? '' : ` · ${tr('svc.inactive')}`}
               </Text>
             </Pressable>
+            <Pressable onPress={() => void moveStaff(s, -1)} hitSlop={8} accessibilityLabel={tr('common.moveUp')}>
+              <Ionicons name="arrow-up" size={18} color={t.colors.textMuted} />
+            </Pressable>
+            <Pressable onPress={() => void moveStaff(s, 1)} hitSlop={8} accessibilityLabel={tr('common.moveDown')}>
+              <Ionicons name="arrow-down" size={18} color={t.colors.textMuted} />
+            </Pressable>
+            <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} hitSlop={8} accessibilityLabel={tr('common.deleteHard')}>
+              <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
+            </Pressable>
             <Toggle
               value={s.active}
               onValueChange={() => void toggleActive(s)}
@@ -417,6 +451,12 @@ export default function BusinessStaffScreen() {
             <Pressable onPress={() => startEdit(s)} hitSlop={8}>
               <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
             </Pressable>
+            {pendingDeleteId === s.id ? (
+              <View style={styles.confirmBox}>
+                <Text style={[styles.rowMeta, { color: t.colors.danger }]}>{tr('common.deleteConfirm')}</Text>
+                <Button label={tr('common.deleteHard')} size="sm" variant="danger" onPress={() => void deleteStaff(s)} />
+              </View>
+            ) : null}
           </View>
         ))
       )}
@@ -449,12 +489,14 @@ const styles = StyleSheet.create({
   toggleSub: { fontSize: fontSize.sm, lineHeight: 18 },
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radius.lg,
     borderWidth: 1,
   },
+  confirmBox: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
   dot: { width: 12, height: 12, borderRadius: 6 },
   rowText: { flex: 1, gap: 2 },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },

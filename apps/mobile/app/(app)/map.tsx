@@ -16,6 +16,7 @@ import {
   Screen,
   useTheme,
 } from '@/components/ui';
+import { BusinessMap } from '@/components/BusinessMap';
 import { ClientTabBar } from '@/components/ClientTabBar';
 import { SalonRow } from '@/components/SalonRow';
 import { spacing } from '@/constants/theme';
@@ -124,6 +125,13 @@ export default function NearMeScreen() {
                 <Callout tone="danger" title={tr('near.listError')}>
                   {listError}
                 </Callout>
+              ) : null}
+              {rows.some((r) => r.latitude != null && r.longitude != null) ? (
+                <BusinessMap
+                  points={rows.filter((r) => r.latitude != null && r.longitude != null).map((r) => ({ publicCode: r.public_code, name: r.name, latitude: r.latitude as number, longitude: r.longitude as number }))}
+                  center={coords}
+                  onSelect={(code) => router.push('/(app)/book/' + code as never)}
+                />
               ) : null}
               <View style={styles.actions}>
                 <Button

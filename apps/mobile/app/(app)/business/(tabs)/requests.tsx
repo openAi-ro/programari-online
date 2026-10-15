@@ -25,8 +25,9 @@ import { generateFreeSlots } from '@/lib/slots';
 import { validateMoveInput } from '@/lib/moveRules';
 import { invokeDecisionNotify, invokeMoved, invokePostpone, invokeWaitlistNotify } from '@/lib/notify-client';
 import { presentLocalBookingNotification } from '@/lib/notifications';
-import { invokeRefundDeposit } from '@/lib/payments';
-import { ensureChatConversation, sendMessage } from '@/lib/chatRpc';
+import { invokeRefundDeposit, invokeWaiveDeposit } from '@/lib/payments';
+import { ensureChatConversationForClient, sendMessage } from '@/lib/chatRpc';
+import { resolveBusinessChatTarget } from '@/lib/chatTarget';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
@@ -394,10 +395,29 @@ export default function BusinessRequestsScreen() {
   }
 
   async function sendQuickMessage(appointment: Appointment, text: string) {
-    const { conversation, error: cErr } = await ensureChatConversation(appointment.business_id);
+    setError(null);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) { setError(trKey('req.notAuthed')); return; }
+    // Conversația e (business, clientul programării) — nu (business, owner).
+    const target = resolveBusinessChatTarget(appointment, user.id);
+    if (target.kind !== 'ok') { setError(trKey('chat.noAccountForMsg')); return; }
+    const { conversation, error: cErr } = await ensureChatConversationForClient(
+      appointment.business_id,
+      target.clientUserId
+    );
     if (cErr || !conversation) { setError(cErr ?? trKey('req.chatOpenFailed')); return; }
     const { error: mErr } = await sendMessage(conversation.id, text);
     if (mErr) setError(mErr); else setSuccess(trKey('req.msgSent'));
+  }
+
+  async function waiveDeposit(id: string) {
+    setError(null);
+    const { ok, error: wErr } = await invokeWaiveDeposit(id);
+    if (!ok) { setError(wErr ?? trKey('common.errorTitle')); return; }
+    setSuccess(trKey('pay.waivedOk'));
+    await load();
   }
 
   async function deleteAppointment(id: string) {
@@ -506,6 +526,7 @@ export default function BusinessRequestsScreen() {
             onClearNoShow={() => void clearNoShow(item.id)}
             onDelete={() => void deleteAppointment(item.id)}
             onQuickMessage={(txt) => sendQuickMessage(item, txt)}
+            onWaiveDeposit={() => void waiveDeposit(item.id)}
           />
         )}
       />

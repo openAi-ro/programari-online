@@ -44,7 +44,18 @@ export default function BusinessTabsLayout() {
   useEffect(() => {
     void refreshBadge();
     const interval = setInterval(() => void refreshBadge(), 60_000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel('business-requests-badge')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => void refreshBadge()
+      )
+      .subscribe();
+    return () => {
+      clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
   }, [refreshBadge]);
 
   return (

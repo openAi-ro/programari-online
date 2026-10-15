@@ -940,18 +940,7 @@ function BusinessHome({
 
       <SectionTitle>{tr('home.title')}</SectionTitle>
 
-      <Card
-        icon="hourglass-outline"
-        title={tr('home.cardRequests')}
-        hint={
-          pendingCount > 0
-            ? pendingBannerTitle(pendingCount)
-            : tr('home.cardRequestsHint')
-        }
-        iconTone="warm"
-        chevron
-        onPress={() => router.push('/(app)/business/(tabs)/requests')}
-      />
+      
       <Card
         icon='chatbubbles-outline'
         title={tr('home.cardMessages')}
@@ -977,13 +966,7 @@ function BusinessHome({
 
       <SectionTitle>{tr('home.clientsTeam')}</SectionTitle>
 
-      <Card
-        icon="people-outline"
-        title={tr('home.cardClients')}
-        hint={tr('home.cardClientsHint')}
-        chevron
-        onPress={() => router.push('/(app)/business/(tabs)/clients' as never)}
-      />
+      
       <Card
         icon="people-circle-outline"
         title={tr('home.cardTeam')}
@@ -1001,12 +984,13 @@ function BusinessHome({
         chevron
         onPress={() => router.push('/(app)/business/services' as never)}
       />
+      
       <Card
-        icon="stats-chart-outline"
-        title={tr('home.cardReports')}
-        hint={tr('home.cardReportsHint')}
+        icon="star-outline"
+        title={tr('rev.title')}
+        hint={tr('rev.subtitle')}
         chevron
-        onPress={() => router.push('/(app)/business/(tabs)/reports' as never)}
+        onPress={() => router.push('/(app)/business/reviews' as never)}
       />
       <Card
         icon="settings-outline"
@@ -1034,17 +1018,7 @@ function BusinessHome({
         onPress={() => router.push('/(app)/my-appointments' as never)}
       />
 
-      <SectionTitle>{tr('tabs.account')}</SectionTitle>
-
-      <Card
-        icon="person-circle-outline"
-        title={tr('bizTabs.settings')}
-        hint={tr('home.cardSettingsHint')}
-        iconTone="neutral"
-        chevron
-        onPress={() => router.push('/(app)/business/(tabs)/settings' as never)}
-      />
-    </Screen>
+      </Screen>
     </View>
   );
 }

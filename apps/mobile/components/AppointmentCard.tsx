@@ -49,6 +49,8 @@ type Props = {
   driveAddress?: string;
   onMarkNoShow?: () => void;
   onQuickMessage?: (text: string) => Promise<void>;
+  onWaiveDeposit?: () => void;
+  onCancelSeries?: () => void;
   onClearNoShow?: () => void;
   onDelete?: () => void;
   onReview?: () => void;
@@ -78,6 +80,8 @@ export function AppointmentCard({
   driveAddress,
   onMarkNoShow,
   onQuickMessage,
+  onWaiveDeposit,
+  onCancelSeries,
   onClearNoShow,
   onDelete,
   onReview,
@@ -466,6 +470,30 @@ export function AppointmentCard({
             variant="danger"
             size="sm"
             onPress={onDelete}
+          />
+        ) : null}
+
+        {onCancelSeries && appointment.recurring_series_id ? (
+          <Button
+            label={`${tr('appt.series')} · ${tr('appt.cancelSeries')}`}
+            icon="repeat-outline"
+            variant="secondary"
+            size="sm"
+            contentAlign="start"
+            labelNumberOfLines={1}
+            onPress={onCancelSeries}
+          />
+        ) : null}
+
+        {onWaiveDeposit && appointment.payment_status === 'unpaid' && (appointment.deposit_ron ?? 0) > 0 ? (
+          <Button
+            label={tr('pay.waiveDeposit')}
+            icon="cash-outline"
+            variant="secondary"
+            size="sm"
+            contentAlign="start"
+            labelNumberOfLines={1}
+            onPress={onWaiveDeposit}
           />
         ) : null}
 

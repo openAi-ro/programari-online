@@ -57,6 +57,7 @@ import {
 type WizardStep = 'staff' | 'service' | 'date' | 'slot' | 'confirm';
 
 type ReviewSnippet = {
+  owner_reply?: string;
   rating: number;
   comment: string;
   created_at: string;
@@ -213,6 +214,7 @@ export default function BookScreen() {
               rating: typeof r.rating === 'number' ? r.rating : Number(r.rating) || 0,
               comment: typeof r.comment === 'string' ? r.comment : '',
               created_at: typeof r.created_at === 'string' ? r.created_at : '',
+              owner_reply: typeof r.owner_reply === 'string' ? r.owner_reply : '',
             }))
             .filter((r: ReviewSnippet) => r.rating >= 1)
         );
@@ -1114,6 +1116,7 @@ function SalonProfileHeader({
             >
               {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
               {r.comment?.trim() ? ` — ${r.comment.trim()}` : ''}
+              {r.owner_reply?.trim() ? `\n${tr('book.ownerReply')}: ${r.owner_reply.trim()}` : ''}
             </Text>
           ))}
         </View>

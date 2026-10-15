@@ -20,6 +20,7 @@ import { getBookingPaths } from '@/lib/bookingLink';
 import { getInstallUrl } from '@/lib/installLink';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/types';
 
@@ -43,11 +44,7 @@ export default function BusinessQrScreen() {
         setError(trKey('req.notAuthed'));
         return;
       }
-      const { data, error: err } = await supabase
-        .from('business_profiles')
-        .select('*')
-        .eq('owner_user_id', user.id)
-        .maybeSingle();
+      const { data, error: err } = await fetchMyBusinessResult(user.id);
       if (err) {
         setError(err.message);
       } else if (!data) {
