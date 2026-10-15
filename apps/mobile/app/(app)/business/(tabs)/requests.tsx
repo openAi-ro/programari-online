@@ -227,6 +227,8 @@ export default function BusinessRequestsScreen() {
       setError(err.message);
       return;
     }
+    // Cardul se actualizeaza imediat; notificarea si reincarcarea vin dupa.
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
 
     const notify = await invokeDecisionNotify(id);
     if (!notify.ok) {
@@ -428,6 +430,7 @@ export default function BusinessRequestsScreen() {
       setError(err.message);
       return;
     }
+    setRows((prev) => prev.filter((r) => r.id !== id));
     setSuccess(trKey('req.deleted'));
     await load();
   }

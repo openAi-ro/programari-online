@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
@@ -72,7 +72,10 @@ export default function MyAppointmentsScreen() {
   const [reviewComment, setReviewComment] = useState('');
   const [myWaitlist, setMyWaitlist] = useState<Array<{ id: string; desired_date: string; status: string; business_id: string }>>([]);
 
+  // Doar ultimul load() scrie lista: un raspuns vechi nu mai suprascrie starea noua.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setError(null);
     const {
       data: { user },
@@ -147,6 +150,7 @@ export default function MyAppointmentsScreen() {
       }
     }
 
+    if (seq !== loadSeq.current) return;
     setRows(
       list.map((a) => ({
         ...a,
@@ -209,6 +213,14 @@ export default function MyAppointmentsScreen() {
       setError(mapBookingRpcError(err.message));
       return;
     }
+    // Actualizare imediata a listei, apoi reincarcare de la server.
+    setRows((prev) =>
+      prev.map((r) =>
+        r.recurring_series_id === item.recurring_series_id && (r.status === 'pending' || r.status === 'approved')
+          ? { ...r, status: 'cancelled' }
+          : r
+      )
+    );
     setSuccess(trKey('appt.seriesCancelled', { count: Number(data ?? 0) }));
     await load();
   }
@@ -221,6 +233,7 @@ export default function MyAppointmentsScreen() {
       setError(mapBookingRpcError(err.message));
       return;
     }
+    setRows((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: 'cancelled' } : r)));
     if (item.payment_status === 'paid') {
       void invokeRefundDeposit(item.id);
     }
