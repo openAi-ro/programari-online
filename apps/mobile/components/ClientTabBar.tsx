@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: '100%',
     paddingHorizontal: 2,
-    overflow: 'hidden',
+    // Fara overflow hidden: badge-ul (top: -4) era taiat sus. Eticheta are deja numberOfLines=1.
   },
   label: {
     fontSize: fontSize.xs,
