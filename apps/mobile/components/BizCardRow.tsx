@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
@@ -54,7 +54,8 @@ export function BizCardRow({
         <Pressable
           onPress={() => onToggleFavorite()}
           hitSlop={8}
-          accessibilityRole="button"
+          // Web: cardul e deja <button>; inima ca al doilea <button> imbricat da eroare de HTML.
+          accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
           accessibilityLabel={favorited ? tr('fav.remove') : tr('fav.add')}
           style={styles.heartBtn}
         >
