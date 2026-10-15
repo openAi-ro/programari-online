@@ -410,6 +410,7 @@ export const en: typeof ro = {
   'home.cardRequests': 'Booking requests',
   'home.cardRequestsHint': 'Approve or decline pending requests',
   'home.cardMessages': 'Client messages',
+  'home.unreadMessages': '{n} unread',
   'home.cardMessagesHint': 'Chat with clients',
   'home.cardCalendar': 'Day calendar',
   'home.cardCalendarHint': 'Hourly bookings, block holidays',

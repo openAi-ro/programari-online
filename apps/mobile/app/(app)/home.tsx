@@ -41,6 +41,7 @@ import {
   syncFavoritesFromCloud,
   toggleFavorite,
 } from '@/lib/favorites';
+import { fetchUnreadTotal } from '@/lib/chatRpc';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { AppointmentStatus } from '@/lib/types';
@@ -854,6 +855,23 @@ function BusinessHome({
 }) {
   const t = useTheme();
   const tr = useT();
+  // Necitite din chat (aceleasi date ca badge-ul clientului): la focus + la 60s.
+  const [chatUnread, setChatUnread] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const refresh = async () => {
+        const n = await fetchUnreadTotal();
+        if (!cancelled) setChatUnread(n);
+      };
+      void refresh();
+      const iv = setInterval(() => void refresh(), 60_000);
+      return () => {
+        cancelled = true;
+        clearInterval(iv);
+      };
+    }, [])
+  );
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
     <Screen bottomInset={bottomInset}>
@@ -948,7 +966,15 @@ function BusinessHome({
         iconTone='neutral'
         chevron
         onPress={() => router.push('/(app)/business/chat' as never)}
-      />
+      >
+        {chatUnread > 0 ? (
+          <View style={styles.unreadRow}>
+            <Badge tone="danger" icon="mail-unread-outline">
+              {tr('home.unreadMessages', { n: chatUnread })}
+            </Badge>
+          </View>
+        ) : null}
+      </Card>
       <Card
         icon="calendar-outline"
         title={tr('home.cardCalendar')}
@@ -1103,6 +1129,7 @@ function Guide() {
 }
 
 const styles = StyleSheet.create({
+  unreadRow: { flexDirection: 'row', marginTop: spacing.xs },
   flex: { flex: 1, minWidth: 0 },
   hero: { gap: 4, marginBottom: spacing.sm },
   heroLabel: { fontSize: fontSize.sm, fontWeight: '600' },

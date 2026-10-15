@@ -408,6 +408,7 @@ export const ro = {
   'home.cardRequests': 'Cereri programări',
   'home.cardRequestsHint': 'Aprobă sau respinge cererile în așteptare',
   'home.cardMessages': 'Mesaje clienti',
+  'home.unreadMessages': '{n} necitite',
   'home.cardMessagesHint': 'Chat cu clientii',
   'home.cardCalendar': 'Calendar pe zi',
   'home.cardCalendarHint': 'Programări pe ore, blochează concediul',
