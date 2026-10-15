@@ -1,11 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
 
 type Extra = { displayVersion?: string };
-
-const SEEN_KEY = 'programari.updateBanner.seenVersion';
 
 /**
  * Versiunea afișată pe login.
@@ -61,47 +58,51 @@ export async function applyAvailableUpdateWithTimeout(ms = 20000): Promise<void>
   ]);
 }
 
-function webStore(): Storage | null {
+const WEB_ENTRY_RE = /\/_expo\/static\/js\/web\/entry-[a-f0-9]+\.js/;
+
+/** Bundle-ul web incarcat acum (din tag-ul <script>). */
+function loadedWebEntry(): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const el of Array.from(document.scripts)) {
+    const m = el.src.match(WEB_ENTRY_RE);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+/** Bundle-ul web publicat acum pe server (index.html fara cache). */
+async function publishedWebEntry(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
   try {
-    if (typeof window === 'undefined') return null;
-    return window.localStorage;
+    const res = await fetch(`/?_v=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.text()).match(WEB_ENTRY_RE)?.[0] ?? null;
   } catch {
     return null;
   }
 }
 
-async function readSeenVersion(): Promise<string | null> {
-  try {
-    if (Platform.OS === 'web') {
-      return webStore()?.getItem(SEEN_KEY) ?? null;
-    }
-    return await AsyncStorage.getItem(SEEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-async function writeSeenVersion(version: string): Promise<void> {
-  try {
-    if (Platform.OS === 'web') {
-      webStore()?.setItem(SEEN_KEY, version);
-      return;
-    }
-    await AsyncStorage.setItem(SEEN_KEY, version);
-  } catch (e) {
-    console.warn('updateBanner persist', e);
-  }
-}
-
-/** Afișează banner-ul o dată per `displayVersion` până la refresh reușit. */
+/**
+ * Banner-ul apare doar cand exista cu adevarat o versiune mai noua decat cea
+ * care ruleaza:
+ * - web: bundle-ul publicat pe server difera de cel incarcat in pagina;
+ * - native: EAS raporteaza un update disponibil.
+ * O incarcare proaspata (sau prima deschidere) nu mai arata banner-ul.
+ */
 export async function shouldShowUpdateBanner(): Promise<boolean> {
-  const current = getAppVersion();
-  const seen = await readSeenVersion();
-  return seen !== current;
-}
-
-export async function markUpdateBannerSeen(version = getAppVersion()): Promise<void> {
-  await writeSeenVersion(version);
+  if (Platform.OS === 'web') {
+    const loaded = loadedWebEntry();
+    if (!loaded) return false;
+    const published = await publishedWebEntry();
+    return published !== null && published !== loaded;
+  }
+  if (!canApplyOtaUpdates()) return false;
+  try {
+    const check = await Updates.checkForUpdateAsync();
+    return check.isAvailable;
+  } catch {
+    return false;
+  }
 }
 
 async function hardRefreshWeb(): Promise<void> {
@@ -160,8 +161,6 @@ async function forceNativeUpdateAndReload(): Promise<void> {
  * - web: unregister SW, golește Cache Storage, reload cu cache-buster
  */
 export async function forceHardRefreshAndUpdate(): Promise<void> {
-  await markUpdateBannerSeen();
-
   if (Platform.OS === 'web') {
     await hardRefreshWeb();
     return;
