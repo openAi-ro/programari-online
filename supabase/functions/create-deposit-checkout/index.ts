@@ -14,6 +14,7 @@ type Payload = {
   appointment_id?: string;
   success_url?: string;
   cancel_url?: string;
+  tip_ron?: number;
 };
 
 Deno.serve(async (req) => {
@@ -92,6 +93,12 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'amount_too_small' }, 400);
   }
 
+  const tipRon = Number(payload.tip_ron ?? 0);
+  if (!Number.isFinite(tipRon) || tipRon < 0 || tipRon > Number(apt.deposit_ron) * 10) {
+    return jsonResponse({ error: 'invalid_tip' }, 400);
+  }
+  const tipBani = Math.round(tipRon * 100);
+
   const fallback =
     Deno.env.get('EXPO_PUBLIC_WEB_BASE_URL')?.replace(/\/$/, '') ||
     supabaseUrl;
@@ -113,6 +120,14 @@ Deno.serve(async (req) => {
     `Avans ${biz?.name ?? 'Programari'}`
   );
 
+  if (tipBani > 0) {
+    body.set('line_items[1][quantity]', '1');
+    body.set('line_items[1][price_data][currency]', 'ron');
+    body.set('line_items[1][price_data][unit_amount]', String(tipBani));
+    body.set('line_items[1][price_data][product_data][name]', 'Bacsis');
+    body.set('metadata[tip_ron]', String(tipRon));
+  }
+
   const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
     headers: {
@@ -131,11 +146,15 @@ Deno.serve(async (req) => {
     business_id: apt.business_id,
     appointment_id: apt.id,
     client_user_id: apt.client_user_id,
-    amount_ron: apt.deposit_ron,
+    amount_ron: Number(apt.deposit_ron) + tipRon,
     status: 'pending',
     provider: 'stripe',
     provider_ref: session.id,
   });
+
+  if (tipBani > 0) {
+    await admin.from('appointments').update({ tip_ron: tipRon }).eq('id', apt.id);
+  }
 
   return jsonResponse({ ok: true, url: session.url, session_id: session.id });
 });

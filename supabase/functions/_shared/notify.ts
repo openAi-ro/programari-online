@@ -467,6 +467,23 @@ export function messageReminder24h(
   return { subject: 'Reminder programare — 24 de ore', text };
 }
 
+export function messageRebook(
+  businessName: string,
+  serviceName: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Time to come back',
+      text: `Hi! It's time for ${serviceName} at ${businessName}. Book your next visit from the app.`,
+    };
+  }
+  return {
+    subject: 'E timpul sa revii',
+    text: `Salut! A venit timpul pentru ${serviceName} la ${businessName}. Programeaza urmatoarea vizita din aplicatie.`,
+  };
+}
+
 export function messagePostpone(
   businessName: string,
   hours: number,
