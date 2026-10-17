@@ -598,7 +598,7 @@ export function AppointmentCard({
             labelNumberOfLines={1}
             onPress={onConfirmAttendance}
           />
-        ) : appointment.attendance_confirmed && appointment.status === 'approved' ? (
+        ) : appointment.attendance_confirmed && appointment.status === 'approved' && !checkedIn ? (
           <Text style={[styles.confirmed, { color: t.colors.success }]}>{tr('appt.attendanceConfirmed')}</Text>
         ) : null}
 

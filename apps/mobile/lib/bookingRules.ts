@@ -1,3 +1,4 @@
+import { CHECKIN_OPEN_BEFORE_MS } from './checkin';
 import { generateFreeSlots } from './slots';
 import { trKey } from './i18n';
 import type { Appointment, BreakHours, BusinessProfile, Staff, WorkingHours } from './types';
@@ -92,7 +93,8 @@ export function canConfirmAttendance(
   if (apt.status !== 'approved') return false;
   if (apt.attendance_confirmed) return false;
   if (apt.no_show) return false;
-  return new Date(apt.start_at) > now;
+  // Doar până se deschide fereastra de sosire; apoi cardul arată „Am ajuns”.
+  return new Date(apt.start_at).getTime() - CHECKIN_OPEN_BEFORE_MS > now.getTime();
 }
 
 export function canMarkNoShow(
