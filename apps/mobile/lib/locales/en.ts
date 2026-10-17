@@ -295,6 +295,9 @@ export const en: typeof ro = {
   'fav.add': 'Add to favorites',
   'video.openPromo': 'Open the promo video',
   'video.watchPromo': 'Watch the promo video',
+  'video.play': 'Play video',
+  'video.pause': 'Pause video',
+  'video.replay': 'Play again',
 
   'map.googleIframe': 'Google map of business location',
   'map.osmIframe': 'Business location map',

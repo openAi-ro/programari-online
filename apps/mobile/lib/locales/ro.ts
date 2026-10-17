@@ -293,6 +293,9 @@ export const ro = {
   'fav.add': 'Adaugă la favorite',
   'video.openPromo': 'Deschide video-ul de prezentare',
   'video.watchPromo': 'Vezi video-ul de prezentare',
+  'video.play': 'Redă video',
+  'video.pause': 'Pauză video',
+  'video.replay': 'Redă din nou',
 
   'map.googleIframe': 'Hartă Google locație business',
   'map.osmIframe': 'Hartă locație business',
