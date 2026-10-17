@@ -119,9 +119,11 @@ export type LoginButtonProps = {
   disabled?: boolean;
   loading?: boolean;
   tone?: 'default' | 'danger';
+  /** Iconiță în stânga textului (ex. logo Google). */
+  leading?: React.ReactNode;
 };
 
-export function LoginButton({ label, onPress, disabled, loading, tone = 'default' }: LoginButtonProps) {
+export function LoginButton({ label, onPress, disabled, loading, tone = 'default', leading }: LoginButtonProps) {
   const p = useLoginPalette();
   return (
     <Pressable
@@ -142,7 +144,10 @@ export function LoginButton({ label, onPress, disabled, loading, tone = 'default
         },
       ]}
     >
-      <Text style={[styles.buttonText, { color: '#ffffff' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{loading ? '…' : label}</Text>
+      <View style={styles.buttonInner}>
+        {leading && !loading ? leading : null}
+        <Text style={[styles.buttonText, { color: '#ffffff' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{loading ? '…' : label}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -201,6 +206,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    minWidth: 0,
   },
   buttonText: {
     fontSize: 14,

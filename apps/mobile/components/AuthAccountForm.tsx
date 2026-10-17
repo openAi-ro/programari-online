@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
+import { GoogleLogo } from '@/components/GoogleLogo';
 import { router } from 'expo-router';
 
 import { Button, Callout, Screen, Segmented, useTheme } from '@/components/ui';
@@ -467,6 +468,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
             </LoginButtonRow>
             <LoginButton
               label={tr('auth.googleContinue')}
+              leading={<GoogleLogo size={18} />}
               onPress={() => void handleGoogleSignIn()}
               disabled={loading || googleBusy}
               loading={googleBusy}
