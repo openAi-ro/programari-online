@@ -746,7 +746,8 @@ export function Segmented<T extends string>({
 }: {
   value: T;
   onChange: (next: T) => void;
-  options: { value: T; label: string; count?: number }[];
+  /** trailing: element mic în dreapta textului (ex. steagul limbii). */
+  options: { value: T; label: string; count?: number; trailing?: React.ReactNode }[];
 }) {
   const t = useTheme();
   return (
@@ -778,6 +779,7 @@ export function Segmented<T extends string>({
               {opt.label}
               {typeof opt.count === 'number' ? ` (${opt.count})` : ''}
             </Text>
+            {opt.trailing ? <View style={styles.segmentedTrailing}>{opt.trailing}</View> : null}
           </Pressable>
         );
       })}
@@ -1410,6 +1412,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderRadius: radius.sm,
     alignItems: 'center',
+  },
+  segmentedTrailing: {
+    position: 'absolute',
+    right: spacing.sm,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
   segmentedText: {
     fontSize: fontSize.sm,

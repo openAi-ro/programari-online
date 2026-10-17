@@ -36,6 +36,7 @@ import {
 } from '@/lib/themePreference';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
 import { setLanguage } from '@/lib/language';
+import { FlagRO, FlagUS } from '@/components/LanguageFlag';
 import { useBack } from '@/lib/nav';
 import {
   registerForPushAsync,
@@ -1421,8 +1422,8 @@ export default function SettingsScreen() {
             })();
           }}
           options={[
-            { value: 'ro', label: 'Română' },
-            { value: 'en', label: 'English' },
+            { value: 'ro', label: 'Română', trailing: <FlagRO /> },
+            { value: 'en', label: 'English', trailing: <FlagUS /> },
           ]}
         />
         <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
