@@ -759,7 +759,7 @@ export const en: typeof ro = {
   'svc.editSvc': 'Edit service',
   'svc.name': 'Name',
   'svc.namePh': 'Haircut, coloring, consultation…',
-  'svc.desc': 'Important description',
+  'svc.desc': 'Description',
   'svc.descPh': 'E.g. what it includes, what the client should bring…',
   'svc.descHint': 'Visible to clients when they pick the service.',
   'svc.duration': 'Duration (minutes)',

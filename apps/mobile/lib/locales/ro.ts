@@ -757,7 +757,7 @@ export const ro = {
   'svc.editSvc': 'Editează serviciul',
   'svc.name': 'Nume',
   'svc.namePh': 'Tuns, vopsit, consultație…',
-  'svc.desc': 'Descriere importantă',
+  'svc.desc': 'Descriere',
   'svc.descPh': 'Ex: ce include, ce să aducă clientul…',
   'svc.descHint': 'Vizibilă clienților când aleg serviciul.',
   'svc.duration': 'Durată (minute)',
