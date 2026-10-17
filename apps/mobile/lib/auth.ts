@@ -2,7 +2,18 @@ import type { AuthError, Session } from '@supabase/supabase-js';
 
 import { supabase } from './supabase';
 import { getPublicWebOrigin } from './webBase';
+import { Platform } from 'react-native';
+
 import { trKey } from './i18n';
+import { assertAccountKind, persistAccountKind } from './accountKind';
+import {
+  PENDING_GOOGLE_KIND_KEY,
+  googleRedirectTo,
+  isFreshSignup,
+  resolveGoogleAccountKind,
+} from './googleAuth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { AppMode } from './appMode';
 
 /**
  * Where Supabase activation / reset emails redirect after click.
@@ -281,6 +292,87 @@ export async function resetPasswordForEmail(email: string) {
 /** Setează parola nouă după ce sesiunea de recovery e activă. */
 export async function updatePassword(newPassword: string) {
   return supabase.auth.updateUser({ password: newPassword });
+}
+
+/** Ține minte ușa (client/business) pe durata redirectului Google. */
+async function rememberPendingGoogleKind(kind: AppMode): Promise<void> {
+  try {
+    await AsyncStorage.setItem(PENDING_GOOGLE_KIND_KEY, kind);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Citește și uită ușa ținută minte pentru logarea Google. */
+export async function takePendingGoogleKind(): Promise<AppMode | null> {
+  try {
+    const value = await AsyncStorage.getItem(PENDING_GOOGLE_KIND_KEY);
+    await AsyncStorage.removeItem(PENDING_GOOGLE_KIND_KEY);
+    return value ? (value === 'business' ? 'business' : 'client') : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Adresa de întoarcere după logarea cu Google. */
+export function getGoogleRedirectTo(): string {
+  return googleRedirectTo(Platform.OS, getPublicWebOrigin());
+}
+
+/**
+ * Pornește logarea cu Google pentru ușa dată (client/business).
+ * Întoarce URL-ul de autorizare; apelantul îl deschide (browser pe web,
+ * sesiune de autentificare pe nativ).
+ */
+export async function startGoogleSignIn(
+  kind: AppMode
+): Promise<{ url: string | null; error: string | null }> {
+  await rememberPendingGoogleKind(kind);
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: getGoogleRedirectTo(),
+      skipBrowserRedirect: true,
+      queryParams: { access_type: 'offline', prompt: 'select_account' },
+    },
+  });
+  if (error) return { url: null, error: error.message };
+  return { url: data.url ?? null, error: null };
+}
+
+/**
+ * Termină logarea Google din URL-ul de callback și fixează rolul contului:
+ * profilul existent nu se răsturnează; cont nou → ușa aleasă.
+ */
+export async function completeGoogleSignIn(
+  url: string,
+  expectedKind: AppMode
+): Promise<{ session: Session | null; error: string | null }> {
+  const result = await completeAuthFromUrl(url);
+  if (result.error || !result.session) {
+    return { session: null, error: result.error };
+  }
+  const user = result.session.user;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('account_kind')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (!profile || isFreshSignup(user)) {
+    const pending = await takePendingGoogleKind();
+    await persistAccountKind(
+      resolveGoogleAccountKind({
+        metadataKind: user.user_metadata?.account_kind as string | undefined,
+        pendingKind: pending ?? expectedKind,
+        profileKind: null,
+      })
+    );
+  }
+  const check = await assertAccountKind(expectedKind);
+  if (!check.ok) {
+    return { session: null, error: check.error };
+  }
+  return { session: result.session, error: null };
 }
 
 export async function signOut() {

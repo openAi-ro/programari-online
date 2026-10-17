@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -16,12 +17,15 @@ import {
 import { assertAccountKind, persistAccountKind } from '@/lib/accountKind';
 import type { AppMode } from '@/lib/appMode';
 import {
+  completeGoogleSignIn,
+  getGoogleRedirectTo,
   mapAuthError,
   resendSignupEmail,
   signInWithPassword,
   signOut,
   signUpWithPassword,
   isDuplicateSignupUser,
+  startGoogleSignIn,
 } from '@/lib/auth';
 import {
   applyWhatsAppOtpSession,
@@ -98,6 +102,8 @@ function mapWhatsAppError(raw: string | null | undefined): string {
   return trKey('auth.waFailed');
 }
 
+WebBrowser.maybeCompleteAuthSession();
+
 export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const t = useTheme();
   const tr = useT();
@@ -122,6 +128,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const [error, setError] = useState<string | null>(null);
   const [activationEmail, setActivationEmail] = useState<string | null>(null);
   const [resendBusy, setResendBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -236,6 +243,37 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     }
     setActivationEmail(target);
     setMessage(tr('auth.activationResent', { email: target }));
+  }
+
+  async function handleGoogleSignIn() {
+    clearFeedback();
+    setGoogleBusy(true);
+    const { url, error: err } = await startGoogleSignIn(kind);
+    if (err || !url) {
+      setGoogleBusy(false);
+      setError(
+        err && /provider is not enabled|unsupported provider/i.test(err)
+          ? tr('auth.errGoogleDisabled')
+          : (mapAuthError(err ? new Error(err) : null) ?? tr('auth.errGoogleDisabled'))
+      );
+      return;
+    }
+    if (Platform.OS === 'web') {
+      window.location.assign(url);
+      return;
+    }
+    const result = await WebBrowser.openAuthSessionAsync(url, getGoogleRedirectTo());
+    if (result.type !== 'success') {
+      setGoogleBusy(false);
+      return;
+    }
+    const done = await completeGoogleSignIn(result.url, kind);
+    setGoogleBusy(false);
+    if (done.error || !done.session) {
+      setError(done.error ?? tr('auth.errGoogleDisabled'));
+      return;
+    }
+    setMessage(tr('auth.signedIn'));
   }
 
   async function handleSendWhatsAppOtp() {
@@ -427,6 +465,12 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                 />
               </LoginButtonHalf>
             </LoginButtonRow>
+            <LoginButton
+              label={tr('auth.googleContinue')}
+              onPress={() => void handleGoogleSignIn()}
+              disabled={loading || googleBusy}
+              loading={googleBusy}
+            />
             <LoginButton
               label={tr('auth.recoverPassword')}
               tone="danger"

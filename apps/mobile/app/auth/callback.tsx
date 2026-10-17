@@ -5,11 +5,14 @@ import * as Linking from 'expo-linking';
 
 import { Button, Callout, LoadingScreen, Screen } from '@/components/ui';
 import { persistAccountKind, parseAccountKind } from '@/lib/accountKind';
+import { isFreshSignup, isGoogleUser, resolveGoogleAccountKind } from '@/lib/googleAuth';
+
 import {
   completeAuthFromUrl,
   getNativeAuthCallbackUrl,
   isAuthCallbackUrl,
   mapAuthError,
+  takePendingGoogleKind,
 } from '@/lib/auth';
 import { takeAuthCallbackUrl } from '@/lib/auth-link';
 import { trKey } from '@/lib/i18n';
@@ -53,13 +56,33 @@ export default function AuthCallbackScreen() {
         }
 
         if (result.session) {
-          const kind = parseAccountKind(
+          let kind = parseAccountKind(
             result.session.user.user_metadata?.account_kind as string | undefined
           );
+          if (isGoogleUser(result.session.user)) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('account_kind')
+              .eq('id', result.session.user.id)
+              .maybeSingle();
+            const pending = await takePendingGoogleKind();
+            kind = resolveGoogleAccountKind({
+              metadataKind: result.session.user.user_metadata?.account_kind as string | undefined,
+              pendingKind: pending,
+              profileKind: isFreshSignup(result.session.user)
+                ? null
+                : (profile?.account_kind as string | undefined),
+            });
+          }
           await persistAccountKind(kind);
           if (result.recovery) {
             setStatus(trKey('auth.cbResetConfirmed'));
             router.replace('/(auth)/reset-password');
+            return;
+          }
+
+          if (Platform.OS === 'web' && isGoogleUser(result.session.user)) {
+            router.replace('/(app)/home');
             return;
           }
 

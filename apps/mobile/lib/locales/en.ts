@@ -125,6 +125,8 @@ export const en: typeof ro = {
   'auth.clientAccountTitle': 'Client account',
   'auth.backToAccountChoice': 'Back to account choice',
   'auth.signedIn': 'Signed in successfully.',
+  'auth.googleContinue': 'Continue with Google',
+  'auth.errGoogleDisabled': 'Google sign-in is not enabled on the server yet.',
   'auth.validNumber': 'Use a valid number (07xxxxxxxx or +40...).',
   'auth.accountExists': 'This account already exists. Use “Sign in”. If it isn’t activated, resend the link below.',
   'auth.activationSent': 'We sent an activation link to {email}. Open it from your email, tap the link, then come back and choose “Sign in”. Without the link you can’t sign in.',

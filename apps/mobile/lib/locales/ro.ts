@@ -123,6 +123,8 @@ export const ro = {
   'auth.clientAccountTitle': 'Cont client',
   'auth.backToAccountChoice': 'Înapoi la alegerea contului',
   'auth.signedIn': 'Autentificare reușită.',
+  'auth.googleContinue': 'Continuă cu Google',
+  'auth.errGoogleDisabled': 'Logarea cu Google nu e activată încă pe server.',
   'auth.validNumber': 'Folosește un număr valid (07xxxxxxxx sau +40...).',
   'auth.accountExists': 'Contul există deja. Folosește „Intră în cont”. Dacă nu e activat, retrimite linkul de mai jos.',
   'auth.activationSent': 'Ți-am trimis un link de activare la {email}. Deschide-l din email, apasă linkul, apoi revino și alege „Intră în cont”. Fără link, nu poți intra.',

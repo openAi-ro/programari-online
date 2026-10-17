@@ -343,6 +343,15 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+# Logare cu Google: se activează din Dashboard (Authentication → Providers → Google)
+# cu Client ID + Secret din Google Cloud. Redirect Google:
+# https://<project-ref>.supabase.co/auth/v1/callback
+# Nu declara enabled=true aici, ca un `config push` să nu dezactiveze setarea din Dashboard.
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
@@ -439,4 +448,8 @@ verify_jwt = false
 
 [functions.expire-pending]
 enabled = true
+verify_jwt = false
+
+# Callback OAuth Google: redirectul vine fără JWT Supabase (state semnat HMAC în funcție)
+[functions.google-calendar-callback]
 verify_jwt = false
