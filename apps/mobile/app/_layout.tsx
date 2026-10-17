@@ -148,6 +148,8 @@ function useSessionGuard() {
     const inPublicBook = segments[0] === 'b' || path.startsWith('/b/');
     const inPublicInstall =
       (segments[0] as string) === 'install' || path.startsWith('/install');
+    const inPublicGcal =
+      (segments[0] as string) === 'gcal-connected' || path.startsWith('/gcal-connected');
     const inDevNavBench =
       __DEV__ &&
       ((segments[0] as string) === 'dev-nav-bench' || path.startsWith('/dev-nav-bench'));
@@ -159,6 +161,7 @@ function useSessionGuard() {
       !inAuthCallbackPath &&
       !inPublicBook &&
       !inPublicInstall &&
+      !inPublicGcal &&
       !inDevNavBench
     ) {
       router.replace('/(auth)/login');
@@ -266,6 +269,7 @@ function RootLayoutNav() {
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="b/[publicCode]" />
         <Stack.Screen name="install" />
+      <Stack.Screen name="gcal-connected" />
       </Stack>
     </ThemeProvider>
   );
