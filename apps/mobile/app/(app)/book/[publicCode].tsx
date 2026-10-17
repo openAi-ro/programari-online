@@ -770,6 +770,7 @@ export default function BookScreen() {
         logoUrl={business.logo_url}
         videoUrl={business.promo_video_url}
         publicMode
+        rating={rating}
       />
 
       <View style={styles.stepper}>

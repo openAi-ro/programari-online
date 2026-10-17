@@ -74,6 +74,11 @@ export type BusinessVisitCardProps = {
    * orașul/județul, rândul de program dispare (în loc e video-ul).
    */
   publicMode?: boolean;
+  /**
+   * Rating agregat (RPC business_rating), afișat în modul public sub
+   * oraș/județ. null = încă necunoscut (nu se afișează nimic).
+   */
+  rating?: { avg: number | null; count: number } | null;
 };
 
 /**
@@ -90,6 +95,7 @@ export function BusinessVisitCard({
   logoUrl = null,
   videoUrl = null,
   publicMode = false,
+  rating = null,
 }: BusinessVisitCardProps) {
   const t = useTheme();
   const tr = useT();
@@ -132,14 +138,29 @@ export function BusinessVisitCard({
               {displayName}
             </Text>
             {publicMode ? (
-              publicPlace ? (
-                <Text
-                  style={[styles.meta, { color: t.colors.textMuted }]}
-                  numberOfLines={2}
-                >
-                  {publicPlace}
-                </Text>
-              ) : null
+              <>
+                {publicPlace ? (
+                  <Text
+                    style={[styles.meta, { color: t.colors.textMuted }]}
+                    numberOfLines={2}
+                  >
+                    {publicPlace}
+                  </Text>
+                ) : null}
+                {rating ? (
+                  <Text
+                    style={[styles.meta, { color: t.colors.textMuted }]}
+                    numberOfLines={1}
+                  >
+                    {rating.count > 0 && rating.avg != null
+                      ? `★ ${rating.avg.toFixed(1)} (${tr(
+                          rating.count === 1 ? 'card.reviewsOne' : 'card.reviewsMany',
+                          { n: rating.count }
+                        )})`
+                      : tr('card.noReviews')}
+                  </Text>
+                ) : null}
+              </>
             ) : address ? (
               <Text
                 style={[styles.meta, { color: t.colors.textMuted }]}
