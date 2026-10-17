@@ -27,6 +27,8 @@ import {
   signUpWithPassword,
   isDuplicateSignupUser,
   startGoogleSignIn,
+  stashReferralCode,
+  claimReferralCode,
 } from '@/lib/auth';
 import {
   applyWhatsAppOtpSession,
@@ -128,6 +130,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activationEmail, setActivationEmail] = useState<string | null>(null);
+  const [referralInput, setReferralInput] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
 
@@ -177,6 +180,9 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
     setLoading(true);
     if (asMode === 'register') {
+      if (!isBusiness && referralInput.trim()) {
+        await stashReferralCode(referralInput);
+      }
       await signOut();
       const { data, error: err } = await signUpWithPassword(e, password, kind);
       if (err) {
@@ -220,6 +226,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       setError(check.error);
       return;
     }
+    await claimReferralCode();
     if (rememberPassword) {
       await saveRememberedCredentials(e, password);
     } else {
@@ -269,6 +276,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       return;
     }
     const done = await completeGoogleSignIn(result.url, kind);
+    if (done.session) await claimReferralCode();
     setGoogleBusy(false);
     if (done.error || !done.session) {
       setError(done.error ?? tr('auth.errGoogleDisabled'));
@@ -340,6 +348,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
 
     if (data.created) {
       await persistAccountKind(kind);
+      await claimReferralCode();
     } else {
       const check = await assertAccountKind(kind);
       if (!check.ok) {
@@ -408,8 +417,18 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               onChangeText={setPassword}
               editable={!loading}
               onSubmitEditing={() => void handleEmailSubmit()}
-              returnKeyType="go"
             />
+            {!isBusiness ? (
+              <LoginField
+                icon="people-outline"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                placeholder={tr('ref.field')}
+                value={referralInput}
+                onChangeText={setReferralInput}
+                editable={!loading}
+              />
+            ) : null}
 
 
             <Pressable

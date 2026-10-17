@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -22,6 +23,8 @@ import { formatInTimeZone } from '@/lib/timezone';
 import { ensureChatConversationForClient } from '@/lib/chatRpc';
 import { isWinbackCandidate } from '@/lib/winback';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
+import { readLocalImageBytes } from '@/lib/uploadLocalImage';
+import type { ClientIntake, ClientPhoto } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
 
@@ -55,6 +58,10 @@ export default function BusinessClientsScreen() {
   const [loyaltyEvery, setLoyaltyEvery] = useState(0);
   const [inactiveOnly, setInactiveOnly] = useState(false);
   const [bizName, setBizName] = useState('');
+  const [bizId, setBizId] = useState<string | null>(null);
+  const [openRecordId, setOpenRecordId] = useState<string | null>(null);
+  const [records, setRecords] = useState<Record<string, { intake: ClientIntake | null; photos: ClientPhoto[] }>>({});
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -72,6 +79,7 @@ export default function BusinessClientsScreen() {
       ? await fetchMyBusinessResult(me.id)
       : { data: null };
     if (biz?.name) setBizName(biz.name);
+    if (biz?.id) setBizId(biz.id);
     if (typeof biz?.no_show_block_after === 'number') {
       setBlockAfter(biz.no_show_block_after);
     }
@@ -93,6 +101,107 @@ export default function BusinessClientsScreen() {
       });
     }, [load, rows.length])
   );
+
+  async function toggleRecord(row: BusinessClientRow) {
+    if (openRecordId === row.client_user_id) {
+      setOpenRecordId(null);
+      return;
+    }
+    setOpenRecordId(row.client_user_id);
+    if (records[row.client_user_id] || !bizId) return;
+    const [intakeRes, photosRes] = await Promise.all([
+      supabase
+        .from('client_intake')
+        .select('*')
+        .eq('business_id', bizId)
+        .eq('client_user_id', row.client_user_id)
+        .maybeSingle(),
+      supabase
+        .from('client_photos')
+        .select('*')
+        .eq('business_id', bizId)
+        .eq('client_user_id', row.client_user_id)
+        .order('created_at', { ascending: false }),
+    ]);
+    setRecords((m) => ({
+      ...m,
+      [row.client_user_id]: {
+        intake: (intakeRes.data ?? null) as ClientIntake | null,
+        photos: ((photosRes.data ?? []) as ClientPhoto[]),
+      },
+    }));
+  }
+
+  async function addClientPhoto(row: BusinessClientRow, kind: 'before' | 'after') {
+    if (!bizId) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setError(tr('team.galleryPerm'));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: false,
+      quality: 0.8,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      const bytes = await readLocalImageBytes(result.assets[0].uri);
+      const path = `client-photos/${bizId}/${row.client_user_id}/${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from('staff-photos')
+        .upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from('staff-photos').getPublicUrl(path);
+      const { error: insErr } = await supabase.from('client_photos').insert({
+        business_id: bizId,
+        client_user_id: row.client_user_id,
+        url: data.publicUrl,
+        kind,
+      });
+      if (insErr) throw insErr;
+      await toggleRecordRefresh(row);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tr('team.photoFail'));
+    }
+    setPhotoBusy(false);
+  }
+
+  async function toggleRecordRefresh(row: BusinessClientRow) {
+    if (!bizId) return;
+    const [intakeRes, photosRes] = await Promise.all([
+      supabase
+        .from('client_intake')
+        .select('*')
+        .eq('business_id', bizId)
+        .eq('client_user_id', row.client_user_id)
+        .maybeSingle(),
+      supabase
+        .from('client_photos')
+        .select('*')
+        .eq('business_id', bizId)
+        .eq('client_user_id', row.client_user_id)
+        .order('created_at', { ascending: false }),
+    ]);
+    setRecords((m) => ({
+      ...m,
+      [row.client_user_id]: {
+        intake: (intakeRes.data ?? null) as ClientIntake | null,
+        photos: ((photosRes.data ?? []) as ClientPhoto[]),
+      },
+    }));
+  }
+
+  async function deleteClientPhoto(row: BusinessClientRow, photoId: string) {
+    const { error: err } = await supabase.from('client_photos').delete().eq('id', photoId);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    await toggleRecordRefresh(row);
+  }
 
   const shown = rows.filter((r) => {
     if (inactiveOnly && !isWinbackCandidate(r, new Date())) return false;
@@ -287,6 +396,7 @@ export default function BusinessClientsScreen() {
                       <>
                         <Button label={tr('cli.call')} size="sm" variant="secondary" icon="call-outline" onPress={() => void Linking.openURL('tel:' + phoneOf(row.contact))} />
                         <Button label={tr('cli.whatsapp')} size="sm" variant="secondary" icon="logo-whatsapp" onPress={() => void Linking.openURL('https://wa.me/' + phoneOf(row.contact).replace(/\D/g, '') + (inactiveOnly ? `?text=${encodeURIComponent(tr('cli.winbackMsg', { business: bizName }))}` : ''))} />
+                        <Button label={tr('int.showRecord')} size="sm" variant="secondary" icon="document-text-outline" onPress={() => void toggleRecord(row)} />
                       </>
                     ) : null}
                     <Button label={tr('cli.chat')} size="sm" variant="secondary" icon="chatbubble-outline" onPress={() => void openChat(row)} />
@@ -300,6 +410,57 @@ export default function BusinessClientsScreen() {
                       {a.no_show ? tr('cli.noShow') : statusLabel(a.status)}
                     </Text>
                   ))}
+                  {openRecordId === row.client_user_id ? (
+                    <View style={styles.record}>
+                      <Text style={[styles.meta, { color: t.colors.text, fontWeight: '700' }]}>
+                        {tr('int.record')}
+                      </Text>
+                      {records[row.client_user_id] ? (
+                        <>
+                          {records[row.client_user_id]?.intake ? (
+                            <>
+                              {records[row.client_user_id]?.intake?.allergies ? (
+                                <Text style={[styles.meta, { color: t.colors.text }]}>
+                                  {tr('int.allergyLabel', { text: records[row.client_user_id]?.intake?.allergies ?? '' })}
+                                </Text>
+                              ) : null}
+                              {records[row.client_user_id]?.intake?.conditions ? (
+                                <Text style={[styles.meta, { color: t.colors.text }]}>
+                                  {tr('int.conditionsLabel', { text: records[row.client_user_id]?.intake?.conditions ?? '' })}
+                                </Text>
+                              ) : null}
+                              <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                                {records[row.client_user_id]?.intake?.photo_consent ? tr('int.consentYes') : tr('int.consentNo')}
+                              </Text>
+                            </>
+                          ) : (
+                            <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                              {tr('int.noRecord')}
+                            </Text>
+                          )}
+                          <View style={styles.photoRow}>
+                            {(records[row.client_user_id]?.photos ?? []).map((p) => (
+                              <View key={p.id} style={styles.photoItem}>
+                                <Image source={{ uri: p.url }} style={styles.photoThumb} />
+                                <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                                  {p.kind === 'after' ? tr('int.after') : tr('int.before')}
+                                </Text>
+                                <Button label={tr('team.delPhoto')} size="sm" variant="secondary" icon="trash-outline" onPress={() => void deleteClientPhoto(row, p.id)} />
+                              </View>
+                            ))}
+                          </View>
+                          <View style={styles.btnRow}>
+                            <Button label={tr('int.addBefore')} size="sm" variant="secondary" loading={photoBusy} onPress={() => void addClientPhoto(row, 'before')} />
+                            <Button label={tr('int.addAfter')} size="sm" variant="secondary" loading={photoBusy} onPress={() => void addClientPhoto(row, 'after')} />
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                          {tr('cli.loading')}
+                        </Text>
+                      )}
+                    </View>
+                  ) : null}
                   {blockAfter > 0 && row.no_show_count >= blockAfter && !row.blocked ? (
                     <Callout tone="warning" title={tr('cli.repeatTitle')}>
                       {tr('cli.repeatBody').replace('{count}', String(row.no_show_count))}
@@ -348,6 +509,11 @@ const styles = StyleSheet.create({
   hist: { fontSize: fontSize.sm },
   contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   link: { fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.xs },
+  record: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  photoItem: { gap: spacing.xs, alignItems: 'center' },
+  photoThumb: { width: 96, height: 96, borderRadius: radius.md },
+  btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,

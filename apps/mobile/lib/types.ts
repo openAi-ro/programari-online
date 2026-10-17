@@ -52,6 +52,13 @@ export type BusinessProfile = {
   address?: string | null;
   maps_url?: string | null;
   google_review_url?: string | null;
+  instagram_url?: string | null;
+  facebook_url?: string | null;
+  offpeak_discount_percent?: number | null;
+  offpeak_start_hour?: number | null;
+  offpeak_end_hour?: number | null;
+  referral_enabled?: boolean | null;
+  referral_reward_text?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   /** Logo firmă (separat de poza de profil). */
@@ -71,6 +78,7 @@ export type Service = {
   description?: string | null;
   duration_minutes: number;
   price: number;
+  rebook_interval_days?: number | null;
   active: boolean;
   sort_order: number;
   created_at: string;
@@ -94,6 +102,7 @@ export type Appointment = {
   attendance_confirmed?: boolean;
   service_id?: string | null;
   service_ids?: string[] | null;
+  checked_in_at?: string | null;
   service_name?: string | null;
   service_duration_minutes?: number | null;
   service_price?: number | null;
@@ -202,6 +211,27 @@ export type ClientPackage = {
   sessions_used: number;
   created_at: string;
   updated_at: string;
+};
+
+export type ClientIntake = {
+  id: string;
+  business_id: string;
+  client_user_id: string;
+  allergies: string;
+  conditions: string;
+  photo_consent: boolean;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClientPhoto = {
+  id: string;
+  business_id: string;
+  client_user_id: string;
+  url: string;
+  kind: 'before' | 'after';
+  created_at: string;
 };
 
 export type GiftCard = {

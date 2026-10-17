@@ -4,7 +4,10 @@ import { getMyAppointmentsUrl } from './bookingLink';
 import { supabase } from './supabase';
 import { trKey } from './i18n';
 
-export async function startDepositCheckout(appointmentId: string): Promise<{
+export async function startDepositCheckout(
+  appointmentId: string,
+  tipRon = 0
+): Promise<{
   ok: boolean;
   error?: string;
 }> {
@@ -14,6 +17,7 @@ export async function startDepositCheckout(appointmentId: string): Promise<{
       appointment_id: appointmentId,
       success_url: success,
       cancel_url: success,
+      tip_ron: tipRon,
     },
   });
   if (error) {

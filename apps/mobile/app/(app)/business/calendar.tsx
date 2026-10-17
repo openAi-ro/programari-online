@@ -429,6 +429,9 @@ export default function BusinessCalendarScreen() {
                     {a.staff_name ? ` · ${a.staff_name}` : ''}
                   </Text>
                   <Badge tone={meta.tone}>{meta.label}</Badge>
+                  {a.checked_in_at ? (
+                    <Badge tone="accent">{tr('appt.checkedIn')}</Badge>
+                  ) : null}
                 </View>
                 {a.no_show ? (
                   <Text style={[styles.contact, { color: t.colors.danger }]}>{tr('cli.noShow')}</Text>

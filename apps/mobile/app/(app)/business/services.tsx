@@ -25,11 +25,12 @@ import type { Service } from '@/lib/types';
 type Draft = {
   name: string;
   description: string;
+  rebookInterval: string;
   duration: string;
   price: string;
 };
 
-const EMPTY_DRAFT: Draft = { name: '', description: '', duration: '60', price: '0' };
+const EMPTY_DRAFT: Draft = { name: '', description: '', duration: '60', price: '0', rebookInterval: '' };
 
 export default function BusinessServicesScreen() {
   const t = useTheme();
@@ -101,6 +102,7 @@ export default function BusinessServicesScreen() {
     setDraft({
       name: s.name,
       description: s.description ?? '',
+      rebookInterval: s.rebook_interval_days ? String(s.rebook_interval_days) : '',
       duration: String(s.duration_minutes),
       price: String(s.price ?? 0),
     });
@@ -112,12 +114,18 @@ export default function BusinessServicesScreen() {
     const description = draft.description.trim();
     const duration = parseInt(draft.duration, 10);
     const price = Number(String(draft.price).replace(',', '.'));
+    const rebookRaw = draft.rebookInterval.trim();
+    const rebookInterval = rebookRaw === '' ? null : parseInt(rebookRaw, 10);
     if (!name) {
       setError(trKey('svc.nameRequired'));
       return;
     }
     if (!Number.isFinite(duration) || duration < 5 || duration > 480) {
       setError(trKey('svc.badDuration'));
+      return;
+    }
+    if (rebookInterval !== null && (!Number.isFinite(rebookInterval) || rebookInterval < 0 || rebookInterval > 365)) {
+      setError(trKey('svc.badRebook'));
       return;
     }
     if (!Number.isFinite(price) || price < 0) {
@@ -133,6 +141,7 @@ export default function BusinessServicesScreen() {
         name,
         description: description || null,
         duration_minutes: duration,
+        rebook_interval_days: rebookInterval,
         price,
         sort_order: rows.length,
         active: true,
@@ -153,6 +162,7 @@ export default function BusinessServicesScreen() {
         name,
         description: description || null,
         duration_minutes: duration,
+        rebook_interval_days: rebookInterval,
         price,
         updated_at: new Date().toISOString(),
       })
@@ -294,6 +304,15 @@ export default function BusinessServicesScreen() {
             keyboardType="decimal-pad"
             icon="cash-outline"
             hint={tr('svc.priceHint')}
+          />
+          <Field
+            label={tr('svc.rebook')}
+            value={draft.rebookInterval}
+            onChangeText={(rebookInterval) => setDraft((d) => ({ ...d, rebookInterval }))}
+            placeholder=""
+            keyboardType="number-pad"
+            icon="repeat-outline"
+            hint={tr('svc.rebookHint')}
           />
         </>
       ) : null}

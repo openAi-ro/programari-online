@@ -37,6 +37,7 @@ import { useBack } from '@/lib/nav';
 import { markWaitlistBooked } from '@/lib/notify-client';
 import { normalizeWalkinContact } from '@/lib/walkinRules';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
+import { parseTipInput, tipOptions } from '@/lib/tip';
 import { generateFreeSlots } from '@/lib/slots';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
@@ -74,6 +75,8 @@ export default function PublicBookScreen() {
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
+  const [tipRon, setTipRon] = useState(0);
+  const [tipCustom, setTipCustom] = useState('');
 
   const selectedService = useMemo(
     () => services.find((s) => s.id === serviceId) ?? null,
@@ -274,7 +277,7 @@ export default function PublicBookScreen() {
         desiredDate: dateLocal,
       });
       if (appointment.payment_status === 'unpaid') {
-        const pay = await startDepositCheckout(appointment.id);
+        const pay = await startDepositCheckout(appointment.id, tipRon);
         if (!pay.ok) {
           payError = pay.error ?? 'checkout_failed';
         }
@@ -505,6 +508,48 @@ export default function PublicBookScreen() {
         <Callout tone="info" title={tr('book.deposit')}>
           {tr('book.depositDesc', { amount: formatLei(business.deposit_ron) })}
         </Callout>
+      ) : null}
+
+      {session ? (
+        <>
+          <SectionTitle>{tr('book.tipTitle')}</SectionTitle>
+          <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
+            {tr('book.tipHint')}
+          </Text>
+          <View style={styles.serviceList}>
+            {tipOptions(selectedService?.price ?? 0).map((o) => (
+              <Pressable
+                key={o.percent}
+                onPress={() => {
+                  setTipRon(o.amount);
+                  setTipCustom('');
+                }}
+                style={[
+                  styles.serviceChip,
+                  {
+                    backgroundColor: tipRon === o.amount ? t.colors.accentSoft : t.colors.surface,
+                    borderColor: tipRon === o.amount ? t.colors.accent : t.colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.serviceName, { color: t.colors.text }]}>
+                  {o.percent === 0 ? tr('book.tipNone') : `${o.percent}% · ${formatRon(o.amount)}`}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Field
+            label={tr('book.tipCustom')}
+            value={tipCustom}
+            onChangeText={(v: string) => {
+              setTipCustom(v);
+              const parsed = parseTipInput(v, selectedService?.price ?? 0);
+              if (parsed !== null) setTipRon(parsed);
+            }}
+            placeholder="0"
+            keyboardType="decimal-pad"
+          />
+        </>
       ) : null}
 
       {(business.loyalty_every ?? 0) >= 2 ? (

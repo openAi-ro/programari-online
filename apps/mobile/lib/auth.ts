@@ -294,6 +294,32 @@ export async function updatePassword(newPassword: string) {
   return supabase.auth.updateUser({ password: newPassword });
 }
 
+export const PENDING_REFERRAL_KEY = 'auth.referralCode';
+
+/** Ține minte codul de recomandare până la prima autentificare. */
+export async function stashReferralCode(code: string): Promise<void> {
+  const value = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (!value) return;
+  try {
+    await AsyncStorage.setItem(PENDING_REFERRAL_KEY, value);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Înregistrează recomandarea, o singură dată, după autentificare. */
+export async function claimReferralCode(): Promise<void> {
+  try {
+    const value = await AsyncStorage.getItem(PENDING_REFERRAL_KEY);
+    if (!value) return;
+    await AsyncStorage.removeItem(PENDING_REFERRAL_KEY);
+    const { error } = await supabase.rpc('record_referral', { p_code: value });
+    if (error) console.warn('record_referral failed', error.message);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Ține minte ușa (client/business) pe durata redirectului Google. */
 async function rememberPendingGoogleKind(kind: AppMode): Promise<void> {
   try {

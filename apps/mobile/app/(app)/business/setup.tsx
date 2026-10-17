@@ -33,6 +33,13 @@ import {
 import { reverseGeocodeRo } from '@/lib/location';
 import { useBack } from '@/lib/nav';
 import { generatePublicCode } from '@/lib/publicCode';
+import * as Clipboard from 'expo-clipboard';
+import {
+  buildBioText,
+  normalizeFacebookUrl,
+  normalizeInstagramUrl,
+} from '@/lib/socialLinks';
+import { getWebBookingUrl } from '@/lib/bookingLink';
 import {
   JUDETE,
   adresaCompleta,
@@ -170,24 +177,34 @@ export default function BusinessSetupScreen() {
   const [autoApprove, setAutoApprove] = useState(DEFAULT_AUTO_APPROVE_RETURNING);
   const [blockAfter, setBlockAfter] = useState(String(DEFAULT_NO_SHOW_BLOCK_AFTER));
   const [loyaltyEvery, setLoyaltyEvery] = useState(String(DEFAULT_LOYALTY_EVERY));
+  const [referralOn, setReferralOn] = useState(false);
+  const [referralReward, setReferralReward] = useState('');
   const [depositRon, setDepositRon] = useState(String(DEFAULT_DEPOSIT_RON));
+  const [offpeakPercent, setOffpeakPercent] = useState('');
+  const [offpeakStart, setOffpeakStart] = useState('');
+  const [offpeakEnd, setOffpeakEnd] = useState('');
   const [myBusinesses, setMyBusinesses] = useState<BusinessProfile[]>([]);
   const [country, setCountry] = useState(DEFAULT_COUNTRY_CODE);
   const [county, setCounty] = useState('');
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
   const [mapsUrl, setMapsUrl] = useState('');
+  const [instagramInput, setInstagramInput] = useState('');
+  const [facebookInput, setFacebookInput] = useState('');
   const [googleReviewUrl, setGoogleReviewUrl] = useState('');
 
   useEffect(() => {
     if (!existingId) return;
     void supabase
       .from('business_profiles')
-      .select('google_review_url')
+      .select('google_review_url, instagram_url, facebook_url')
       .eq('id', existingId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) setGoogleReviewUrl(data.google_review_url ?? '');
+        if (!data) return;
+        setGoogleReviewUrl(data.google_review_url ?? '');
+        setInstagramInput(data.instagram_url ?? '');
+        setFacebookInput(data.facebook_url ?? '');
       });
   }, [existingId]);
   const [latitude, setLatitude] = useState('');
@@ -268,7 +285,12 @@ export default function BusinessSetupScreen() {
         setAutoApprove(Boolean(b.auto_approve_returning));
         setBlockAfter(String(b.no_show_block_after ?? DEFAULT_NO_SHOW_BLOCK_AFTER));
         setLoyaltyEvery(String(b.loyalty_every ?? DEFAULT_LOYALTY_EVERY));
+        setReferralOn(Boolean(b.referral_enabled));
+        setReferralReward(b.referral_reward_text ?? '');
         setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
+        setOffpeakPercent(b.offpeak_discount_percent ? String(b.offpeak_discount_percent) : '');
+        setOffpeakStart(b.offpeak_start_hour != null ? String(b.offpeak_start_hour) : '');
+        setOffpeakEnd(b.offpeak_end_hour != null ? String(b.offpeak_end_hour) : '');
 
         // Adresele vechi aveau doar orașul; deducem județul din nomenclator.
         setCountry(countryCodeOf(b.country));
@@ -362,6 +384,11 @@ export default function BusinessSetupScreen() {
     setAutoApprove(Boolean(b.auto_approve_returning));
     setBlockAfter(String(b.no_show_block_after ?? DEFAULT_NO_SHOW_BLOCK_AFTER));
     setLoyaltyEvery(String(b.loyalty_every ?? DEFAULT_LOYALTY_EVERY));
+    setReferralOn(Boolean(b.referral_enabled));
+    setReferralReward(b.referral_reward_text ?? '');
+    setOffpeakPercent(b.offpeak_discount_percent ? String(b.offpeak_discount_percent) : '');
+    setOffpeakStart(b.offpeak_start_hour != null ? String(b.offpeak_start_hour) : '');
+    setOffpeakEnd(b.offpeak_end_hour != null ? String(b.offpeak_end_hour) : '');
     setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
     setCountry(countryCodeOf(b.country));
     const judet = judetCanonic(b.county) || judetPentruLocalitate(b.city);
@@ -452,6 +479,23 @@ export default function BusinessSetupScreen() {
       return;
     }
 
+    const offpeakPctRaw = offpeakPercent.trim();
+    const offpeakPct = offpeakPctRaw === '' ? 0 : parseInt(offpeakPctRaw, 10);
+    const offpeakStartH = offpeakStart.trim() === '' ? null : parseInt(offpeakStart.trim(), 10);
+    const offpeakEndH = offpeakEnd.trim() === '' ? null : parseInt(offpeakEnd.trim(), 10);
+    if (
+      !Number.isFinite(offpeakPct) ||
+      offpeakPct < 0 ||
+      offpeakPct > 90 ||
+      (offpeakStartH !== null && (!Number.isFinite(offpeakStartH) || offpeakStartH < 0 || offpeakStartH > 23)) ||
+      (offpeakEndH !== null && (!Number.isFinite(offpeakEndH) || offpeakEndH < 0 || offpeakEndH > 23)) ||
+      ((offpeakStartH === null) !== (offpeakEndH === null)) ||
+      (offpeakPct === 0 && (offpeakStartH !== null || offpeakEndH !== null))
+    ) {
+      setError(trKey('setup.badOffpeak'));
+      return;
+    }
+
     // Nu forțăm deposit_ron: 0 la fiecare salvare — păstrăm valoarea din DB.
     // La creare, DB default e 0 (migrarea v13).
     const rules = {
@@ -463,8 +507,15 @@ export default function BusinessSetupScreen() {
       auto_approve_returning: autoApprove,
       no_show_block_after: blockN,
       loyalty_every: loyalty,
+      referral_enabled: referralOn,
+      referral_reward_text: referralReward.trim() || null,
       deposit_ron: deposit,
       google_review_url: googleReviewUrl.trim() || null,
+      instagram_url: normalizeInstagramUrl(instagramInput),
+      facebook_url: normalizeFacebookUrl(facebookInput),
+      offpeak_discount_percent: offpeakPct,
+      offpeak_start_hour: offpeakStartH,
+      offpeak_end_hour: offpeakEndH,
     };
 
     setSaving(true);
@@ -751,6 +802,39 @@ export default function BusinessSetupScreen() {
         keyboardType="url"
         hint={tr('setup.reviewHint')}
       />
+      <Field
+        label={tr('setup.instagram')}
+        value={instagramInput}
+        onChangeText={setInstagramInput}
+        placeholder="@salonul.tau"
+        icon="logo-instagram"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Field
+        label={tr('setup.facebook')}
+        value={facebookInput}
+        onChangeText={setFacebookInput}
+        placeholder="SalonulTau"
+        icon="logo-facebook"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      {publicCode ? (
+        <Button
+          label={tr('setup.copyBio')}
+          variant="secondary"
+          icon="copy-outline"
+          onPress={() =>
+            void (async () => {
+              const bizName =
+                myBusinesses.find((b) => b.id === existingId)?.name ?? name;
+              await Clipboard.setStringAsync(buildBioText(bizName, getWebBookingUrl(publicCode)));
+              setMessage(trKey('setup.bioCopied'));
+            })()
+          }
+        />
+      ) : null}
       <Button
         label={geoBusy ? tr('setup.geoBusy') : tr('setup.useMyLoc')}
         variant="secondary"
@@ -828,6 +912,27 @@ export default function BusinessSetupScreen() {
         keyboardType="decimal-pad"
         icon="cash-outline"
         hint={tr('setup.depositHint')}
+      />
+      <Field
+        label={tr('setup.offpeakPercent')}
+        value={offpeakPercent}
+        onChangeText={setOffpeakPercent}
+        placeholder="10"
+        keyboardType="number-pad"
+        icon="pricetag-outline"
+        hint={tr('setup.offpeakHint')}
+      />
+      <Field
+        label={tr('setup.offpeakHours')}
+        value={offpeakStart && offpeakEnd ? `${offpeakStart}-${offpeakEnd}` : offpeakStart || offpeakEnd || ''}
+        onChangeText={(v) => {
+          const parts = v.replace(/[^0-9-]/g, '').split('-');
+          setOffpeakStart(parts[0] ?? '');
+          setOffpeakEnd(parts[1] ?? '');
+        }}
+        placeholder="10-14"
+        keyboardType="numbers-and-punctuation"
+        icon="time-outline"
       />
 
       
@@ -921,6 +1026,35 @@ export default function BusinessSetupScreen() {
         icon="gift-outline"
         hint={tr('setup.loyaltyHint')}
       />
+      <View
+        style={[
+          styles.breakRow,
+          { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+        ]}
+      >
+        <View style={styles.breakTitles}>
+          <Text style={[styles.breakTitle, { color: t.colors.text }]}>
+            {tr('setup.referral')}
+          </Text>
+          <Text style={[styles.breakSub, { color: t.colors.textMuted }]}>
+            {tr('setup.referralHint')}
+          </Text>
+        </View>
+        <Toggle
+          value={referralOn}
+          onValueChange={setReferralOn}
+          accessibilityLabel={tr('setup.referral')}
+        />
+      </View>
+      {referralOn ? (
+        <Field
+          label={tr('setup.referralReward')}
+          value={referralReward}
+          onChangeText={setReferralReward}
+          placeholder="10% reducere"
+          icon="gift-outline"
+        />
+      ) : null}
 
       <SectionTitle>{tr('setup.blockedTitle')}</SectionTitle>
       <Text style={[styles.hint, { color: t.colors.textMuted }]}>

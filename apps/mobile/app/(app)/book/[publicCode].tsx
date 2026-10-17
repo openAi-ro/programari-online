@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
@@ -8,6 +8,7 @@ import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import { StaffBadge } from '@/components/StaffBadge';
 import { StaffPortfolio } from '@/components/StaffPortfolio';
+import { SocialButtons } from '@/components/SocialButtons';
 import { BusinessVisitCard } from '@/components/BusinessVisitCard';
 import { businessToVisitCardProps } from '@/lib/visitCard';
 import {
@@ -39,6 +40,8 @@ import {
   notifyAfterBooking,
 } from '@/lib/bookingRpc';
 import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
+import { discountedPrice, isOffpeakStart } from '@/lib/offpeak';
+import { parseTipInput, tipOptions } from '@/lib/tip';
 import { clampRepeatCount } from '@/lib/recurringRules';
 import {
   waitlistJoinBody,
@@ -125,9 +128,21 @@ export default function BookScreen() {
   const [step, setStep] = useState<WizardStep>('service');
   const [stepsReady, setStepsReady] = useState(false);
   const [repeatCount, setRepeatCount] = useState(1);
+  const [tipRon, setTipRon] = useState(0);
+  const [tipCustom, setTipCustom] = useState('');
 
   const isReschedule = Boolean(rescheduleId);
   const combo = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
+  const offpeakPct = business?.offpeak_discount_percent ?? 0;
+  const selectedOffpeak =
+    Boolean(selected) &&
+    isOffpeakStart(
+      selected!.startUtc,
+      business?.timezone ?? 'Europe/Bucharest',
+      business?.offpeak_start_hour ?? null,
+      business?.offpeak_end_hour ?? null,
+      offpeakPct
+    );
   const selectedStaff = useMemo(
     () => staffList.find((s) => s.id === staffId) ?? null,
     [staffList, staffId]
@@ -549,7 +564,7 @@ export default function BookScreen() {
         });
       }
       if (appointment.payment_status === 'unpaid') {
-        const pay = await startDepositCheckout(appointment.id);
+        const pay = await startDepositCheckout(appointment.id, tipRon);
         if (!pay.ok) {
           payError = pay.error ?? 'checkout_failed';
         }
@@ -755,6 +770,7 @@ export default function BookScreen() {
         onToggleFavorite={() => {
           void toggleFavorite(business.id).then(setFavorited);
         }}
+        publicCode={code}
       />
 
       <BusinessVisitCard
@@ -849,6 +865,50 @@ export default function BookScreen() {
         <Callout tone="info" title={tr('book.deposit')}>
           {tr('book.depositDesc', { amount: formatLei(business.deposit_ron) })}
         </Callout>
+      ) : null}
+
+      {!isReschedule && step === 'confirm' ? (
+        <>
+          <SectionTitle>{tr('book.tipTitle')}</SectionTitle>
+          <Text style={[styles.note, { color: t.colors.textMuted }]}>{tr('book.tipHint')}</Text>
+          <View style={styles.serviceList}>
+            {tipOptions(combo.price).map((o) => (
+              <Pressable
+                key={o.percent}
+                onPress={() => {
+                  setTipRon(o.amount);
+                  setTipCustom('');
+                }}
+                style={[
+                  styles.serviceChip,
+                  {
+                    backgroundColor: tipRon === o.amount ? t.colors.accentSoft : t.colors.surface,
+                    borderColor: tipRon === o.amount ? t.colors.accent : t.colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.serviceName, { color: t.colors.text }]}>
+                  {o.percent === 0 ? tr('book.tipNone') : `${o.percent}% · ${formatRon(o.amount)}`}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.note, { color: t.colors.textMuted }]}>{tr('book.tipCustom')}</Text>
+          <TextInput
+            value={tipCustom}
+            onChangeText={(v: string) => {
+              setTipCustom(v);
+              const parsed = parseTipInput(v, combo.price);
+              if (parsed !== null) {
+                setTipRon(parsed);
+              }
+            }}
+            placeholder="0"
+            placeholderTextColor={t.colors.textFaint}
+            keyboardType="decimal-pad"
+            style={[styles.tipInput, { color: t.colors.text, borderColor: t.colors.borderStrong, backgroundColor: t.colors.surface }]}
+          />
+        </>
       ) : null}
 
       {(business.loyalty_every ?? 0) >= 2 && step === 'confirm' ? (
@@ -1029,6 +1089,10 @@ export default function BookScreen() {
         </>
       ) : null}
 
+      {selected && selectedOffpeak && (step === 'slot' || step === 'confirm') ? (
+        <Badge tone="accent">{tr('book.offpeakBadge', { percent: offpeakPct })}</Badge>
+      ) : null}
+
       {step === 'confirm' ? (
         <>
           <SectionTitle>{tr('book.confirmTitle')}</SectionTitle>
@@ -1043,7 +1107,7 @@ export default function BookScreen() {
             {combo.count > 0 ? (
               <ConfirmLine
                 label={tr('book.stepService')}
-                value={`${combo.name} · ${formatDuration(combo.durationMinutes)} · ${formatRon(combo.price)}`}
+                value={`${combo.name} · ${formatDuration(combo.durationMinutes)} · ${formatRon(selectedOffpeak ? discountedPrice(combo.price, offpeakPct) : combo.price)}`}
               />
             ) : (
               <ConfirmLine label={tr('book.duration')} value={`${durationMinutes} min`} />
@@ -1096,6 +1160,7 @@ function SalonProfileHeader({
   reviews,
   favorited,
   onToggleFavorite,
+  publicCode,
 }: {
   business: BusinessProfile;
   address: string | null;
@@ -1103,10 +1168,12 @@ function SalonProfileHeader({
   reviews: ReviewSnippet[];
   favorited: boolean;
   onToggleFavorite: () => void;
+  publicCode: string;
 }) {
   const t = useTheme();
   const tr = useT();
   const [imgFailed, setImgFailed] = useState(false);
+  const router = useRouter();
   const showLogo = Boolean(business.logo_url) && !imgFailed;
 
   return (
@@ -1147,6 +1214,14 @@ function SalonProfileHeader({
               {tr('book.noReviews')}
             </Text>
           )}
+          <SocialButtons instagramUrl={business.instagram_url} facebookUrl={business.facebook_url} />
+          <Button
+            label={tr('as.ask')}
+            variant="secondary"
+            size="sm"
+            icon="chatbubble-ellipses-outline"
+            onPress={() => router.push(`/(app)/assistant/${publicCode}` as never)}
+          />
         </View>
         <Pressable
           onPress={onToggleFavorite}
@@ -1228,6 +1303,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   serviceName: { fontSize: fontSize.md, fontWeight: '700' },
+  tipInput: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: fontSize.md,
+    fontWeight: '600',
+  },
   serviceDesc: { fontSize: fontSize.sm, opacity: 0.9 },
   serviceMeta: { fontSize: fontSize.sm },
   timeLocked: {

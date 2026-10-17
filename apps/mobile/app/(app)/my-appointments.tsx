@@ -35,6 +35,9 @@ import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { invokeRefundDeposit } from '@/lib/payments';
 import { formatRon } from '@/lib/format';
 import { sessionsLeft } from '@/lib/packages';
+import { canCheckIn } from '@/lib/checkin';
+import { makeReferralCode } from '@/lib/referral';
+import { getPublicWebOrigin } from '@/lib/webBase';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
@@ -85,6 +88,10 @@ export default function MyAppointmentsScreen() {
   >([]);
   const [giftCode, setGiftCode] = useState('');
   const [giftResult, setGiftResult] = useState<string | null>(null);
+  const [myReferralCode, setMyReferralCode] = useState<string | null>(null);
+  const [myReferrals, setMyReferrals] = useState<
+    Array<{ id: string; status: string; created_at: string }>
+  >([]);
 
   // Doar ultimul load() scrie lista: un raspuns vechi nu mai suprascrie starea noua.
   const loadSeq = useRef(0);
@@ -206,6 +213,23 @@ export default function MyAppointmentsScreen() {
       .eq('client_user_id', user.id)
       .order('created_at', { ascending: false });
     setMyPackages((pkgs ?? []) as unknown as typeof myPackages);
+    const { data: me } = await supabase
+      .from('profiles')
+      .select('referral_code')
+      .eq('id', user.id)
+      .maybeSingle();
+    let code = (me?.referral_code as string | null) ?? null;
+    if (!code) {
+      code = makeReferralCode();
+      await supabase.from('profiles').update({ referral_code: code }).eq('id', user.id);
+    }
+    setMyReferralCode(code);
+    const { data: refs } = await supabase
+      .from('referrals')
+      .select('id, status, created_at')
+      .eq('referrer_user_id', user.id)
+      .order('created_at', { ascending: false });
+    setMyReferrals((refs ?? []) as typeof myReferrals);
     setReviewsByApt(map);
     setLoading(false);
   }, []);
@@ -233,6 +257,22 @@ export default function MyAppointmentsScreen() {
     }
     await load();
   }
+  const [checkInBusyId, setCheckInBusyId] = useState<string | null>(null);
+
+  async function handleCheckIn(item: Row) {
+    setCheckInBusyId(item.id);
+    setError(null);
+    const { error: err } = await supabase.rpc('mark_checked_in', {
+      p_appointment_id: item.id,
+    });
+    setCheckInBusyId(null);
+    if (err) {
+      setError(mapBookingRpcError(err.message));
+      return;
+    }
+    await load();
+  }
+
   async function checkGiftCard() {
     setGiftResult(null);
     const { data, error: err } = await supabase.rpc('check_gift_card', {
@@ -429,6 +469,12 @@ export default function MyAppointmentsScreen() {
                 ))}
               </View>
             ) : null}
+            <Button
+              label={tr('int.title')}
+              variant="secondary"
+              icon="document-text-outline"
+              onPress={() => router.push('/(app)/intake' as never)}
+            />
             {myPackages.length > 0 ? (
               <View style={{ gap: spacing.sm }}>
                 <Text style={{ fontWeight: '800', color: t.colors.text }}>{tr('pkg.myTitle')}</Text>
@@ -440,6 +486,37 @@ export default function MyAppointmentsScreen() {
                     })}
                   </Text>
                 ))}
+              </View>
+            ) : null}
+            {myReferralCode ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={{ fontWeight: '800', color: t.colors.text }}>{tr('ref.title')}</Text>
+                <Text style={{ color: t.colors.textMuted }}>{tr('ref.desc')}</Text>
+                <Text style={{ color: t.colors.text }}>
+                  {tr('ref.code', { code: myReferralCode })}
+                </Text>
+                <Button
+                  label={tr('ref.share')}
+                  variant="secondary"
+                  onPress={() =>
+                    void Share.share({
+                      message: tr('ref.shareText', {
+                        code: myReferralCode ?? '',
+                        url: getPublicWebOrigin(),
+                      }),
+                    })
+                  }
+                />
+                {myReferrals.length > 0 ? (
+                  <Text style={{ color: t.colors.text }}>
+                    {tr('ref.reported', { n: myReferrals.length })} ·{' '}
+                    {myReferrals
+                      .map((r) =>
+                        r.status === 'rewarded' ? tr('ref.rewarded') : tr('ref.pending')
+                      )
+                      .join(', ')}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
             <View style={{ gap: spacing.sm }}>
@@ -568,6 +645,16 @@ export default function MyAppointmentsScreen() {
             }
             reviewLabel={
               reviewsByApt[item.id] ? tr('my.yourReview', { rating: reviewsByApt[item.id].rating }) : undefined
+            }
+            checkedIn={Boolean(item.checked_in_at)}
+            checkInLoading={checkInBusyId === item.id}
+            onCheckIn={
+              canCheckIn(
+                { status: item.status, startAt: item.start_at, checkedInAt: item.checked_in_at ?? null },
+                new Date()
+              )
+                ? () => void handleCheckIn(item)
+                : undefined
             }
             onGoogleReview={
               item.status === 'approved' &&

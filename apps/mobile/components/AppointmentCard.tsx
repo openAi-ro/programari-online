@@ -56,6 +56,9 @@ type Props = {
   onReview?: () => void;
   reviewLabel?: string;
   onGoogleReview?: () => void;
+  onCheckIn?: () => void;
+  checkInLoading?: boolean;
+  checkedIn?: boolean;
   cancelNoticeMinutes?: number | null;
   onShare?: () => void;
 };
@@ -88,6 +91,9 @@ export function AppointmentCard({
   onReview,
   reviewLabel,
   onGoogleReview,
+  onCheckIn,
+  checkInLoading,
+  checkedIn,
   cancelNoticeMinutes,
   onShare,
 }: Props) {
@@ -519,6 +525,20 @@ export function AppointmentCard({
             contentAlign="start"
             labelNumberOfLines={1}
             onPress={onGoogleReview}
+          />
+        ) : null}
+        {checkedIn ? (
+          <Text style={[styles.payHint, { color: t.colors.accent }]}>{tr('appt.checkedIn')}</Text>
+        ) : onCheckIn ? (
+          <Button
+            label={tr('appt.checkIn')}
+            icon="checkmark-circle-outline"
+            variant="secondary"
+            size="sm"
+            contentAlign="start"
+            labelNumberOfLines={1}
+            loading={checkInLoading}
+            onPress={onCheckIn}
           />
         ) : null}
 
