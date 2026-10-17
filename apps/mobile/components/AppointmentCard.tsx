@@ -55,6 +55,7 @@ type Props = {
   onDelete?: () => void;
   onReview?: () => void;
   reviewLabel?: string;
+  onGoogleReview?: () => void;
   cancelNoticeMinutes?: number | null;
   onShare?: () => void;
 };
@@ -86,6 +87,7 @@ export function AppointmentCard({
   onDelete,
   onReview,
   reviewLabel,
+  onGoogleReview,
   cancelNoticeMinutes,
   onShare,
 }: Props) {
@@ -506,6 +508,17 @@ export function AppointmentCard({
             contentAlign="start"
             labelNumberOfLines={1}
             onPress={onReview}
+          />
+        ) : null}
+        {onGoogleReview ? (
+          <Button
+            label={tr('appt.googleReview')}
+            icon="logo-google"
+            variant="secondary"
+            size="sm"
+            contentAlign="start"
+            labelNumberOfLines={1}
+            onPress={onGoogleReview}
           />
         ) : null}
 

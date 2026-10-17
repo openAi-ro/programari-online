@@ -1,4 +1,4 @@
-﻿import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { DatePickerField } from '@/components/DatePickerField';
 import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import { StaffBadge } from '@/components/StaffBadge';
+import { StaffPortfolio } from '@/components/StaffPortfolio';
 import { BusinessVisitCard } from '@/components/BusinessVisitCard';
 import { businessToVisitCardProps } from '@/lib/visitCard';
 import {
@@ -29,7 +30,15 @@ import {
   staffSchedule,
   toYmd,
 } from '@/lib/bookingRules';
-import { createAppointmentIfFree, createRecurringAppointments, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
+import {
+  createAppointmentIfFree,
+  createAppointmentMultiIfFree,
+  createRecurringAppointments,
+  createRecurringMultiAppointments,
+  listBusyRanges,
+  notifyAfterBooking,
+} from '@/lib/bookingRpc';
+import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
 import { clampRepeatCount } from '@/lib/recurringRules';
 import {
   waitlistJoinBody,
@@ -95,7 +104,8 @@ export default function BookScreen() {
   const [services, setServices] = useState<Service[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [serviceId, setServiceId] = useState<string | null>(null);
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const serviceId = serviceIds[0] ?? null;
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
@@ -117,17 +127,14 @@ export default function BookScreen() {
   const [repeatCount, setRepeatCount] = useState(1);
 
   const isReschedule = Boolean(rescheduleId);
-  const selectedService = useMemo(
-    () => services.find((s) => s.id === serviceId) ?? null,
-    [services, serviceId]
-  );
+  const combo = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
   const selectedStaff = useMemo(
     () => staffList.find((s) => s.id === staffId) ?? null,
     [staffList, staffId]
   );
 
   const durationMinutes =
-    selectedService?.duration_minutes ?? business?.session_duration_minutes ?? 60;
+    combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
 
   const hasStaffChoice = staffList.length > 1;
   const hasServices = services.length > 0;
@@ -279,7 +286,7 @@ export default function BookScreen() {
             ? serviceIdParam[0]
             : null;
       if (list.length > 0) {
-        setServiceId(fromQsSvc && list.some((s) => s.id === fromQsSvc) ? fromQsSvc : list[0].id);
+        setServiceIds([fromQsSvc && list.some((s) => s.id === fromQsSvc) ? fromQsSvc : list[0].id]);
       }
 
       const { data: staffRows } = await supabase
@@ -318,11 +325,16 @@ export default function BookScreen() {
       if (rescheduleId) {
         const { data: apt } = await supabase
           .from('appointments')
-          .select('service_id, staff_id')
+          .select('service_id, service_ids, staff_id')
           .eq('id', String(rescheduleId))
           .maybeSingle();
-        if (apt?.service_id && list.some((s) => s.id === apt.service_id)) {
-          setServiceId(apt.service_id as string);
+        const aptServiceIds = Array.isArray(apt?.service_ids)
+          ? (apt.service_ids as string[]).filter((id) => list.some((s) => s.id === id))
+          : apt?.service_id && list.some((s) => s.id === apt.service_id)
+            ? [apt.service_id as string]
+            : [];
+        if (aptServiceIds.length > 0) {
+          setServiceIds(aptServiceIds);
         }
         if (apt?.staff_id && team.some((s) => s.id === apt.staff_id)) {
           setStaffId(apt.staff_id as string);
@@ -405,7 +417,7 @@ export default function BookScreen() {
       setError(trKey('book.pickSlot'));
       return;
     }
-    if (services.length > 0 && !serviceId) {
+    if (services.length > 0 && serviceIds.length === 0) {
       setError(trKey('book.pickService'));
       return;
     }
@@ -453,7 +465,17 @@ export default function BookScreen() {
     }
 
     if (!isReschedule && repeatCount > 1) {
-      const { appointments: series, error: err } = await createRecurringAppointments({
+      const { appointments: series, error: err } =
+        serviceIds.length > 1
+          ? await createRecurringMultiAppointments({
+              businessId: business.id,
+              startAt: selected.startUtc,
+              endAt: selected.endUtc,
+              serviceIds,
+              staffId,
+              repeatCount,
+            })
+          : await createRecurringAppointments({
         businessId: business.id,
         startAt: selected.startUtc,
         endAt: selected.endUtc,
@@ -485,7 +507,16 @@ export default function BookScreen() {
       return;
     }
 
-    const { appointment: created, error: err } = await createAppointmentIfFree({
+    const { appointment: created, error: err } =
+      serviceIds.length > 1
+        ? await createAppointmentMultiIfFree({
+            businessId: business.id,
+            startAt: selected.startUtc,
+            endAt: selected.endUtc,
+            serviceIds,
+            staffId,
+          })
+        : await createAppointmentIfFree({
       businessId: business.id,
       startAt: selected.startUtc,
       endAt: selected.endUtc,
@@ -630,7 +661,7 @@ export default function BookScreen() {
     step === 'staff'
       ? Boolean(staffId)
       : step === 'service'
-        ? Boolean(serviceId) || services.length === 0
+        ? serviceIds.length > 0 || services.length === 0
         : step === 'date'
           ? Boolean(dateLocal)
           : step === 'slot'
@@ -847,20 +878,36 @@ export default function BookScreen() {
               );
             })}
           </View>
+          {selectedStaff ? (
+            <StaffPortfolio urls={selectedStaff.portfolio_urls} name={selectedStaff.name} />
+          ) : null}
         </>
+      ) : null}
+
+      {step === 'service' && selectedStaff ? (
+        <StaffPortfolio urls={selectedStaff.portfolio_urls} name={selectedStaff.name} />
       ) : null}
 
       {step === 'service' ? (
         <>
           <SectionTitle>{tr('book.pickServiceTitle')}</SectionTitle>
+          {combo.count > 1 ? (
+            <Text style={[styles.note, { color: t.colors.textMuted }]}>
+              {tr('book.comboSummary', {
+                name: combo.name,
+                duration: formatDuration(combo.durationMinutes),
+                price: formatRon(combo.price),
+              })}
+            </Text>
+          ) : null}
           <View style={styles.serviceList}>
             {services.map((s) => {
-              const on = s.id === serviceId;
+              const on = serviceIds.includes(s.id);
               return (
                 <Pressable
                   key={s.id}
                   onPress={() => {
-                    setServiceId(s.id);
+                    setServiceIds((ids) => toggleServiceId(ids, s.id));
                     setSelected(null);
                   }}
                   style={({ pressed }) => [
@@ -920,7 +967,7 @@ export default function BookScreen() {
             <Text style={[styles.note, { color: t.colors.textMuted }]}>
               {tr('book.staffLine', {
                 staff: selectedStaff.name,
-                service: selectedService ? ` · ${selectedService.name}` : '',
+                service: combo.count > 0 ? ` · ${combo.name}` : '',
               })}
             </Text>
           ) : null}
@@ -985,10 +1032,10 @@ export default function BookScreen() {
           >
             <ConfirmLine label={tr('book.salon')} value={business.name} />
             {selectedStaff ? <ConfirmLine label={tr('book.stepStaff')} value={selectedStaff.name} /> : null}
-            {selectedService ? (
+            {combo.count > 0 ? (
               <ConfirmLine
                 label={tr('book.stepService')}
-                value={`${selectedService.name} · ${formatDuration(selectedService.duration_minutes)} · ${formatRon(selectedService.price)}`}
+                value={`${combo.name} · ${formatDuration(combo.durationMinutes)} · ${formatRon(combo.price)}`}
               />
             ) : (
               <ConfirmLine label={tr('book.duration')} value={`${durationMinutes} min`} />

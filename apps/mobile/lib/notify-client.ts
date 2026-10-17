@@ -193,6 +193,7 @@ export async function invokeWaitlistNotify(opts: {
   business_id: string;
   desired_date: string;
   booking_url: string;
+  waitlist_id?: string;
 }): Promise<InvokeResult> {
   const { data, error } = await supabase.functions.invoke('notify-waitlist', {
     body: { ...opts, lang: getLanguageSync() },

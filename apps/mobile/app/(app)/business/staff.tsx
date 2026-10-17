@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,12 +24,19 @@ import { DEFAULT_BREAK_HOURS, DEFAULT_WORKING_HOURS, STAFF_COLORS } from '@/lib/
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
+import {
+  MAX_PORTFOLIO_PHOTOS,
+  addPortfolioUrl,
+  normalizePortfolioUrls,
+  removePortfolioUrl,
+} from '@/lib/staffPortfolio';
 import { supabase } from '@/lib/supabase';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
 
 type Draft = {
   name: string;
   photoUrl: string;
+  portfolioUrls: string[];
   customHours: boolean;
   workingHours: WorkingHours;
   breakHours: BreakHours;
@@ -38,6 +45,7 @@ type Draft = {
 const EMPTY_DRAFT: Draft = {
   name: '',
   photoUrl: '',
+  portfolioUrls: [],
   customHours: false,
   workingHours: DEFAULT_WORKING_HOURS,
   breakHours: DEFAULT_BREAK_HOURS,
@@ -114,6 +122,7 @@ export default function BusinessStaffScreen() {
     setDraft({
       name: s.name,
       photoUrl: s.photo_url ?? '',
+      portfolioUrls: normalizePortfolioUrls(s.portfolio_urls),
       customHours: Boolean(s.working_hours),
       workingHours: s.working_hours ?? DEFAULT_WORKING_HOURS,
       breakHours: s.break_hours ?? DEFAULT_BREAK_HOURS,
@@ -142,6 +151,35 @@ export default function BusinessStaffScreen() {
     try {
       const url = await uploadStaffPhoto(result.assets[0].uri);
       setDraft((d) => ({ ...d, photoUrl: url }));
+      setMessage(trKey('team.photoUp'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : trKey('team.photoFail'));
+    }
+    setPhotoBusy(false);
+  }
+
+  async function pickPortfolioPhotos(): Promise<void> {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setError(trKey('team.galleryPerm'));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      let urls = draft.portfolioUrls;
+      for (const asset of result.assets) {
+        if (urls.length >= MAX_PORTFOLIO_PHOTOS) break;
+        const url = await uploadStaffPhoto(asset.uri);
+        urls = addPortfolioUrl(urls, url);
+      }
+      setDraft((d) => ({ ...d, portfolioUrls: urls }));
       setMessage(trKey('team.photoUp'));
     } catch (e) {
       setError(e instanceof Error ? e.message : trKey('team.photoFail'));
@@ -195,6 +233,7 @@ export default function BusinessStaffScreen() {
     if (editingId === 'new') {
       const { error: err } = await supabase.from('staff').insert({
         business_id: businessId,
+        portfolio_urls: normalizePortfolioUrls(draft.portfolioUrls),
         name,
         photo_url: photoUrl,
         color: STAFF_COLORS[rows.length % STAFF_COLORS.length],
@@ -217,10 +256,12 @@ export default function BusinessStaffScreen() {
       .update({
         name,
         photo_url: photoUrl,
+        portfolio_urls: normalizePortfolioUrls(draft.portfolioUrls),
         ...hours,
         updated_at: new Date().toISOString(),
       })
       .eq('id', editingId);
+
     setSaving(false);
     if (err) {
       setError(err.message);
@@ -376,6 +417,43 @@ export default function BusinessStaffScreen() {
           </View>
           <View
             style={[
+              styles.portfolioBox,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
+            <Text style={[styles.toggleTitle, { color: t.colors.text }]}>{tr('team.portfolio')}</Text>
+            <Text style={[styles.toggleSub, { color: t.colors.textMuted }]}>
+              {tr('team.portfolioHint', { max: MAX_PORTFOLIO_PHOTOS })}
+            </Text>
+            {draft.portfolioUrls.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workRow}>
+                {draft.portfolioUrls.map((uri) => (
+                  <View key={uri} style={styles.workItem}>
+                    <Image source={{ uri }} style={styles.workThumb} />
+                    <Button
+                      label={tr('team.delWork')}
+                      variant="secondary"
+                      size="sm"
+                      icon="trash-outline"
+                      onPress={() =>
+                        setDraft((d) => ({ ...d, portfolioUrls: removePortfolioUrl(d.portfolioUrls, uri) }))
+                      }
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            ) : null}
+            <Button
+              label={tr('team.addWork')}
+              variant="secondary"
+              icon="images-outline"
+              loading={photoBusy}
+              disabled={draft.portfolioUrls.length >= MAX_PORTFOLIO_PHOTOS}
+              onPress={() => void pickPortfolioPhotos()}
+            />
+          </View>
+          <View
+            style={[
               styles.toggleRow,
               { backgroundColor: t.colors.surface, borderColor: t.colors.border },
             ]}
@@ -485,6 +563,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
   },
+  portfolioBox: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  workRow: { gap: spacing.sm },
+  workItem: { gap: spacing.xs, alignItems: 'center' },
+  workThumb: { width: 96, height: 96, borderRadius: radius.md },
   toggleTitle: { fontSize: fontSize.md, fontWeight: '600' },
   toggleSub: { fontSize: fontSize.sm, lineHeight: 18 },
   row: {

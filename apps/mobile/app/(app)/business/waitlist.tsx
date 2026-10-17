@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import {
@@ -16,6 +16,7 @@ import { useBack } from '@/lib/nav';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
+import { filterWaitlistByDate, waitlistDates } from '@/lib/waitlistFilter';
 import { supabase } from '@/lib/supabase';
 import type { WaitlistEntry } from '@/lib/types';
 
@@ -34,6 +35,7 @@ export default function BusinessWaitlistScreen() {
   const [success, setSuccess] = useState<string | null>(null);
   const [bizCode, setBizCode] = useState('');
   const [notifyBusyId, setNotifyBusyId] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -87,16 +89,21 @@ export default function BusinessWaitlistScreen() {
       business_id: row.business_id,
       desired_date: row.desired_date,
       booking_url: bizCode ? getWebBookingUrl(bizCode) : '',
+      waitlist_id: row.id,
     });
     setNotifyBusyId(null);
     if (!res.ok) {
       setError(tr('wl.notifyFailed'));
       return;
     }
-    await supabase
-      .from('waitlist')
-      .update({ status: 'notified', notified_at: new Date().toISOString() })
-      .eq('id', row.id);
+    const payload = res.data as
+      | { outcomes?: { id: string; ok: boolean }[] }
+      | undefined;
+    const mine = payload?.outcomes?.find((o) => o.id === row.id);
+    if (mine && !mine.ok) {
+      setError(tr('wl.notifyFailed'));
+      return;
+    }
     setSuccess(tr('wl.notifiedOk'));
     await load();
   }
@@ -125,6 +132,33 @@ export default function BusinessWaitlistScreen() {
     <Screen title={tr('wl.title')} subtitle={tr('wl.subtitle')} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
       {success ? <Callout tone="success">{success}</Callout> : null}
+      {rows.length > 0 ? (
+        <View style={styles.chips}>
+          {[null, ...waitlistDates(rows)].map((d) => {
+            const activeChip = filterDate === d;
+            return (
+              <Pressable
+                key={d ?? 'all'}
+                onPress={() => setFilterDate(d)}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: activeChip ? t.colors.accentSoft : t.colors.surface,
+                    borderColor: activeChip ? t.colors.accent : t.colors.border,
+                  },
+                ]}
+              >
+                <Text style={{ color: activeChip ? t.colors.accent : t.colors.text }}>
+                  {d ?? tr('wl.allDays')}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+      {rows.length > 0 && filterWaitlistByDate(rows, filterDate).length === 0 ? (
+        <Text style={[styles.meta, { color: t.colors.textMuted }]}>{tr('wl.noForDay')}</Text>
+      ) : null}
       {rows.length === 0 ? (
         <EmptyState
           icon="hourglass-outline"
@@ -132,7 +166,7 @@ export default function BusinessWaitlistScreen() {
           description={tr('wl.emptyDesc')}
         />
       ) : (
-        rows.map((row) => {
+        filterWaitlistByDate(rows, filterDate).map((row) => {
           const contact = [row.client_phone, row.client_email].filter(Boolean).join(' · ');
           return (
             <View
@@ -149,13 +183,18 @@ export default function BusinessWaitlistScreen() {
                 {contact || tr('wl.client')}
               </Text>
               {row.status === 'notified' ? (
-                <Text style={[styles.meta, { color: t.colors.accent }]}>{tr('wl.statusNotified')}</Text>
+                <Text style={[styles.meta, { color: t.colors.accent }]}>
+                  {row.notified_at
+                    ? tr('wl.notifiedAt', { when: new Date(row.notified_at).toLocaleString() })
+                    : tr('wl.statusNotified')}
+                </Text>
               ) : null}
               <Button
-                label={tr('wl.notify')}
+                label={row.status === 'notified' ? tr('wl.statusNotified') : tr('wl.notify')}
                 variant="secondary"
                 size="sm"
                 loading={notifyBusyId === row.id}
+                disabled={row.status === 'notified'}
                 onPress={() => void notifyRow(row)}
               />
               <Button
@@ -177,6 +216,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.lg,
     borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
   },
   date: { fontSize: fontSize.lg, fontWeight: '800' },

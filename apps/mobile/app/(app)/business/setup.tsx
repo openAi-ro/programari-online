@@ -177,6 +177,19 @@ export default function BusinessSetupScreen() {
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
   const [mapsUrl, setMapsUrl] = useState('');
+  const [googleReviewUrl, setGoogleReviewUrl] = useState('');
+
+  useEffect(() => {
+    if (!existingId) return;
+    void supabase
+      .from('business_profiles')
+      .select('google_review_url')
+      .eq('id', existingId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setGoogleReviewUrl(data.google_review_url ?? '');
+      });
+  }, [existingId]);
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
@@ -444,6 +457,7 @@ export default function BusinessSetupScreen() {
       no_show_block_after: blockN,
       loyalty_every: loyalty,
       deposit_ron: deposit,
+      google_review_url: googleReviewUrl.trim() || null,
     };
 
     setSaving(true);
@@ -718,6 +732,17 @@ export default function BusinessSetupScreen() {
         autoCorrect={false}
         keyboardType="url"
         hint={tr('setup.mapsHint')}
+      />
+      <Field
+        label={tr('setup.reviewLink')}
+        value={googleReviewUrl}
+        onChangeText={setGoogleReviewUrl}
+        placeholder="https://g.page/…"
+        icon="star-outline"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        hint={tr('setup.reviewHint')}
       />
       <Button
         label={geoBusy ? tr('setup.geoBusy') : tr('setup.useMyLoc')}

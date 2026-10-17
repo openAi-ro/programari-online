@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Linking, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
@@ -33,6 +33,8 @@ import {
 import { useBack } from '@/lib/nav';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { invokeRefundDeposit } from '@/lib/payments';
+import { formatRon } from '@/lib/format';
+import { sessionsLeft } from '@/lib/packages';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
@@ -49,6 +51,7 @@ type Row = Appointment & {
     | 'city'
     | 'address'
     | 'maps_url'
+    | 'google_review_url'
     | 'latitude'
     | 'longitude'
   > | null;
@@ -71,6 +74,17 @@ export default function MyAppointmentsScreen() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [myWaitlist, setMyWaitlist] = useState<Array<{ id: string; desired_date: string; status: string; business_id: string }>>([]);
+  const [myPackages, setMyPackages] = useState<
+    Array<{
+      id: string;
+      sessions_total: number;
+      sessions_used: number;
+      packages?: { name: string | null } | null;
+      business_profiles?: { name: string | null } | null;
+    }>
+  >([]);
+  const [giftCode, setGiftCode] = useState('');
+  const [giftResult, setGiftResult] = useState<string | null>(null);
 
   // Doar ultimul load() scrie lista: un raspuns vechi nu mai suprascrie starea noua.
   const loadSeq = useRef(0);
@@ -128,12 +142,22 @@ export default function MyAppointmentsScreen() {
     const bizIds = [...new Set(list.map((a) => a.business_id))];
     let bizById: Record<string, Row['business_profiles']> = {};
     if (bizIds.length) {
-      const { data: businesses } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let bizRes: any = await supabase
         .from('business_profiles')
         .select(
-          'id, name, timezone, public_code, cancel_notice_minutes, county, city, address, maps_url, latitude, longitude'
+          'id, name, timezone, public_code, cancel_notice_minutes, county, city, address, maps_url, google_review_url, latitude, longitude'
         )
         .in('id', bizIds);
+      if (bizRes.error && /google_review_url/i.test(bizRes.error.message)) {
+        bizRes = await supabase
+          .from('business_profiles')
+          .select(
+            'id, name, timezone, public_code, cancel_notice_minutes, county, city, address, maps_url, latitude, longitude'
+          )
+          .in('id', bizIds);
+      }
+      const businesses = bizRes.data;
       for (const b of businesses ?? []) {
         bizById[b.id] = {
           name: b.name,
@@ -144,6 +168,7 @@ export default function MyAppointmentsScreen() {
           city: b.city,
           address: b.address,
           maps_url: b.maps_url,
+          google_review_url: b.google_review_url,
           latitude: b.latitude,
           longitude: b.longitude,
         };
@@ -175,6 +200,12 @@ export default function MyAppointmentsScreen() {
       .in('status', ['active', 'notified'])
       .order('desired_date', { ascending: true });
     setMyWaitlist((wl ?? []) as Array<{ id: string; desired_date: string; status: string; business_id: string }>);
+    const { data: pkgs } = await supabase
+      .from('client_packages')
+      .select('id, sessions_total, sessions_used, packages(name), business_profiles(name)')
+      .eq('client_user_id', user.id)
+      .order('created_at', { ascending: false });
+    setMyPackages((pkgs ?? []) as unknown as typeof myPackages);
     setReviewsByApt(map);
     setLoading(false);
   }, []);
@@ -202,6 +233,31 @@ export default function MyAppointmentsScreen() {
     }
     await load();
   }
+  async function checkGiftCard() {
+    setGiftResult(null);
+    const { data, error: err } = await supabase.rpc('check_gift_card', {
+      p_code: giftCode.trim(),
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (err || !row) {
+      setGiftResult(trKey('pkg.giftNotFound'));
+      return;
+    }
+    const statusLabel =
+      row.status === 'redeemed'
+        ? trKey('pkg.giftStatusRedeemed')
+        : row.status === 'cancelled'
+          ? trKey('pkg.giftStatusCancelled')
+          : trKey('pkg.giftStatusActive');
+    setGiftResult(
+      trKey('pkg.giftFound', {
+        business: row.business_name ?? '',
+        balance: formatRon(row.balance),
+        status: statusLabel,
+      })
+    );
+  }
+
   async function cancelSeries(item: Row) {
     if (!item.recurring_series_id) return;
     setError(null);
@@ -373,6 +429,31 @@ export default function MyAppointmentsScreen() {
                 ))}
               </View>
             ) : null}
+            {myPackages.length > 0 ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={{ fontWeight: '800', color: t.colors.text }}>{tr('pkg.myTitle')}</Text>
+                {myPackages.map((p) => (
+                  <Text key={p.id} style={{ color: t.colors.text }}>
+                    {p.business_profiles?.name ?? ''} · {p.packages?.name ?? ''} ·{' '}
+                    {tr('pkg.mySessions', {
+                      left: sessionsLeft(p.sessions_total, p.sessions_used),
+                    })}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            <View style={{ gap: spacing.sm }}>
+              <Field
+                label={tr('pkg.checkGift')}
+                value={giftCode}
+                onChangeText={setGiftCode}
+                placeholder={tr('pkg.checkGiftPh')}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              <Button label={tr('pkg.checkBtn')} variant="secondary" onPress={() => void checkGiftCard()} />
+              {giftResult ? <Text style={{ color: t.colors.text }}>{giftResult}</Text> : null}
+            </View>
             {reviewingId ? (
               <View style={{ gap: spacing.md }}>
                 <Callout tone="accent" title={tr('my.review')}>
@@ -487,6 +568,13 @@ export default function MyAppointmentsScreen() {
             }
             reviewLabel={
               reviewsByApt[item.id] ? tr('my.yourReview', { rating: reviewsByApt[item.id].rating }) : undefined
+            }
+            onGoogleReview={
+              item.status === 'approved' &&
+              new Date(item.end_at).getTime() < Date.now() &&
+              item.business_profiles?.google_review_url
+                ? () => void Linking.openURL(item.business_profiles!.google_review_url!)
+                : undefined
             }
             onAddToCalendar={() =>
               void addAppointmentToCalendar({

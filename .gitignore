@@ -60,3 +60,6 @@ trajectory-*.json
 /Muse spark 1.4.3.md
 /Proba Auto Recul fix.lua
 /.tools/
+# EAS/expo temp (TEMP/TMP during eas update) and local DB/function backups
+apps/mobile/.tmp-build/
+/backups/

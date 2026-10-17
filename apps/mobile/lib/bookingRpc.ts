@@ -107,6 +107,66 @@ export async function createAppointmentIfFree(opts: {
   return { appointment, error: null };
 }
 
+/** Rezervare cu mai multe servicii (bloc combinat, v41). */
+export async function createAppointmentMultiIfFree(opts: {
+  businessId: string;
+  startAt: string;
+  endAt: string;
+  serviceIds: string[];
+  staffId: string | null;
+}): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const ensured = await ensureMyProfile();
+  if (!ensured.ok) {
+    return { appointment: null, error: ensured.error };
+  }
+  const { data, error } = await supabase.rpc('create_appointment_multi_if_free', {
+    p_business_id: opts.businessId,
+    p_start_at: opts.startAt,
+    p_service_ids: opts.serviceIds,
+    p_staff_id: opts.staffId || null,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
+}
+
+/** Serie saptamanala cu bloc combinat (v41). */
+export async function createRecurringMultiAppointments(opts: {
+  businessId: string;
+  startAt: string;
+  endAt: string;
+  serviceIds: string[];
+  staffId: string | null;
+  repeatCount: number;
+}): Promise<{ appointments: Appointment[]; error: string | null }> {
+  const ensured = await ensureMyProfile();
+  if (!ensured.ok) {
+    return { appointments: [], error: ensured.error };
+  }
+  const { data, error } = await supabase.rpc('create_recurring_multi_appointments', {
+    p_business_id: opts.businessId,
+    p_start_at: opts.startAt,
+    p_service_ids: opts.serviceIds,
+    p_staff_id: opts.staffId || null,
+    p_repeat_count: opts.repeatCount,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointments: [], error: text };
+  }
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as Appointment[];
+  if (rows.length === 0 || !rows[0]?.id) {
+    return { appointments: [], error: 'booking_empty_result' };
+  }
+  return { appointments: rows, error: null };
+}
+
 /** Rezervare ca invitat (fara cont) — apelabil si anonim (v35). */
 export async function createGuestAppointment(opts: {
   businessId: string;

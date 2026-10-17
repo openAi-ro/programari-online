@@ -51,6 +51,7 @@ export type BusinessProfile = {
   city?: string | null;
   address?: string | null;
   maps_url?: string | null;
+  google_review_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   /** Logo firmă (separat de poza de profil). */
@@ -92,6 +93,7 @@ export type Appointment = {
   decision_notified: boolean;
   attendance_confirmed?: boolean;
   service_id?: string | null;
+  service_ids?: string[] | null;
   service_name?: string | null;
   service_duration_minutes?: number | null;
   service_price?: number | null;
@@ -112,6 +114,7 @@ export type Staff = {
   business_id: string;
   name: string;
   photo_url?: string | null;
+  portfolio_urls?: string[] | null;
   color: string;
   active: boolean;
   sort_order: number;
@@ -177,6 +180,40 @@ export type ChatConversation = {
   created_at: string;
   client_last_read_at?: string | null;
   owner_last_read_at?: string | null;
+};
+
+export type PackageTemplate = {
+  id: string;
+  business_id: string;
+  name: string;
+  sessions: number;
+  price: number;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type ClientPackage = {
+  id: string;
+  business_id: string;
+  client_user_id: string;
+  package_id: string;
+  sessions_total: number;
+  sessions_used: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GiftCard = {
+  id: string;
+  business_id: string;
+  code: string;
+  amount: number;
+  balance: number;
+  recipient_name: string | null;
+  status: 'active' | 'redeemed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
 };
 
 export type ChatMessage = {

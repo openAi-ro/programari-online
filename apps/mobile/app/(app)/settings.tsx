@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -55,6 +55,12 @@ import { uploadBusinessVideo } from '@/lib/businessVideo';
 import { pickerDurationToMs } from '@/lib/videoRules';
 import { PromoVideo } from '@/components/PromoVideo';
 import { supabase } from '@/lib/supabase';
+import { scheduleMessageDismiss } from '@/lib/transientMessage';
+import { isGoogleConnected } from '@/lib/googleCalendar';
+import {
+  serviceChecklistState,
+  type ServiceChecklistState,
+} from '@/lib/serviceChecklist';
 import type { Profile } from '@/lib/types';
 
 export default function SettingsScreen() {
@@ -100,6 +106,13 @@ export default function SettingsScreen() {
   const [bizHasAddress, setBizHasAddress] = useState(false);
   const [bizHasCoords, setBizHasCoords] = useState(false);
   const [hasServices, setHasServices] = useState(false);
+  const [serviceState, setServiceState] = useState<ServiceChecklistState>({ kind: 'none' });
+  const [gcalStatus, setGcalStatus] = useState<{
+    google_calendar_id: string | null;
+    connected_at: string | null;
+    last_synced_at: string | null;
+  } | null>(null);
+  const [gcalBusy, setGcalBusy] = useState(false);
   const [hasStaff, setHasStaff] = useState(false);
   const [pushDiagOpen, setPushDiagOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
@@ -110,9 +123,90 @@ export default function SettingsScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Bannerul de succes e temporar: dispare singur, nu rămâne pe pagină.
+  useEffect(() => {
+    if (!message) return;
+    return scheduleMessageDismiss(() => setMessage(null));
+  }, [message]);
+
   useEffect(() => {
     void getThemePreference().then(setThemePref);
   }, []);
+
+  useEffect(() => {
+    if (!businessId) {
+      setGcalStatus(null);
+      return;
+    }
+    void supabase
+      .rpc('get_google_calendar_status', { p_business_id: businessId })
+      .then(({ data }) => {
+        const row = Array.isArray(data) ? data[0] : data;
+        setGcalStatus(row ?? null);
+      });
+  }, [businessId]);
+
+  async function handleGoogleConnect() {
+    if (!businessId) return;
+    setGcalBusy(true);
+    setError(null);
+    const { data, error: err } = await supabase.functions.invoke('google-calendar-connect', {
+      body: { business_id: businessId },
+    });
+    setGcalBusy(false);
+    const payload = data as { url?: string; error?: string } | null;
+    if (err || !payload?.url) {
+      setError(
+        payload?.error === 'google_not_configured'
+          ? trKey('gcal.notConfigured')
+          : trKey('gcal.syncFail')
+      );
+      return;
+    }
+    await Linking.openURL(payload.url);
+  }
+
+  async function handleGoogleSync() {
+    if (!businessId) return;
+    setGcalBusy(true);
+    setError(null);
+    setMessage(null);
+    const { data, error: err } = await supabase.functions.invoke('google-calendar-sync', {
+      body: { business_id: businessId },
+    });
+    setGcalBusy(false);
+    const payload = data as { imported?: number; pushed?: number } | null;
+    if (err || !payload) {
+      setError(trKey('gcal.syncFail'));
+      return;
+    }
+    setMessage(
+      trKey('gcal.syncOk', {
+        imported: payload.imported ?? 0,
+        pushed: payload.pushed ?? 0,
+      })
+    );
+    const { data: status } = await supabase.rpc('get_google_calendar_status', {
+      p_business_id: businessId,
+    });
+    setGcalStatus((Array.isArray(status) ? status[0] : status) ?? null);
+  }
+
+  async function handleGoogleDisconnect() {
+    if (!businessId) return;
+    setGcalBusy(true);
+    setError(null);
+    const { error: err } = await supabase.rpc('disconnect_google_calendar', {
+      p_business_id: businessId,
+    });
+    setGcalBusy(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setGcalStatus(null);
+    setMessage(trKey('gcal.disconnected'));
+  }
 
   useEffect(() => {
     (async () => {
@@ -210,19 +304,23 @@ export default function SettingsScreen() {
         setVideoUrl(biz.promo_video_url ?? null);
         setBizHasAddress(Boolean(biz.county || biz.city || biz.address));
         setBizHasCoords(biz.latitude != null && biz.longitude != null);
-        const [{ count: svcCount }, { count: staffCount }] = await Promise.all([
+        const [{ data: svcRows }, { count: staffCount }] = await Promise.all([
           supabase
             .from('services')
-            .select('id', { count: 'exact', head: true })
+            .select('name, active')
             .eq('business_id', biz.id)
-            .eq('active', true),
+            .order('sort_order', { ascending: true }),
           supabase
             .from('staff')
             .select('id', { count: 'exact', head: true })
             .eq('business_id', biz.id)
             .eq('active', true),
         ]);
-        setHasServices((svcCount ?? 0) > 0);
+        const svcState = serviceChecklistState(
+          (svcRows ?? []) as { name: string; active: boolean }[],
+        );
+        setServiceState(svcState);
+        setHasServices(svcState.kind === 'ok');
         setHasStaff((staffCount ?? 0) > 0);
       } else {
         setBusinessId(null);
@@ -233,6 +331,7 @@ export default function SettingsScreen() {
         setBizHasAddress(false);
         setBizHasCoords(false);
         setHasServices(false);
+        setServiceState({ kind: 'none' });
         setHasStaff(false);
       }
 
@@ -1593,11 +1692,36 @@ export default function SettingsScreen() {
                 onPress={() => router.push('/(app)/business/services' as never)}
               />
               <SettingRow
+                icon="gift-outline"
+                title={tr('pkg.title')}
+                description={tr('pkg.subtitle')}
+                onPress={() => router.push('/(app)/business/packages' as never)}
+              />
+              <SettingRow
                 icon="people-outline"
                 title={tr('team.title')}
                 description={hasStaff ? tr('set.teamDesc') : tr('set.addStaff')}
                 onPress={() => router.push('/(app)/business/staff' as never)}
               />
+
+              <SectionTitle>{tr('gcal.title')}</SectionTitle>
+              <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
+                <Text style={[styles.panelText, { color: t.colors.textMuted }]}>{tr('gcal.desc')}</Text>
+                {isGoogleConnected(gcalStatus) ? (
+                  <>
+                    <Badge tone="accent" icon="calendar-outline">
+                      {tr('gcal.connected')}
+                      {gcalStatus?.last_synced_at
+                        ? ` · ${tr('gcal.lastSync', { when: new Date(gcalStatus.last_synced_at).toLocaleString() })}`
+                        : ''}
+                    </Badge>
+                    <Button label={tr('gcal.syncNow')} variant="secondary" icon="sync-outline" loading={gcalBusy} onPress={() => void handleGoogleSync()} />
+                    <Button label={tr('gcal.disconnect')} variant="secondary" icon="unlink-outline" loading={gcalBusy} onPress={() => void handleGoogleDisconnect()} />
+                  </>
+                ) : (
+                  <Button label={tr('gcal.connect')} icon="logo-google" loading={gcalBusy} onPress={() => void handleGoogleConnect()} />
+                )}
+              </View>
 
               <SectionTitle>{tr('set.checklist')}</SectionTitle>
               <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
@@ -1612,7 +1736,17 @@ export default function SettingsScreen() {
                   const extras: string[] = [];
                   if (!logoUrl) extras.push(tr('set.extraLogo'));
                   if (!videoUrl) extras.push(tr('set.extraVideo'));
-                  if (!hasServices) extras.push(tr('set.extraService'));
+                  if (serviceState.kind === 'none') {
+                    extras.push(tr('set.extraServiceNone'));
+                  } else if (serviceState.kind === 'inactive') {
+                    extras.push(
+                      serviceState.names.length === 1
+                        ? tr('set.extraServiceInactiveOne', { name: serviceState.names[0] })
+                        : tr('set.extraServiceInactiveMany', {
+                            list: serviceState.names.join(', '),
+                          }),
+                    );
+                  }
                   if (!hasStaff) extras.push(tr('set.extraStaff'));
                   const allMissing = [...missing, ...extras.filter((e) => e !== tr('set.extraVideo'))];
                   if (allMissing.length === 0) {

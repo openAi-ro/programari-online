@@ -20,6 +20,7 @@ import { statusLabel } from '@/lib/status';
 import { mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { formatInTimeZone } from '@/lib/timezone';
 import { ensureChatConversationForClient } from '@/lib/chatRpc';
+import { isWinbackCandidate } from '@/lib/winback';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
@@ -52,6 +53,8 @@ export default function BusinessClientsScreen() {
   const [noteBusy, setNoteBusy] = useState(false);
   const [blockAfter, setBlockAfter] = useState(2);
   const [loyaltyEvery, setLoyaltyEvery] = useState(0);
+  const [inactiveOnly, setInactiveOnly] = useState(false);
+  const [bizName, setBizName] = useState('');
 
   const load = useCallback(async () => {
     setError(null);
@@ -68,6 +71,7 @@ export default function BusinessClientsScreen() {
     const { data: biz } = me
       ? await fetchMyBusinessResult(me.id)
       : { data: null };
+    if (biz?.name) setBizName(biz.name);
     if (typeof biz?.no_show_block_after === 'number') {
       setBlockAfter(biz.no_show_block_after);
     }
@@ -91,6 +95,7 @@ export default function BusinessClientsScreen() {
   );
 
   const shown = rows.filter((r) => {
+    if (inactiveOnly && !isWinbackCandidate(r, new Date())) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -194,6 +199,26 @@ export default function BusinessClientsScreen() {
         placeholder={tr('cli.searchPh')}
         icon="search-outline"
       />
+      <View style={styles.chips}>
+        {[
+          { key: 'all', label: tr('cli.allClients'), on: !inactiveOnly },
+          { key: 'inactive', label: tr('cli.inactiveFilter'), on: inactiveOnly },
+        ].map((chip) => (
+          <Pressable
+            key={chip.key}
+            onPress={() => setInactiveOnly(chip.key === 'inactive')}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: chip.on ? t.colors.accentSoft : t.colors.surface,
+                borderColor: chip.on ? t.colors.accent : t.colors.border,
+              },
+            ]}
+          >
+            <Text style={{ color: t.colors.text }}>{chip.label}</Text>
+          </Pressable>
+        ))}
+      </View>
       {error ? <Callout tone="danger">{error}</Callout> : null}
       {shown.length === 0 ? (
         <EmptyState
@@ -261,7 +286,7 @@ export default function BusinessClientsScreen() {
                     {phoneOf(row.contact) ? (
                       <>
                         <Button label={tr('cli.call')} size="sm" variant="secondary" icon="call-outline" onPress={() => void Linking.openURL('tel:' + phoneOf(row.contact))} />
-                        <Button label={tr('cli.whatsapp')} size="sm" variant="secondary" icon="logo-whatsapp" onPress={() => void Linking.openURL('https://wa.me/' + phoneOf(row.contact).replace(/\D/g, ''))} />
+                        <Button label={tr('cli.whatsapp')} size="sm" variant="secondary" icon="logo-whatsapp" onPress={() => void Linking.openURL('https://wa.me/' + phoneOf(row.contact).replace(/\D/g, '') + (inactiveOnly ? `?text=${encodeURIComponent(tr('cli.winbackMsg', { business: bizName }))}` : ''))} />
                       </>
                     ) : null}
                     <Button label={tr('cli.chat')} size="sm" variant="secondary" icon="chatbubble-outline" onPress={() => void openChat(row)} />
@@ -323,4 +348,11 @@ const styles = StyleSheet.create({
   hist: { fontSize: fontSize.sm },
   contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   link: { fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.xs },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
 });
