@@ -32,7 +32,6 @@ muse-bin-*.exe
 # Measure / nav bench (local DEV harness, not product)
 .measure-nav/
 apps/mobile/app/dev-nav-bench.tsx
-apps/mobile/lib/navTiming.ts
 apps/mobile/probe-live.mjs
 apps/mobile/verify_*.py
 apps/mobile/verify-screenshots/
