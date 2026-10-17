@@ -19,6 +19,7 @@ type Payload = {
   desired_date?: string;
   booking_url?: string;
   lang?: string;
+  waitlist_id?: string;
 };
 
 Deno.serve(async (req) => {
@@ -39,6 +40,7 @@ Deno.serve(async (req) => {
   const businessId = payload.business_id;
   const desiredDate = payload.desired_date;
   const bookingUrl = (payload.booking_url ?? '').trim();
+  const waitlistId = (payload.waitlist_id ?? '').trim() || null;
 
   if (!businessId || !desiredDate || !/^\d{4}-\d{2}-\d{2}$/.test(desiredDate)) {
     return jsonResponse({ error: 'invalid_payload' }, 400);
@@ -105,7 +107,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: listErr.message }, 500);
   }
 
-  const list = rows ?? [];
+  const list = (rows ?? []).filter((row) => !waitlistId || row.id === waitlistId);
   const outcomes: { id: string; ok: boolean }[] = [];
   const link =
     bookingUrl ||
@@ -126,13 +128,18 @@ Deno.serve(async (req) => {
     );
     const copy = messageWaitlistSpot(business.name, desiredDate, link, lang);
 
-    await notifyClientChannels({
+    const results = await notifyClientChannels({
       email,
       phone,
       subject: copy.subject,
       text: copy.text,
     });
 
+    const delivered = results.some((r) => r.ok && !r.stub);
+    if (!delivered) {
+      outcomes.push({ id: row.id, ok: false });
+      continue;
+    }
     await admin
       .from('waitlist')
       .update({
@@ -147,7 +154,7 @@ Deno.serve(async (req) => {
 
   return jsonResponse({
     ok: true,
-    notified: outcomes.length,
+    notified: outcomes.filter((o) => o.ok).length,
     outcomes,
   });
 });
