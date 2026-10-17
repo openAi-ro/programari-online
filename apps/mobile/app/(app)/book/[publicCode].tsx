@@ -532,6 +532,7 @@ export default function BookScreen() {
     }
 
     const appointment = created;
+    let payError: string | null = null;
     if (appointment?.id) {
       const notify = await notifyAfterBooking(appointment);
       if (!notify.ok) {
@@ -549,8 +550,8 @@ export default function BookScreen() {
       }
       if (appointment.payment_status === 'unpaid') {
         const pay = await startDepositCheckout(appointment.id);
-        if (!pay.ok && pay.error !== 'stripe_not_configured') {
-          setError(mapPayError(pay.error ?? 'checkout_failed'));
+        if (!pay.ok) {
+          payError = pay.error ?? 'checkout_failed';
         }
       }
     }
@@ -572,8 +573,14 @@ export default function BookScreen() {
           : trKey('book.sentPending')
       );
     }
+    if (payError === 'stripe_not_configured') {
+      // Programarea ramane creata; plata online nu e activata inca.
+      setMessage(mapPayError(payError));
+    } else if (payError) {
+      setError(mapPayError(payError));
+    }
     if (appointment?.id) {
-      setTimeout(() => router.replace('/(app)/my-appointments'), 600);
+      setTimeout(() => router.replace('/(app)/my-appointments'), payError ? 6000 : 600);
     }
   }
 

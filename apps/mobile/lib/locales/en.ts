@@ -634,7 +634,8 @@ export const en: typeof ro = {
   'book.reviewMany': 'reviews',
   'book.noReviews': 'No reviews yet',
 
-  'pay.noCard': 'Card payment isn’t active yet. The business marks the deposit when received (cash or transfer).',
+  'pay.unavailableAfterBook': 'Your booking has been sent. Online deposit payment isn’t available right now; the salon will contact you about the deposit.',
+  'pay.genericError': 'The online deposit payment couldn’t be started. Your booking is still sent; please try again later or contact the salon.',
   'pay.notPayable': 'This booking no longer has a payable deposit.',
   'pay.minAmount': 'Minimum online deposit is 2 lei.',
 
@@ -1171,7 +1172,7 @@ export const en: typeof ro = {
   'set.pushExpoGoRemote': 'Expo Go (SDK 53+) does not support remote push on Android. Use a development build / EAS APK.',
   'chat.noAccountForMsg': 'This client has no app account (guest or walk-in), so chat messages cannot be sent.',
   'setup.depositLabel': 'Booking deposit (RON)',
-  'setup.depositHint': '0 = no deposit. Above 0, the client pays the deposit online and is refunded if you reject.',
+  'setup.depositHint': '0 = no deposit. Above 0, the client pays the deposit online and is refunded if you reject. Online payment requires payments to be activated.',
   'setup.depositPh': '0',
   'setup.secIdentity': 'Identity and location',
   'setup.secSchedule': 'Schedule and break',

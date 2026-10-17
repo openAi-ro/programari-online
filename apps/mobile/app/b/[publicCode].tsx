@@ -262,6 +262,7 @@ export default function PublicBookScreen() {
       return;
     }
     const appointment = created;
+    let payError: string | null = null;
     if (appointment?.id) {
       const notify = await notifyAfterBooking(appointment);
       if (!notify.ok) {
@@ -274,8 +275,8 @@ export default function PublicBookScreen() {
       });
       if (appointment.payment_status === 'unpaid') {
         const pay = await startDepositCheckout(appointment.id);
-        if (!pay.ok && pay.error !== 'stripe_not_configured') {
-          setError(mapPayError(pay.error ?? 'checkout_failed'));
+        if (!pay.ok) {
+          payError = pay.error ?? 'checkout_failed';
         }
       }
     }
@@ -295,6 +296,12 @@ export default function PublicBookScreen() {
           ? trKey('book.sentDeposit', { amount: formatLei(appointment.deposit_ron) })
           : trKey('book.sentPending')
       );
+    }
+    if (payError === 'stripe_not_configured') {
+      // Programarea ramane creata; plata online nu e activata inca.
+      setMessage(mapPayError(payError));
+    } else if (payError) {
+      setError(mapPayError(payError));
     }
   }
 

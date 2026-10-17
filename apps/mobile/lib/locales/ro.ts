@@ -632,7 +632,8 @@ export const ro = {
   'book.reviewMany': 'recenzii',
   'book.noReviews': 'Fără recenzii încă',
 
-  'pay.noCard': 'Plata cu cardul nu e activă încă. Business-ul marchează avansul când îl primește (cash sau transfer).',
+  'pay.unavailableAfterBook': 'Programarea a fost trimisă. Plata avansului online nu este disponibilă momentan; salonul te va contacta pentru avans.',
+  'pay.genericError': 'Plata avansului online nu a putut fi pornită. Programarea rămâne trimisă; încearcă mai târziu sau contactează salonul.',
   'pay.notPayable': 'Această programare nu mai are un avans de plată.',
   'pay.minAmount': 'Avansul minim pentru plata online este 2 lei.',
 
@@ -1169,7 +1170,7 @@ export const ro = {
   'set.pushExpoGoRemote': 'Expo Go (SDK 53+) nu suportă push remote pe Android. Folosește un development build / APK EAS.',
   'chat.noAccountForMsg': 'Clientul nu are cont în aplicație (invitat sau walk-in), mesajul nu poate fi trimis prin chat.',
   'setup.depositLabel': 'Avans la rezervare (lei)',
-  'setup.depositHint': '0 = fără avans. Dacă e mai mare ca 0, clientul plătește avansul online, iar la respingere i se returnează.',
+  'setup.depositHint': '0 = fără avans. Dacă e mai mare ca 0, clientul plătește avansul online, iar la respingere i se returnează. Plata online necesită activarea plăților.',
   'setup.depositPh': '0',
   'setup.secIdentity': 'Identitate și locație',
   'setup.secSchedule': 'Program și pauză',

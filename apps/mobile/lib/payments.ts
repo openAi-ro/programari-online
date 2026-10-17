@@ -17,12 +17,9 @@ export async function startDepositCheckout(appointmentId: string): Promise<{
     },
   });
   if (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: await functionErrorCode(error) };
   }
-  const payload = data as { ok?: boolean; url?: string; error?: string };
-  if (payload?.error === 'stripe_not_configured') {
-    return { ok: false, error: 'stripe_not_configured' };
-  }
+  const payload = data as { ok?: boolean; url?: string; error?: string } | null;
   if (!payload?.url) {
     return { ok: false, error: payload?.error ?? 'checkout_failed' };
   }
@@ -30,9 +27,31 @@ export async function startDepositCheckout(appointmentId: string): Promise<{
   return { ok: true };
 }
 
+/**
+ * La un raspuns non-2xx, supabase-js da un FunctionsHttpError generic
+ * ("Edge Function returned a non-2xx status code"); codul real
+ * (ex. { error: 'stripe_not_configured' }) e in corpul raspunsului din error.context.
+ */
+async function functionErrorCode(error: unknown): Promise<string> {
+  const context = (error as { context?: unknown } | null)?.context as
+    | { clone?: () => { json: () => Promise<unknown> }; json?: () => Promise<unknown> }
+    | undefined;
+  if (context && typeof context.json === 'function') {
+    try {
+      const res = typeof context.clone === 'function' ? context.clone() : context;
+      const body = (await res.json!()) as { error?: unknown } | null;
+      if (body && typeof body.error === 'string' && body.error) return body.error;
+    } catch {
+      // corp lipsa / non-JSON: cadem pe codul generic
+    }
+  }
+  return 'checkout_failed';
+}
+
+/** Mesaj clar pentru client; niciodata textul tehnic brut. */
 export function mapPayError(error: string): string {
   if (error === 'stripe_not_configured') {
-    return trKey('pay.noCard');
+    return trKey('pay.unavailableAfterBook');
   }
   if (error === 'not_payable') {
     return trKey('pay.notPayable');
@@ -40,7 +59,7 @@ export function mapPayError(error: string): string {
   if (error === 'amount_too_small') {
     return trKey('pay.minAmount');
   }
-  return error;
+  return trKey('pay.genericError');
 }
 
 /** Business renunta la avansul neplatit al unei programari (RPC waive_deposit). */
