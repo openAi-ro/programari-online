@@ -867,7 +867,7 @@ export default function BookScreen() {
         </Callout>
       ) : null}
 
-      {!isReschedule && step === 'confirm' ? (
+      {!isReschedule && step === 'confirm' && (business.deposit_ron ?? 0) > 0 && combo.price > 0 ? (
         <>
           <SectionTitle>{tr('book.tipTitle')}</SectionTitle>
           <Text style={[styles.note, { color: t.colors.textMuted }]}>{tr('book.tipHint')}</Text>

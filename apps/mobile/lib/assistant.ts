@@ -119,6 +119,7 @@ export function answerAssistantMessage(
   if (
     includesAny(text, [
       'anulez',
+      'anula',
       'anularea',
       'anulare',
       'mut',
@@ -179,6 +180,7 @@ export function answerAssistantMessage(
       'cine ma',
       'cine ne',
       'echipa',
+      'cine lucreaza',
       'maestru',
       'tunde',
     ])
@@ -195,6 +197,8 @@ export function answerAssistantMessage(
     includesAny(text, [
       'unde vorbesti',
       'unde vorbiti',
+      'unde sunteti',
+      'unde va aflati',
       'adresa',
       'locatie',
       'gasesti',

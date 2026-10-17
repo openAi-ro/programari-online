@@ -195,7 +195,7 @@ export default function IntakeScreen() {
           <SectionTitle>{tr('int.photos')}</SectionTitle>
           {photos.length === 0 ? (
             <Text style={[styles.meta, { color: t.colors.textMuted }]}>
-              {tr('int.noRecord')}
+              {tr('int.noPhotos')}
             </Text>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>

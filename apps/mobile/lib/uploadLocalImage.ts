@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { trKey } from './i18n';
@@ -24,6 +25,16 @@ export type LocalImageBytes = {
  * de aceea copiem în cache și citim cu expo-file-system.
  */
 export async function readLocalImageBytes(localUri: string): Promise<LocalImageBytes> {
+  if (Platform.OS === 'web') {
+    // Pe web ImagePicker dă un URI blob:/data: și nu există cache de fișiere.
+    const blob = await (await fetch(localUri)).blob();
+    const buffer = await blob.arrayBuffer();
+    if (buffer.byteLength < 100) {
+      throw new Error(trKey('media.imageEmpty'));
+    }
+    const png = blob.type === 'image/png';
+    return { buffer, contentType: png ? 'image/png' : 'image/jpeg', ext: png ? 'png' : 'jpg' };
+  }
   const clean = localUri.split('?')[0] ?? localUri;
   const rawExt = clean.split('.').pop()?.toLowerCase();
   const ext: 'jpg' | 'png' = rawExt === 'png' ? 'png' : 'jpg';

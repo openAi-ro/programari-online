@@ -148,11 +148,11 @@ export default function BusinessClientsScreen() {
     setPhotoBusy(true);
     setError(null);
     try {
-      const bytes = await readLocalImageBytes(result.assets[0].uri);
-      const path = `client-photos/${bizId}/${row.client_user_id}/${Date.now()}.jpg`;
+      const { buffer, contentType, ext } = await readLocalImageBytes(result.assets[0].uri);
+      const path = `client-photos/${bizId}/${row.client_user_id}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from('staff-photos')
-        .upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
+        .upload(path, buffer, { contentType, upsert: false });
       if (upErr) throw upErr;
       const { data } = supabase.storage.from('staff-photos').getPublicUrl(path);
       const { error: insErr } = await supabase.from('client_photos').insert({
@@ -194,11 +194,16 @@ export default function BusinessClientsScreen() {
     }));
   }
 
-  async function deleteClientPhoto(row: BusinessClientRow, photoId: string) {
-    const { error: err } = await supabase.from('client_photos').delete().eq('id', photoId);
+  async function deleteClientPhoto(row: BusinessClientRow, photo: ClientPhoto) {
+    const { error: err } = await supabase.from('client_photos').delete().eq('id', photo.id);
     if (err) {
       setError(err.message);
       return;
+    }
+    const marker = '/staff-photos/';
+    const at = photo.url.indexOf(marker);
+    if (at >= 0) {
+      await supabase.storage.from('staff-photos').remove([decodeURIComponent(photo.url.slice(at + marker.length))]);
     }
     await toggleRecordRefresh(row);
   }
@@ -396,9 +401,9 @@ export default function BusinessClientsScreen() {
                       <>
                         <Button label={tr('cli.call')} size="sm" variant="secondary" icon="call-outline" onPress={() => void Linking.openURL('tel:' + phoneOf(row.contact))} />
                         <Button label={tr('cli.whatsapp')} size="sm" variant="secondary" icon="logo-whatsapp" onPress={() => void Linking.openURL('https://wa.me/' + phoneOf(row.contact).replace(/\D/g, '') + (inactiveOnly ? `?text=${encodeURIComponent(tr('cli.winbackMsg', { business: bizName }))}` : ''))} />
-                        <Button label={tr('int.showRecord')} size="sm" variant="secondary" icon="document-text-outline" onPress={() => void toggleRecord(row)} />
                       </>
                     ) : null}
+                    <Button label={tr('int.showRecord')} size="sm" variant="secondary" icon="document-text-outline" onPress={() => void toggleRecord(row)} />
                     <Button label={tr('cli.chat')} size="sm" variant="secondary" icon="chatbubble-outline" onPress={() => void openChat(row)} />
                   </View>
                   {history.map((a) => (
@@ -429,6 +434,11 @@ export default function BusinessClientsScreen() {
                                   {tr('int.conditionsLabel', { text: records[row.client_user_id]?.intake?.conditions ?? '' })}
                                 </Text>
                               ) : null}
+                              {records[row.client_user_id]?.intake?.notes ? (
+                                <Text style={[styles.meta, { color: t.colors.text }]}>
+                                  {tr('int.notesLabel', { text: records[row.client_user_id]?.intake?.notes ?? '' })}
+                                </Text>
+                              ) : null}
                               <Text style={[styles.meta, { color: t.colors.textMuted }]}>
                                 {records[row.client_user_id]?.intake?.photo_consent ? tr('int.consentYes') : tr('int.consentNo')}
                               </Text>
@@ -445,7 +455,7 @@ export default function BusinessClientsScreen() {
                                 <Text style={[styles.meta, { color: t.colors.textMuted }]}>
                                   {p.kind === 'after' ? tr('int.after') : tr('int.before')}
                                 </Text>
-                                <Button label={tr('team.delPhoto')} size="sm" variant="secondary" icon="trash-outline" onPress={() => void deleteClientPhoto(row, p.id)} />
+                                <Button label={tr('team.delPhoto')} size="sm" variant="secondary" icon="trash-outline" onPress={() => void deleteClientPhoto(row, p)} />
                               </View>
                             ))}
                           </View>

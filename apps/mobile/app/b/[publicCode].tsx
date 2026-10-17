@@ -510,7 +510,7 @@ export default function PublicBookScreen() {
         </Callout>
       ) : null}
 
-      {session ? (
+      {session && (business.deposit_ron ?? 0) > 0 && (selectedService?.price ?? 0) > 0 ? (
         <>
           <SectionTitle>{tr('book.tipTitle')}</SectionTitle>
           <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>

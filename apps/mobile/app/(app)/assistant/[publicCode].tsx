@@ -18,7 +18,7 @@ import {
   type AssistantAnswer,
   type AssistantKnowledge,
 } from '@/lib/assistant';
-import { ensureChatConversationForClient } from '@/lib/chatRpc';
+import { ensureChatConversation } from '@/lib/chatRpc';
 import { locationFromBusiness, formatAddress } from '@/lib/location';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
@@ -159,7 +159,7 @@ export default function AssistantScreen() {
       router.push('/(auth)/login' as never);
       return;
     }
-    const { conversation, error: err } = await ensureChatConversationForClient(businessId, user.id);
+    const { conversation, error: err } = await ensureChatConversation(businessId);
     setChatBusy(false);
     if (err || !conversation) {
       setError(err ?? trKey('chat.errorTitle'));

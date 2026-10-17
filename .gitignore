@@ -62,3 +62,6 @@ trajectory-*.json
 # EAS/expo temp (TEMP/TMP during eas update) and local DB/function backups
 apps/mobile/.tmp-build/
 /backups/
+
+# Local web exports (expo export)
+dist/

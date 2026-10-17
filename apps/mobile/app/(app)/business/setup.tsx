@@ -181,8 +181,7 @@ export default function BusinessSetupScreen() {
   const [referralReward, setReferralReward] = useState('');
   const [depositRon, setDepositRon] = useState(String(DEFAULT_DEPOSIT_RON));
   const [offpeakPercent, setOffpeakPercent] = useState('');
-  const [offpeakStart, setOffpeakStart] = useState('');
-  const [offpeakEnd, setOffpeakEnd] = useState('');
+  const [offpeakHours, setOffpeakHours] = useState('');
   const [myBusinesses, setMyBusinesses] = useState<BusinessProfile[]>([]);
   const [country, setCountry] = useState(DEFAULT_COUNTRY_CODE);
   const [county, setCounty] = useState('');
@@ -289,8 +288,11 @@ export default function BusinessSetupScreen() {
         setReferralReward(b.referral_reward_text ?? '');
         setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
         setOffpeakPercent(b.offpeak_discount_percent ? String(b.offpeak_discount_percent) : '');
-        setOffpeakStart(b.offpeak_start_hour != null ? String(b.offpeak_start_hour) : '');
-        setOffpeakEnd(b.offpeak_end_hour != null ? String(b.offpeak_end_hour) : '');
+        setOffpeakHours(
+          b.offpeak_start_hour != null && b.offpeak_end_hour != null
+            ? `${b.offpeak_start_hour}-${b.offpeak_end_hour}`
+            : ''
+        );
 
         // Adresele vechi aveau doar orașul; deducem județul din nomenclator.
         setCountry(countryCodeOf(b.country));
@@ -387,8 +389,11 @@ export default function BusinessSetupScreen() {
     setReferralOn(Boolean(b.referral_enabled));
     setReferralReward(b.referral_reward_text ?? '');
     setOffpeakPercent(b.offpeak_discount_percent ? String(b.offpeak_discount_percent) : '');
-    setOffpeakStart(b.offpeak_start_hour != null ? String(b.offpeak_start_hour) : '');
-    setOffpeakEnd(b.offpeak_end_hour != null ? String(b.offpeak_end_hour) : '');
+    setOffpeakHours(
+      b.offpeak_start_hour != null && b.offpeak_end_hour != null
+        ? `${b.offpeak_start_hour}-${b.offpeak_end_hour}`
+        : ''
+    );
     setDepositRon(String(b.deposit_ron ?? DEFAULT_DEPOSIT_RON));
     setCountry(countryCodeOf(b.country));
     const judet = judetCanonic(b.county) || judetPentruLocalitate(b.city);
@@ -481,9 +486,13 @@ export default function BusinessSetupScreen() {
 
     const offpeakPctRaw = offpeakPercent.trim();
     const offpeakPct = offpeakPctRaw === '' ? 0 : parseInt(offpeakPctRaw, 10);
-    const offpeakStartH = offpeakStart.trim() === '' ? null : parseInt(offpeakStart.trim(), 10);
-    const offpeakEndH = offpeakEnd.trim() === '' ? null : parseInt(offpeakEnd.trim(), 10);
+    const hoursParts = offpeakHours.trim() === '' ? [] : offpeakHours.trim().split('-');
+    const offpeakStartRaw = (hoursParts[0] ?? '').trim();
+    const offpeakEndRaw = (hoursParts[1] ?? '').trim();
+    const offpeakStartH = offpeakStartRaw === '' ? null : parseInt(offpeakStartRaw, 10);
+    const offpeakEndH = offpeakEndRaw === '' ? null : parseInt(offpeakEndRaw, 10);
     if (
+      hoursParts.length > 2 ||
       !Number.isFinite(offpeakPct) ||
       offpeakPct < 0 ||
       offpeakPct > 90 ||
@@ -493,6 +502,13 @@ export default function BusinessSetupScreen() {
       (offpeakPct === 0 && (offpeakStartH !== null || offpeakEndH !== null))
     ) {
       setError(trKey('setup.badOffpeak'));
+      return;
+    }
+    if (
+      (instagramInput.trim() && !normalizeInstagramUrl(instagramInput)) ||
+      (facebookInput.trim() && !normalizeFacebookUrl(facebookInput))
+    ) {
+      setError(trKey('setup.badSocial'));
       return;
     }
 
@@ -924,12 +940,8 @@ export default function BusinessSetupScreen() {
       />
       <Field
         label={tr('setup.offpeakHours')}
-        value={offpeakStart && offpeakEnd ? `${offpeakStart}-${offpeakEnd}` : offpeakStart || offpeakEnd || ''}
-        onChangeText={(v) => {
-          const parts = v.replace(/[^0-9-]/g, '').split('-');
-          setOffpeakStart(parts[0] ?? '');
-          setOffpeakEnd(parts[1] ?? '');
-        }}
+        value={offpeakHours}
+        onChangeText={(v) => setOffpeakHours(v.replace(/[^0-9-]/g, ''))}
         placeholder="10-14"
         keyboardType="numbers-and-punctuation"
         icon="time-outline"

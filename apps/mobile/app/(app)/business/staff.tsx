@@ -506,12 +506,15 @@ export default function BusinessStaffScreen() {
           >
             <StaffBadge name={s.name} photoUrl={s.photo_url} color={s.color} size={52} />
             <Pressable onPress={() => startEdit(s)} style={styles.rowText}>
-              <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
-              <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
+              <Text style={[styles.rowName, { color: t.colors.text }]} numberOfLines={2} ellipsizeMode="tail">
+                {s.name}
+              </Text>
+              <Text style={[styles.rowMeta, { color: t.colors.textMuted }]} numberOfLines={1} ellipsizeMode="tail">
                 {s.working_hours ? tr('team.customHours') : tr('team.bizHours')}
                 {s.active ? '' : ` · ${tr('svc.inactive')}`}
               </Text>
             </Pressable>
+            <View style={styles.rowActions}>
             <Pressable onPress={() => void moveStaff(s, -1)} hitSlop={8} accessibilityLabel={tr('common.moveUp')}>
               <Ionicons name="arrow-up" size={18} color={t.colors.textMuted} />
             </Pressable>
@@ -529,6 +532,7 @@ export default function BusinessStaffScreen() {
             <Pressable onPress={() => startEdit(s)} hitSlop={8}>
               <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
             </Pressable>
+            </View>
             {pendingDeleteId === s.id ? (
               <View style={styles.confirmBox}>
                 <Text style={[styles.rowMeta, { color: t.colors.danger }]}>{tr('common.deleteConfirm')}</Text>
@@ -585,7 +589,9 @@ const styles = StyleSheet.create({
   },
   confirmBox: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
   dot: { width: 12, height: 12, borderRadius: 6 },
-  rowText: { flex: 1, gap: 2 },
+  // Textul ia latimea ramasa; pe ecran ingust actiunile trec pe randul urmator.
+  rowText: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 140, gap: 2 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginLeft: 'auto' },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowMeta: { fontSize: fontSize.sm },
 });

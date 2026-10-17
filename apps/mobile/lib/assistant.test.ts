@@ -74,5 +74,14 @@ const greet = answerAssistantMessage(knowledge, 'Bună ziua!');
 assert(greet.intent === 'greeting', 'salut → greeting', greet.intent);
 assert(greet.confidence > 0, 'salutul are încredere pozitivă');
 
+for (const [q, intent] of [
+  ['Unde sunteți?', 'location'],
+  ['Cum pot anula?', 'cancel_policy'],
+  ['Cine lucrează la voi?', 'staff'],
+] as const) {
+  const a = answerAssistantMessage(knowledge, q);
+  assert(a.intent === intent, `${q} -> ${intent}`, a.intent);
+}
+
 console.log(`assistant: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

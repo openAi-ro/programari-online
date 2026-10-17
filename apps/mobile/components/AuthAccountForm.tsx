@@ -417,8 +417,9 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               onChangeText={setPassword}
               editable={!loading}
               onSubmitEditing={() => void handleEmailSubmit()}
+              returnKeyType="go"
             />
-            {!isBusiness ? (
+            {!isBusiness && mode === 'register' ? (
               <LoginField
                 icon="people-outline"
                 autoCapitalize="characters"
