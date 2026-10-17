@@ -200,6 +200,13 @@ export default function BusinessSetupScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Mesajul de confirmare / informare dispare singur (nu rămâne peste „Salvează”).
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   useEffect(() => {
     let cancelled = false;
     // Gardă anti-blocare: dacă interogările atârnă (fără net / DNS blocat),
@@ -1015,19 +1022,10 @@ export default function BusinessSetupScreen() {
             </Pressable>
           ))}
         </View>
-      ) : (
-        <Text style={[styles.hint, { color: t.colors.textFaint }]}>
-          {tr('setup.noBlocked', { cal: tr('cal.title') })}
-        </Text>
-      )}
+      ) : null}
 
 
         </>
-      ) : null}
-      {publicCode ? (
-        <Callout tone="accent" title={tr('setup.pubCode', { code: publicCode ?? '' })}>
-          {tr('setup.pubCodeHint')}
-        </Callout>
       ) : null}
     </Screen>
   );
