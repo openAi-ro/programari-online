@@ -14,7 +14,7 @@ import {
   mapAuthError,
   takePendingGoogleKind,
 } from '@/lib/auth';
-import { takeAuthCallbackUrl } from '@/lib/auth-link';
+import { pickAuthCallbackUrl, takeAuthCallbackUrl } from '@/lib/auth-link';
 import { trKey } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
@@ -32,13 +32,17 @@ export default function AuthCallbackScreen() {
 
     (async () => {
       try {
-        const url = takeAuthCallbackUrl() || (await Linking.getInitialURL());
-        const href =
-          typeof window !== 'undefined'
-            ? `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`
-            : url;
-
-        const toParse = href && isAuthCallbackUrl(href) ? href : url;
+        const url =
+          takeAuthCallbackUrl() || Linking.getLinkingURL() || (await Linking.getInitialURL());
+        const toParse = pickAuthCallbackUrl({
+          platform: Platform.OS,
+          webHref:
+            Platform.OS === 'web'
+              ? `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`
+              : null,
+          linkUrl: url,
+          isCallback: isAuthCallbackUrl,
+        });
         const result = toParse
           ? await completeAuthFromUrl(toParse)
           : {
@@ -69,9 +73,13 @@ export default function AuthCallbackScreen() {
             kind = resolveGoogleAccountKind({
               metadataKind: result.session.user.user_metadata?.account_kind as string | undefined,
               pendingKind: pending,
-              profileKind: isFreshSignup(result.session.user)
-                ? null
-                : (profile?.account_kind as string | undefined),
+              // Cont nou: ușa aleasă bate profilul implicit pus de trigger. Dacă
+              // ușa a fost deja consumată (formularul a terminat primul), profilul
+              // e deja corect.
+              profileKind:
+                isFreshSignup(result.session.user) && pending
+                  ? null
+                  : (profile?.account_kind as string | undefined),
             });
           }
           await persistAccountKind(kind);
