@@ -1331,6 +1331,7 @@ export const ro = {
   'int.conditionsLabel': 'Afecțiuni: {text}',
   'int.consentYes': 'Acord foto: da',
   'int.consentNo': 'Acord foto: nu',
+  'int.photoNeedsConsent': 'Clientul nu și-a dat acordul pentru poze înainte/după. Pozele se pot adăuga după ce bifează acordul în Fișa mea.',
   'int.addBefore': 'Adaugă poză înainte',
   'int.addAfter': 'Adaugă poză după',
   'int.showRecord': 'Vezi fișa',

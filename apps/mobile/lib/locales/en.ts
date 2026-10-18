@@ -1333,6 +1333,7 @@ export const en: typeof ro = {
   'int.conditionsLabel': 'Conditions: {text}',
   'int.consentYes': 'Photo consent: yes',
   'int.consentNo': 'Photo consent: no',
+  'int.photoNeedsConsent': 'The client has not consented to before/after photos. Photos can be added after they tick the consent box in My health form.',
   'int.addBefore': 'Add before photo',
   'int.addAfter': 'Add after photo',
   'int.showRecord': 'View record',

@@ -136,6 +136,10 @@ export default function BusinessClientsScreen() {
 
   async function addClientPhoto(row: BusinessClientRow, kind: 'before' | 'after') {
     if (!bizId) return;
+    if (!records[row.client_user_id]?.intake?.photo_consent) {
+      setError(tr('int.photoNeedsConsent'));
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       setError(tr('team.galleryPerm'));
@@ -457,9 +461,14 @@ export default function BusinessClientsScreen() {
                               </View>
                             ))}
                           </View>
+                          {!records[row.client_user_id]?.intake?.photo_consent ? (
+                            <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                              {tr('int.photoNeedsConsent')}
+                            </Text>
+                          ) : null}
                           <View style={styles.btnRow}>
-                            <Button label={tr('int.addBefore')} size="sm" variant="secondary" loading={photoBusy} onPress={() => void addClientPhoto(row, 'before')} />
-                            <Button label={tr('int.addAfter')} size="sm" variant="secondary" loading={photoBusy} onPress={() => void addClientPhoto(row, 'after')} />
+                            <Button label={tr('int.addBefore')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[row.client_user_id]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'before')} />
+                            <Button label={tr('int.addAfter')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[row.client_user_id]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'after')} />
                           </View>
                         </>
                       ) : (
