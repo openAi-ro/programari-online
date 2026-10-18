@@ -30,12 +30,14 @@
                                  "predictiveBackGestureEnabled":  false,
                                  "permissions":  [
                                                      "android.permission.CAMERA",
-                                                     "android.permission.RECORD_AUDIO",
                                                      "android.permission.ACCESS_COARSE_LOCATION",
                                                      "android.permission.ACCESS_FINE_LOCATION",
                                                      "android.permission.POST_NOTIFICATIONS",
                                                      "android.permission.VIBRATE"
                                                  ],
+                                 "blockedPermissions":  [
+                                                            "android.permission.RECORD_AUDIO"
+                                                        ],
                                  "softwareKeyboardLayoutMode":  "resize",
                                  "config":  {
                                                 "googleMaps":  {
@@ -60,7 +62,8 @@
                                  [
                                      "expo-camera",
                                      {
-                                         "cameraPermission":  "Permite scanarea QR pentru programări."
+                                         "cameraPermission":  "Permite scanarea QR pentru programări.",
+                                         "recordAudioAndroid":  false
                                      }
                                  ],
                                  [
