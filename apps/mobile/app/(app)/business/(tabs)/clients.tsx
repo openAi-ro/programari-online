@@ -25,6 +25,7 @@ import { isWinbackCandidate } from '@/lib/winback';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import type { ClientIntake, ClientPhoto } from '@/lib/types';
+import { CLIENT_PHOTO_BUCKET, clientPhotoPath, withSignedUrls } from '@/lib/clientPhotos';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
 
@@ -123,11 +124,12 @@ export default function BusinessClientsScreen() {
         .eq('client_user_id', row.client_user_id)
         .order('created_at', { ascending: false }),
     ]);
+    const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
     setRecords((m) => ({
       ...m,
       [row.client_user_id]: {
         intake: (intakeRes.data ?? null) as ClientIntake | null,
-        photos: ((photosRes.data ?? []) as ClientPhoto[]),
+        photos,
       },
     }));
   }
@@ -149,16 +151,15 @@ export default function BusinessClientsScreen() {
     setError(null);
     try {
       const { buffer, contentType, ext } = await readLocalImageBytes(result.assets[0].uri);
-      const path = `client-photos/${bizId}/${row.client_user_id}/${Date.now()}.${ext}`;
+      const path = clientPhotoPath(bizId, row.client_user_id, ext);
       const { error: upErr } = await supabase.storage
-        .from('staff-photos')
+        .from(CLIENT_PHOTO_BUCKET)
         .upload(path, buffer, { contentType, upsert: false });
       if (upErr) throw upErr;
-      const { data } = supabase.storage.from('staff-photos').getPublicUrl(path);
       const { error: insErr } = await supabase.from('client_photos').insert({
         business_id: bizId,
         client_user_id: row.client_user_id,
-        url: data.publicUrl,
+        storage_path: path,
         kind,
       });
       if (insErr) throw insErr;
@@ -185,11 +186,12 @@ export default function BusinessClientsScreen() {
         .eq('client_user_id', row.client_user_id)
         .order('created_at', { ascending: false }),
     ]);
+    const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
     setRecords((m) => ({
       ...m,
       [row.client_user_id]: {
         intake: (intakeRes.data ?? null) as ClientIntake | null,
-        photos: ((photosRes.data ?? []) as ClientPhoto[]),
+        photos,
       },
     }));
   }
@@ -200,11 +202,7 @@ export default function BusinessClientsScreen() {
       setError(err.message);
       return;
     }
-    const marker = '/staff-photos/';
-    const at = photo.url.indexOf(marker);
-    if (at >= 0) {
-      await supabase.storage.from('staff-photos').remove([decodeURIComponent(photo.url.slice(at + marker.length))]);
-    }
+    await supabase.storage.from(CLIENT_PHOTO_BUCKET).remove([photo.storage_path]);
     await toggleRecordRefresh(row);
   }
 
@@ -451,7 +449,7 @@ export default function BusinessClientsScreen() {
                           <View style={styles.photoRow}>
                             {(records[row.client_user_id]?.photos ?? []).map((p) => (
                               <View key={p.id} style={styles.photoItem}>
-                                <Image source={{ uri: p.url }} style={styles.photoThumb} />
+                                {p.signedUrl ? <Image source={{ uri: p.signedUrl }} style={styles.photoThumb} /> : null}
                                 <Text style={[styles.meta, { color: t.colors.textMuted }]}>
                                   {p.kind === 'after' ? tr('int.after') : tr('int.before')}
                                 </Text>

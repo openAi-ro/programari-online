@@ -17,6 +17,7 @@ import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { ClientPhoto } from '@/lib/types';
+import { withSignedUrls } from '@/lib/clientPhotos';
 
 type Biz = { id: string; name: string };
 
@@ -93,7 +94,7 @@ export default function IntakeScreen() {
       .eq('business_id', businessId)
       .eq('client_user_id', userId)
       .order('created_at', { ascending: false });
-    setPhotos((ph ?? []) as ClientPhoto[]);
+    setPhotos(await withSignedUrls((ph ?? []) as ClientPhoto[]));
   }, [userId, businessId]);
 
   useFocusEffect(
@@ -201,7 +202,7 @@ export default function IntakeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
               {photos.map((p) => (
                 <View key={p.id} style={styles.photo}>
-                  <Image source={{ uri: p.url }} style={styles.thumb} />
+                  {p.signedUrl ? <Image source={{ uri: p.signedUrl }} style={styles.thumb} /> : null}
                   <Text style={[styles.meta, { color: t.colors.textMuted }]}>
                     {p.kind === 'after' ? tr('int.after') : tr('int.before')}
                   </Text>

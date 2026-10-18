@@ -229,8 +229,11 @@ export type ClientPhoto = {
   id: string;
   business_id: string;
   client_user_id: string;
-  url: string;
+  /** Calea în bucket-ul privat 'client-photos' (nu un URL public). */
+  storage_path: string;
   kind: 'before' | 'after';
+  /** Link semnat temporar, pus doar în aplicație pentru afișare. */
+  signedUrl?: string | null;
   created_at: string;
 };
 
