@@ -159,11 +159,6 @@ export default function BusinessStaffScreen() {
   }
 
   async function pickPortfolioPhotos(): Promise<void> {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError(trKey('team.galleryPerm'));
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -188,11 +183,6 @@ export default function BusinessStaffScreen() {
   }
 
   async function pickFromGallery(): Promise<void> {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError(trKey('team.galleryPerm'));
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,

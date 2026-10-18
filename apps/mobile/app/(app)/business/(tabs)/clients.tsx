@@ -140,11 +140,6 @@ export default function BusinessClientsScreen() {
       setError(tr('int.photoNeedsConsent'));
       return;
     }
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError(tr('team.galleryPerm'));
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,

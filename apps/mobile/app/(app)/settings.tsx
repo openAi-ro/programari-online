@@ -419,11 +419,6 @@ export default function SettingsScreen() {
   }
 
   async function pickAvatarFromGallery(): Promise<void> {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError(trKey('set.avatarGallery'));
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
@@ -510,11 +505,6 @@ export default function SettingsScreen() {
   }
 
   async function pickLogoFromGallery(): Promise<void> {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError(trKey('set.logoGallery'));
-      return;
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
@@ -621,11 +611,6 @@ export default function SettingsScreen() {
   }
 
   async function pickVideoFromGallery(): Promise<void> {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setError(trKey('set.videoGallery'));
-      return;
-    }
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos'],
