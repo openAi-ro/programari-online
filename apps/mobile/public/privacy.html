@@ -10,97 +10,183 @@
 <p class="langswitch"><a href="?lang=ro">Română</a><a href="?lang=en">English</a></p>
 <div data-lang="ro">
 <h1>Politica de Confidențialitate</h1>
-<p><strong>Ultima actualizare:</strong> 19 septembrie 2026</p>
-<p><strong>Operator:</strong> Programări Online ("Aplicația"), contact: contact@programari.expo.app</p>
+<p><strong>Ultima actualizare:</strong> 18 octombrie 2026</p>
+<p><strong>Operator:</strong> Programări Online ("Aplicația" – aplicația Android Programari și site-ul programari.expo.app), contact: <a href="mailto:rafaeldanescu@gmail.com">rafaeldanescu@gmail.com</a></p>
 
 <h2>1. Ce date colectăm</h2>
 <ul>
-<li>Număr de telefon (format E.164, ex. +407xxxxxxxx) - pentru autentificare prin cod OTP trimis pe WhatsApp.</li>
-<li>Adresă de email (opțional, autentificare clasică).</li>
-<li>Date de programare (servicii, intervale, locație) generate de utilizarea aplicației.</li>
+<li><strong>Date de cont:</strong> număr de telefon (format E.164, ex. +407xxxxxxxx), adresă de email, nume, poză de profil (opțional), tipul contului (client sau business).</li>
+<li><strong>Date de programare:</strong> servicii, date și ore, specialist, statusul programării, confirmarea prezenței și check-in-ul („Am ajuns”), recenzii, favorite, lista de așteptare.</li>
+<li><strong>Mesaje:</strong> conversațiile din chat dintre client și business și întrebările adresate asistentului din aplicație.</li>
+<li><strong>Fișa clientului:</strong> alergii, afecțiuni, preferințe și alte mențiuni completate de client, acordul pentru poze, plus notițele business-ului despre client.</li>
+<li><strong>Poze:</strong> pozele înainte/după ale clienților (doar cu acordul clientului), pozele echipei, logo-ul și pozele/videoul de prezentare ale business-ului, poza de profil.</li>
+<li><strong>Locație:</strong> locația aproximativă sau precisă a dispozitivului, doar când îți dai permisiunea, ca să găsești business-uri în apropiere sau să completezi automat adresa business-ului. Nu urmărim locația în fundal.</li>
+<li><strong>Date de dispozitiv:</strong> tokenul pentru notificări push, limba și tipul de dispozitiv.</li>
+<li><strong>Plăți:</strong> pentru avansuri, datele cardului sunt introduse direct la Stripe; noi primim doar statusul plății, suma și un identificator al tranzacției. Nu vedem și nu stocăm datele cardului.</li>
 </ul>
 
-<h2>2. De ce colectăm numărul de telefon și WhatsApp</h2>
-<p>Numărul este folosit exclusiv pentru:</p>
+<h2>2. Permisiunile aplicației</h2>
 <ul>
-<li>Trimiterea codului de verificare OTP pe WhatsApp (prin Meta WhatsApp Cloud API), cu consimțământul tău explicit (bifă opt-in înainte de trimitere).</li>
-<li>Autentificarea și crearea contului (client sau business).</li>
+<li><strong>Cameră:</strong> scanarea codurilor QR pentru programări și fotografierea pozelor (profil, echipă, înainte/după).</li>
+<li><strong>Alegerea pozelor:</strong> prin selectorul de poze al sistemului; aplicația primește doar pozele pe care le alegi, fără acces la toată galeria.</li>
+<li><strong>Locație (doar cât folosești aplicația):</strong> business-uri în apropiere și completarea adresei business-ului.</li>
+<li><strong>Notificări:</strong> confirmări, remindere, mesaje noi și cereri de programare.</li>
 </ul>
-<p>Nu folosim numărul pentru marketing fără consimțământ separat. Poți retrage consimțământul oricând din Setări sau cerând ștergerea contului.</p>
+<p>Poți refuza sau retrage oricând aceste permisiuni din setările telefonului; aplicația funcționează în continuare, fără funcția respectivă.</p>
 
-<h2>3. Temei legal (GDPR)</h2>
-<p>Consimțământ (art. 6 alin. 1 lit. a GDPR) pentru OTP WhatsApp și executarea contractului pentru furnizarea serviciului de programări.</p>
-
-<h2>4. Partajarea datelor</h2>
+<h2>3. Cum folosim datele</h2>
 <ul>
-<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> - pentru livrarea mesajului OTP. Meta primește numărul și conținutul template-ului de autentificare.</li>
-<li><strong>Supabase (hosting & autentificare)</strong> - stocare conturi și sesiuni.</li>
-<li>Nu vindem datele către terți.</li>
+<li>Crearea contului și autentificarea (inclusiv cod OTP pe WhatsApp sau email și „Continuă cu Google”).</li>
+<li>Rezervarea, confirmarea, mutarea și anularea programărilor și comunicarea cu business-ul.</li>
+<li>Trimiterea notificărilor despre programări: push, WhatsApp și email.</li>
+<li>Sincronizarea cu Google Calendar, dacă business-ul o activează.</li>
+<li>Încasarea avansurilor, dacă business-ul le cere.</li>
+<li>Securitate, prevenirea abuzurilor și remedierea erorilor.</li>
+</ul>
+<p>Nu folosim datele pentru publicitate și nu le vindem. Nu trimitem mesaje de marketing fără un consimțământ separat.</p>
+
+<h2>4. Autentificare cu Google și Google Calendar</h2>
+<p><strong>„Continuă cu Google”:</strong> primim de la Google numele, adresa de email și poza de profil ale contului Google, doar pentru crearea contului și autentificare.</p>
+<p><strong>Google Calendar (doar conturi business, opțional):</strong> când business-ul conectează calendarul, citim evenimentele din calendar ca să blocăm intervalele ocupate și adăugăm programările din aplicație în calendar. Tokenul de acces este păstrat pe server, accesibil doar funcțiilor de server (niciodată în aplicație), și îl ștergem când deconectezi calendarul sau îți ștergi contul. Datele din Google Calendar nu sunt folosite în alt scop, nu sunt transferate altor persoane și nu sunt folosite pentru publicitate. Utilizarea datelor primite de la API-urile Google respectă <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, inclusiv cerințele de utilizare limitată (Limited Use).</p>
+
+<h2>5. Cine primește datele (persoane împuternicite)</h2>
+<ul>
+<li><strong>Business-ul la care faci programarea</strong> – vede numele, datele de contact, programările, mesajele, fișa ta și pozele înainte/după.</li>
+<li><strong>Supabase</strong> – găzduirea bazei de date, autentificare, stocarea fișierelor și funcțiile de server.</li>
+<li><strong>Expo (EAS)</strong> – găzduirea site-ului, actualizările aplicației și livrarea notificărilor push, prin Google Firebase Cloud Messaging și Apple Push Notification Service.</li>
+<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – livrarea codurilor de autentificare și a mesajelor despre programări pe WhatsApp (numărul de telefon și conținutul mesajului).</li>
+<li><strong>Resend</strong> – trimiterea emailurilor (adresa de email și conținutul mesajului).</li>
+<li><strong>Google</strong> – autentificarea cu Google și Google Calendar, dacă le folosești.</li>
+<li><strong>Stripe</strong> – procesarea plăților pentru avansuri.</li>
+</ul>
+<p>Unii furnizori pot prelucra date în afara Spațiului Economic European. În aceste cazuri, transferul se face pe baza clauzelor contractuale standard aprobate de Comisia Europeană sau a altor garanții prevăzute de GDPR.</p>
+
+<h2>6. Temei legal (GDPR)</h2>
+<ul>
+<li><strong>Executarea contractului</strong> (art. 6 alin. 1 lit. b) – contul, programările, mesajele, notificările despre programări și plățile.</li>
+<li><strong>Consimțământ</strong> (art. 6 alin. 1 lit. a, și art. 9 alin. 2 lit. a pentru datele de sănătate din fișă, cum ar fi alergiile și afecțiunile) – codul OTP pe WhatsApp, fișa clientului, pozele înainte/după, locația, notificările push și Google Calendar. Poți retrage consimțământul oricând, fără să fie afectată legalitatea prelucrării de până atunci.</li>
+<li><strong>Interes legitim</strong> (art. 6 alin. 1 lit. f) – securitatea, prevenirea abuzurilor și remedierea erorilor.</li>
+<li><strong>Obligație legală</strong> (art. 6 alin. 1 lit. c) – păstrarea evidențelor de plată.</li>
 </ul>
 
-<h2>5. Stocare și durată</h2>
-<p>Codurile OTP sunt hash-uite (SHA-256) și expirate automat după ~10 minute. Numărul de telefon este păstrat cât contul este activ.</p>
+<h2>7. Cât timp păstrăm datele</h2>
+<ul>
+<li>Datele contului, programările, mesajele, fișa și pozele: cât timp contul este activ. Se șterg când îți ștergi contul.</li>
+<li>Codurile OTP sunt stocate doar ca hash (SHA-256) și expiră automat după aproximativ 10 minute.</li>
+<li>Jurnalul tehnic al notificărilor trimise (canal, status, eroare), folosit pentru depanare: cât timp contul este activ.</li>
+<li>Evidențele de plată: cât timp o cere legislația fiscală și contabilă.</li>
+<li>Copiile de siguranță ale bazei de date se rescriu automat; datele șterse dispar din ele în cel mult 30 de zile.</li>
+</ul>
 
-<h2>6. Drepturile tale</h2>
-<p>Drept de acces, rectificare, ștergere, restricționare, opoziție și portabilitate. Pentru exercitare: contact@programari.expo.app. Poți solicita ștergerea completă a contului și a numărului asociat.</p>
+<h2>8. Ștergerea contului</h2>
+<p>Poți șterge contul oricând din aplicație: <strong>Setări → Șterge contul</strong>. Fără aplicație, poți cere ștergerea prin email. Toți pașii și ce date se șterg sunt pe pagina <a href="/delete-account.html">Ștergerea contului</a>.</p>
 
-<h2>7. Securitate</h2>
-<p>Folosim transport criptat (HTTPS), hash-uri pentru coduri și rate-limit la încercări OTP.</p>
+<h2>9. Drepturile tale</h2>
+<p>Ai dreptul de acces, rectificare, ștergere, restricționare, opoziție și portabilitate a datelor și dreptul de a-ți retrage consimțământul. Poți descărca o copie a datelor din <strong>Setări → Exportă datele mele</strong>. Pentru orice altă cerere scrie la <a href="mailto:rafaeldanescu@gmail.com">rafaeldanescu@gmail.com</a>; răspundem în cel mult o lună. Ai și dreptul să depui o plângere la ANSPDCP (Autoritatea Națională de Supraveghere a Prelucrării Datelor cu Caracter Personal, <a href="https://www.dataprotection.ro">www.dataprotection.ro</a>).</p>
 
-<h2>8. Contact și reclamații</h2>
-<p>Întrebări: contact@programari.expo.app. Te poți adresa și ANSPDCP (România).</p>
+<h2>10. Securitate</h2>
+<p>Folosim conexiuni criptate (HTTPS). Accesul la date este limitat prin reguli la nivel de rând: un business vede doar clienții proprii, iar un client doar datele lui. Pozele înainte/după sunt păstrate într-un spațiu privat și se deschid doar prin linkuri temporare. Folosim hash-uri pentru coduri și limităm încercările de autentificare.</p>
 
-<h2>9. Modificări</h2>
-<p>Vom actualiza această pagină și vom afișa data ultimei actualizări.</p>
+<h2>11. Copii</h2>
+<p>Aplicația nu se adresează persoanelor sub 16 ani și nu colectăm cu bună știință date despre acestea.</p>
 
-<p><a href="/">Înapoi la aplicație</a> | <a href="/terms.html">Termeni și condiții</a></p>
+<h2>12. Modificări</h2>
+<p>Vom actualiza această pagină și data ultimei actualizări.</p>
+
+<h2>13. Contact</h2>
+<p>Întrebări despre date: <a href="mailto:rafaeldanescu@gmail.com">rafaeldanescu@gmail.com</a>.</p>
+
+<p><a href="/">Înapoi la aplicație</a> | <a href="/terms.html">Termeni și condiții</a> | <a href="/delete-account.html">Ștergerea contului</a></p>
 </div>
 <div data-lang="en" hidden>
 <h1>Privacy Policy</h1>
-<p><strong>Last updated:</strong> September 19, 2026</p>
-<p><strong>Controller:</strong> Programări Online ("the App"), contact: contact@programari.expo.app</p>
+<p><strong>Last updated:</strong> October 18, 2026</p>
+<p><strong>Controller:</strong> Programări Online ("the App" – the Programari Android app and the programari.expo.app website), contact: <a href="mailto:rafaeldanescu@gmail.com">rafaeldanescu@gmail.com</a></p>
 
 <h2>1. What data we collect</h2>
 <ul>
-<li>Phone number (E.164 format, e.g. +407xxxxxxxx) - for authentication via an OTP code sent over WhatsApp.</li>
-<li>Email address (optional, classic login).</li>
-<li>Booking data (services, time slots, location) generated by using the app.</li>
+<li><strong>Account data:</strong> phone number (E.164 format, e.g. +407xxxxxxxx), email address, name, profile photo (optional), account type (client or business).</li>
+<li><strong>Booking data:</strong> services, dates and times, staff member, booking status, attendance confirmation and check-in ("I'm here"), reviews, favorites, waitlist.</li>
+<li><strong>Messages:</strong> chat conversations between client and business and questions asked to the in-app assistant.</li>
+<li><strong>Client record:</strong> allergies, conditions, preferences and other notes filled in by the client, photo consent, and the business's notes about the client.</li>
+<li><strong>Photos:</strong> clients' before/after photos (only with the client's consent), team photos, the business logo and showcase photos/video, profile photo.</li>
+<li><strong>Location:</strong> the device's approximate or precise location, only when you grant permission, to find nearby businesses or auto-fill the business address. We do not track location in the background.</li>
+<li><strong>Device data:</strong> push notification token, language and device type.</li>
+<li><strong>Payments:</strong> for deposits, card details are entered directly with Stripe; we only receive the payment status, amount and a transaction ID. We never see or store card details.</li>
 </ul>
 
-<h2>2. Why we collect the phone number and WhatsApp</h2>
-<p>The number is used exclusively for:</p>
+<h2>2. App permissions</h2>
 <ul>
-<li>Sending the OTP verification code over WhatsApp (via Meta WhatsApp Cloud API), with your explicit consent (opt-in checkbox before sending).</li>
-<li>Authentication and account creation (client or business).</li>
+<li><strong>Camera:</strong> scanning booking QR codes and taking photos (profile, team, before/after).</li>
+<li><strong>Choosing photos:</strong> through the system photo picker; the app only receives the photos you pick, with no access to the whole library.</li>
+<li><strong>Location (only while using the app):</strong> nearby businesses and filling in the business address.</li>
+<li><strong>Notifications:</strong> confirmations, reminders, new messages and booking requests.</li>
 </ul>
-<p>We do not use the number for marketing without separate consent. You can withdraw consent anytime from Settings or by requesting account deletion.</p>
+<p>You can refuse or revoke these permissions at any time in your phone settings; the app keeps working without that feature.</p>
 
-<h2>3. Legal basis (GDPR)</h2>
-<p>Consent (Art. 6(1)(a) GDPR) for WhatsApp OTP and performance of the contract for providing the booking service.</p>
-
-<h2>4. Data sharing</h2>
+<h2>3. How we use the data</h2>
 <ul>
-<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> - for delivering the OTP message. Meta receives the number and the content of the authentication template.</li>
-<li><strong>Supabase (hosting & authentication)</strong> - account and session storage.</li>
-<li>We do not sell data to third parties.</li>
+<li>Creating the account and signing in (including OTP codes via WhatsApp or email and "Continue with Google").</li>
+<li>Booking, confirming, moving and cancelling appointments and communicating with the business.</li>
+<li>Sending booking notifications: push, WhatsApp and email.</li>
+<li>Syncing with Google Calendar, if the business turns it on.</li>
+<li>Collecting deposits, if the business requires them.</li>
+<li>Security, abuse prevention and fixing errors.</li>
+</ul>
+<p>We do not use the data for advertising and we do not sell it. We do not send marketing messages without separate consent.</p>
+
+<h2>4. Google sign-in and Google Calendar</h2>
+<p><strong>"Continue with Google":</strong> we receive the Google account's name, email address and profile photo from Google, only to create the account and sign you in.</p>
+<p><strong>Google Calendar (business accounts only, optional):</strong> when a business connects its calendar, we read calendar events to block busy time slots and we add the app's appointments to the calendar. The access token is kept on the server, accessible only to server functions (never in the app), and we delete it when you disconnect the calendar or delete your account. Google Calendar data is not used for any other purpose, is not transferred to other people and is not used for advertising. The App's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>5. Who receives the data (processors)</h2>
+<ul>
+<li><strong>The business you book with</strong> – sees your name, contact details, bookings, messages, client record and before/after photos.</li>
+<li><strong>Supabase</strong> – database hosting, authentication, file storage and server functions.</li>
+<li><strong>Expo (EAS)</strong> – website hosting, app updates and push notification delivery, via Google Firebase Cloud Messaging and Apple Push Notification Service.</li>
+<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – delivering sign-in codes and booking messages over WhatsApp (phone number and message content).</li>
+<li><strong>Resend</strong> – sending emails (email address and message content).</li>
+<li><strong>Google</strong> – Google sign-in and Google Calendar, if you use them.</li>
+<li><strong>Stripe</strong> – processing deposit payments.</li>
+</ul>
+<p>Some providers may process data outside the European Economic Area. In those cases, transfers rely on the European Commission's standard contractual clauses or other safeguards provided by the GDPR.</p>
+
+<h2>6. Legal basis (GDPR)</h2>
+<ul>
+<li><strong>Performance of a contract</strong> (Art. 6(1)(b)) – the account, bookings, messages, booking notifications and payments.</li>
+<li><strong>Consent</strong> (Art. 6(1)(a), and Art. 9(2)(a) for health data in the client record, such as allergies and conditions) – WhatsApp OTP, the client record, before/after photos, location, push notifications and Google Calendar. You can withdraw consent at any time, without affecting the lawfulness of processing before withdrawal.</li>
+<li><strong>Legitimate interest</strong> (Art. 6(1)(f)) – security, abuse prevention and fixing errors.</li>
+<li><strong>Legal obligation</strong> (Art. 6(1)(c)) – keeping payment records.</li>
 </ul>
 
-<h2>5. Storage and retention</h2>
-<p>OTP codes are hashed (SHA-256) and automatically expire after ~10 minutes. The phone number is kept while the account is active.</p>
+<h2>7. How long we keep data</h2>
+<ul>
+<li>Account data, bookings, messages, the client record and photos: while the account is active. They are deleted when you delete your account.</li>
+<li>OTP codes are stored only as a hash (SHA-256) and expire automatically after about 10 minutes.</li>
+<li>The technical log of sent notifications (channel, status, error), used for troubleshooting: while the account is active.</li>
+<li>Payment records: as long as tax and accounting law requires.</li>
+<li>Database backups are overwritten automatically; deleted data disappears from them within 30 days.</li>
+</ul>
 
-<h2>6. Your rights</h2>
-<p>Right of access, rectification, erasure, restriction, objection and portability. To exercise them: contact@programari.expo.app. You can request full deletion of the account and the associated number.</p>
+<h2>8. Account deletion</h2>
+<p>You can delete your account at any time in the app: <strong>Settings → Delete account</strong>. Without the app, you can request deletion by email. All steps and what is deleted are on the <a href="/delete-account.html?lang=en">Account deletion</a> page.</p>
 
-<h2>7. Security</h2>
-<p>We use encrypted transport (HTTPS), hashes for codes and rate-limiting on OTP attempts.</p>
+<h2>9. Your rights</h2>
+<p>You have the right of access, rectification, erasure, restriction, objection and data portability, and the right to withdraw consent. You can download a copy of your data from <strong>Settings → Export my data</strong>. For any other request, write to <a href="mailto:rafaeldanescu@gmail.com">rafaeldanescu@gmail.com</a>; we reply within one month. You also have the right to lodge a complaint with ANSPDCP, the Romanian data protection authority (<a href="https://www.dataprotection.ro">www.dataprotection.ro</a>).</p>
 
-<h2>8. Contact and complaints</h2>
-<p>Questions: contact@programari.expo.app. You can also contact ANSPDCP (Romania).</p>
+<h2>10. Security</h2>
+<p>We use encrypted connections (HTTPS). Access to data is restricted by row-level rules: a business only sees its own clients and a client only their own data. Before/after photos are kept in private storage and open only through temporary links. We hash codes and rate-limit sign-in attempts.</p>
 
-<h2>9. Changes</h2>
-<p>We will update this page and show the last-update date.</p>
+<h2>11. Children</h2>
+<p>The App is not intended for people under 16 and we do not knowingly collect their data.</p>
 
-<p><a href="/">Back to the app</a> | <a href="/terms.html">Terms and conditions</a></p>
+<h2>12. Changes</h2>
+<p>We will update this page and the last-updated date.</p>
+
+<h2>13. Contact</h2>
+<p>Data questions: <a href="mailto:rafaeldanescu@gmail.com">rafaeldanescu@gmail.com</a>.</p>
+
+<p><a href="/">Back to the app</a> | <a href="/terms.html">Terms and conditions</a> | <a href="/delete-account.html?lang=en">Account deletion</a></p>
 </div>
 <script>
 (function () {

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ștergerea contului - Programări Online</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1a1a1a}h1{font-size:28px}h2{font-size:20px;margin-top:32px} a{color:#0a7cff}.langswitch{margin:8px 0 0}.langswitch a{margin-right:12px}.box{background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:12px 16px}</style>
+</head>
+<body>
+<p class="langswitch"><a href="?lang=ro">Română</a><a href="?lang=en">English</a></p>
+<div data-lang="ro">
+<h1>Ștergerea contului Programări Online</h1>
+<p>Aplicația: <strong>Programari</strong> (Android: com.programari.app, web: programari.expo.app). Dezvoltator: Programări Online.</p>
+
+<h2>1. Din aplicație (cel mai rapid)</h2>
+<ol>
+<li>Deschide aplicația Programari (sau <a href="/">programari.expo.app</a>) și intră în cont.</li>
+<li>Mergi la <strong>Setări</strong>.</li>
+<li>Apasă <strong>Șterge contul</strong> și confirmă cu <strong>Șterge definitiv</strong>.</li>
+</ol>
+<p>Contul se șterge imediat și ești deconectat. Operațiunea nu poate fi anulată. Înainte, poți descărca o copie a datelor tale din Setări → <strong>Exportă datele mele</strong>.</p>
+
+<h2>2. Fără aplicație</h2>
+<div class="box">
+<p>Trimite un email la <a href="mailto:rafaeldanescu@gmail.com?subject=Stergere%20cont%20Programari">rafaeldanescu@gmail.com</a> cu subiectul <strong>„Ștergere cont Programari”</strong>, de pe adresa de email a contului sau menționând numărul de telefon folosit la autentificare.</p>
+<p>Putem cere o confirmare ca să ne asigurăm că ești titularul contului. Ștergem contul în cel mult 30 de zile de la confirmare și îți răspundem pe email când s-a finalizat.</p>
+</div>
+
+<h2>3. Ce date se șterg</h2>
+<ul>
+<li>Contul (email, număr de telefon, nume, poză de profil) și setările.</li>
+<li>Programările, favoritele, recenziile, mesajele din chat, fișa ta (alergii, preferințe, mențiuni) și pozele înainte/după asociate contului.</li>
+<li>Pentru conturile business: profilul business-ului, serviciile, echipa, programul și datele legate de acestea.</li>
+<li>Conexiunea cu Google Calendar și tokenurile de notificare ale dispozitivelor.</li>
+</ul>
+
+<h2>4. Ce putem păstra și cât timp</h2>
+<ul>
+<li>Datele despre plăți (avansuri prin Stripe), dacă există, cât timp o cere legislația fiscală și contabilă.</li>
+<li>Copiile de siguranță ale bazei de date se rescriu automat; datele șterse dispar din ele în cel mult 30 de zile.</li>
+</ul>
+
+<p>Detalii complete în <a href="/privacy.html">Politica de confidențialitate</a>.</p>
+<p><a href="/">Înapoi la aplicație</a> | <a href="/terms.html">Termeni și condiții</a></p>
+</div>
+<div data-lang="en" hidden>
+<h1>Deleting your Programări Online account</h1>
+<p>App: <strong>Programari</strong> (Android: com.programari.app, web: programari.expo.app). Developer: Programări Online.</p>
+
+<h2>1. In the app (fastest)</h2>
+<ol>
+<li>Open the Programari app (or <a href="/">programari.expo.app</a>) and sign in.</li>
+<li>Go to <strong>Settings</strong>.</li>
+<li>Tap <strong>Delete account</strong> and confirm with <strong>Delete permanently</strong>.</li>
+</ol>
+<p>The account is deleted immediately and you are signed out. This cannot be undone. Before that, you can download a copy of your data from Settings → <strong>Export my data</strong>.</p>
+
+<h2>2. Without the app</h2>
+<div class="box">
+<p>Send an email to <a href="mailto:rafaeldanescu@gmail.com?subject=Delete%20Programari%20account">rafaeldanescu@gmail.com</a> with the subject <strong>"Delete Programari account"</strong>, from the account's email address or stating the phone number you sign in with.</p>
+<p>We may ask for a confirmation to make sure you own the account. We delete the account within 30 days of confirmation and reply by email when it is done.</p>
+</div>
+
+<h2>3. What is deleted</h2>
+<ul>
+<li>The account (email, phone number, name, profile photo) and settings.</li>
+<li>Bookings, favorites, reviews, chat messages, your client record (allergies, preferences, notes) and the before/after photos linked to the account.</li>
+<li>For business accounts: the business profile, services, team, opening hours and the related data.</li>
+<li>The Google Calendar connection and device notification tokens.</li>
+</ul>
+
+<h2>4. What we may keep and for how long</h2>
+<ul>
+<li>Payment records (Stripe deposits), if any, for as long as tax and accounting law requires.</li>
+<li>Database backups are overwritten automatically; deleted data disappears from them within 30 days.</li>
+</ul>
+
+<p>Full details in the <a href="/privacy.html">Privacy Policy</a>.</p>
+<p><a href="/">Back to the app</a> | <a href="/terms.html">Terms and conditions</a></p>
+</div>
+<script>
+(function () {
+  function pickLang() {
+    try {
+      var q = new URLSearchParams(location.search).get('lang');
+      if (q === 'ro' || q === 'en') return q;
+      var saved = localStorage.getItem('programari.language');
+      if (saved === 'ro' || saved === 'en') return saved;
+    } catch (e) {}
+    return (navigator.language || 'ro').toLowerCase().indexOf('en') === 0 ? 'en' : 'ro';
+  }
+  var lang = pickLang();
+  document.documentElement.lang = lang;
+  document.title = lang === 'en' ? 'Delete your account - Programări Online' : 'Ștergerea contului - Programări Online';
+  var blocks = document.querySelectorAll('[data-lang]');
+  for (var i = 0; i < blocks.length; i++) {
+    blocks[i].hidden = blocks[i].getAttribute('data-lang') !== lang;
+  }
+})();
+</script>
+</body>
+</html>

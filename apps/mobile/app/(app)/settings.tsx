@@ -35,8 +35,9 @@ import {
   type ThemePreference,
 } from '@/lib/themePreference';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
-import { setLanguage } from '@/lib/language';
+import { getLanguageSync, setLanguage } from '@/lib/language';
 import { confirmAction } from '@/lib/confirm';
+import { getPublicWebOrigin } from '@/lib/webBase';
 import { FlagRO, FlagUS } from '@/components/LanguageFlag';
 import { useBack } from '@/lib/nav';
 import {
@@ -1831,6 +1832,14 @@ export default function SettingsScreen() {
         description={tr('set.deleteAccountBody')}
         onPress={() => void handleDeleteAccount()}
         danger
+      />
+      <SettingRow
+        icon="information-circle-outline"
+        title={tr('set.deleteAccountInfo')}
+        description={tr('set.deleteAccountInfoHint')}
+        onPress={() =>
+          void Linking.openURL(`${getPublicWebOrigin()}/delete-account.html?lang=${getLanguageSync()}`)
+        }
       />
 <SettingRow
         icon="log-out-outline"
