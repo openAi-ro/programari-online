@@ -13,10 +13,7 @@
                              "buildNumber":  "2",
                              "infoPlist":  {
                                                "ITSAppUsesNonExemptEncryption":  false
-                                           },
-                             "config":  {
-                                            "googleMapsApiKey":  "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY"
-                                        }
+                                           }
                          },
                  "android":  {
                                  "package":  "com.programari.app",
@@ -39,11 +36,6 @@
                                                             "android.permission.RECORD_AUDIO"
                                                         ],
                                  "softwareKeyboardLayoutMode":  "resize",
-                                 "config":  {
-                                                "googleMaps":  {
-                                                                   "apiKey":  "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY"
-                                                               }
-                                            },
                                  "versionCode":  2
                              },
                  "web":  {
@@ -88,13 +80,7 @@
                                          "imageWidth":  200
                                      }
                                  ],
-                                 [
-                                     "react-native-maps",
-                                     {
-                                         "androidGoogleMapsApiKey":  "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY",
-                                         "iosGoogleMapsApiKey":  "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY"
-                                     }
-                                 ]
+                                 "react-native-maps"
                              ],
                  "experiments":  {
                                      "typedRoutes":  true
@@ -109,7 +95,6 @@
                                "eas":  {
                                            "projectId":  "8f72fe7c-7a5d-489e-8271-1f81d7113fe0"
                                        },
-                               "googleMapsApiKey":  "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY",
                                "iosInstallUrl":  "https://programari.expo.app/login"
                            },
                  "owner":  "promixt",

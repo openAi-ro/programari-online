@@ -17,22 +17,33 @@ type Props = {
   height?: number;
 };
 
-/** Cheie Maps: .env EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, apoi app.json extra / ios / android. */
+/** Valoare de completat din șabloane — nu e o cheie reală. */
+const MAPS_KEY_PLACEHOLDER = 'REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY';
+
+function realKey(v: string | undefined | null): string {
+  const k = (v ?? '').trim();
+  return k && k !== MAPS_KEY_PLACEHOLDER ? k : '';
+}
+
+/** Cheie Maps: .env EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, apoi app.json extra / ios / android. Placeholder = fără cheie. */
 export function getMapsApiKey(): string {
-  const fromEnv = (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '').trim();
+  const fromEnv = realKey(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
   if (fromEnv) return fromEnv;
   const extra = Constants.expoConfig?.extra as { googleMapsApiKey?: string } | undefined;
-  if (extra?.googleMapsApiKey?.trim()) return extra.googleMapsApiKey.trim();
-  const ios = (
-    Constants.expoConfig as { ios?: { config?: { googleMapsApiKey?: string } } } | null
-  )?.ios?.config?.googleMapsApiKey;
-  if (ios?.trim()) return ios.trim();
-  const android = (
-    Constants.expoConfig as {
-      android?: { config?: { googleMaps?: { apiKey?: string } } };
-    } | null
-  )?.android?.config?.googleMaps?.apiKey;
-  return android?.trim() ?? '';
+  const fromExtra = realKey(extra?.googleMapsApiKey);
+  if (fromExtra) return fromExtra;
+  const ios = realKey(
+    (Constants.expoConfig as { ios?: { config?: { googleMapsApiKey?: string } } } | null)?.ios
+      ?.config?.googleMapsApiKey
+  );
+  if (ios) return ios;
+  return realKey(
+    (
+      Constants.expoConfig as {
+        android?: { config?: { googleMaps?: { apiKey?: string } } };
+      } | null
+    )?.android?.config?.googleMaps?.apiKey
+  );
 }
 
 export function hasGoogleMapsApiKey(): boolean {

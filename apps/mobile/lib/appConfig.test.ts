@@ -3,11 +3,12 @@
  * Run: npx tsx lib/appConfig.test.ts
  * from apps/mobile
  *
- * Regresie: react-native-maps 1.27 își injectează cheia nativă DOAR din
- * props-urile pluginului (androidGoogleMapsApiKey / iosGoogleMapsApiKey).
- * android.config.googleMaps.apiKey e ignorat (fallback-ul legacy Expo nu
- * rulează când pachetul își aduce plugin propriu). Fără props, MapView
- * nativ crapă cu "API key not found" și aplicația se închide.
+ * 1) Nu livrăm o cheie Google Maps falsă (placeholder) în app.json.
+ * 2) Regresie: react-native-maps 1.27 își injectează cheia nativă DOAR din
+ *    props-urile pluginului (androidGoogleMapsApiKey / iosGoogleMapsApiKey).
+ *    Când se pune o cheie reală, trebuie pusă în plugin (și identic în
+ *    android.config / ios.config dacă există acolo). Fără cheie, harta nativă
+ *    nu se afișează deloc (GoogleMapPicker arată mesajul de cheie lipsă).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -35,34 +36,28 @@ type AppJson = {
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const appJson = JSON.parse(readFileSync(join(here, '..', 'app.json'), 'utf8')) as AppJson;
+const raw = readFileSync(join(here, '..', 'app.json'), 'utf8');
+const appJson = JSON.parse(raw) as AppJson;
 const plugins = appJson.expo.plugins ?? [];
 const maps = plugins.find((p) => (typeof p === 'string' ? p : p[0]) === 'react-native-maps');
 
+assert(!raw.includes('REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY'), 'fără cheie Maps placeholder în app.json');
 assert(maps !== undefined, 'react-native-maps e în plugins');
-assert(
-  typeof maps !== 'string' &&
-    typeof maps?.[1]?.androidGoogleMapsApiKey === 'string' &&
-    (maps[1].androidGoogleMapsApiKey as string).length > 10,
-  'pluginul maps are androidGoogleMapsApiKey'
-);
-assert(
-  typeof maps !== 'string' &&
-    typeof maps?.[1]?.iosGoogleMapsApiKey === 'string' &&
-    (maps[1].iosGoogleMapsApiKey as string).length > 10,
-  'pluginul maps are iosGoogleMapsApiKey'
-);
-assert(
-  typeof maps !== 'string' &&
-    maps?.[1]?.androidGoogleMapsApiKey ===
-      appJson.expo.android?.config?.googleMaps?.apiKey,
-  'cheia android din plugin = cea din android.config'
-);
-assert(
-  typeof maps !== 'string' &&
-    maps?.[1]?.iosGoogleMapsApiKey === appJson.expo.ios?.config?.googleMapsApiKey,
-  'cheia iOS din plugin = cea din ios.config'
-);
+
+const props = typeof maps === 'string' || !maps ? {} : maps[1];
+const androidKey = appJson.expo.android?.config?.googleMaps?.apiKey;
+const iosKey = appJson.expo.ios?.config?.googleMapsApiKey;
+if (androidKey) {
+  assert(props.androidGoogleMapsApiKey === androidKey, 'cheia android din plugin = cea din android.config');
+}
+if (iosKey) {
+  assert(props.iosGoogleMapsApiKey === iosKey, 'cheia iOS din plugin = cea din ios.config');
+}
+for (const k of ['androidGoogleMapsApiKey', 'iosGoogleMapsApiKey']) {
+  if (props[k] !== undefined) {
+    assert(typeof props[k] === 'string' && (props[k] as string).length > 10, `pluginul maps: ${k} valid`);
+  }
+}
 
 console.log(`appConfig: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
