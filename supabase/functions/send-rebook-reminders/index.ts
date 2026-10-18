@@ -97,10 +97,11 @@ Deno.serve(async (req) => {
       }
       let lang: 'ro' | 'en' = 'ro';
       let whatsappOk = true;
+      let profilePhone: string | null = null;
       if (visit.client_user_id) {
         const { data: profile } = await admin
           .from('profiles')
-          .select('language, notify_reminders, notify_whatsapp')
+          .select('language, notify_reminders, notify_whatsapp, phone')
           .eq('id', visit.client_user_id)
           .maybeSingle();
         lang = profile?.language === 'en' ? 'en' : 'ro';
@@ -110,14 +111,21 @@ Deno.serve(async (req) => {
           continue;
         }
         whatsappOk = profile ? profile.notify_whatsapp !== false : true;
+        profilePhone = (profile?.phone as string | null | undefined) ?? null;
       }
       const copy = messageRebook(business?.name ?? 'business', svc.name, lang);
       try {
         await notifyClientChannels({
           email: visit.client_email,
-          phone: whatsappOk ? visit.client_phone : null,
+          phone: whatsappOk
+            ? visit.client_phone && `${visit.client_phone}`.trim()
+              ? visit.client_phone
+              : profilePhone
+            : null,
           subject: copy.subject,
           text: copy.text,
+          wa: copy.wa,
+          log: { admin, type: 'REBOOK', businessId: visit.business_id, appointmentId: visit.id },
         });
         if (visit.client_user_id) {
           try {

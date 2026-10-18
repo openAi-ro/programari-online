@@ -18,6 +18,7 @@ import {
   messageApproved,
   messageRejected,
   notifyClientChannels,
+  resolveClientPhone,
   notifyLocale,
   parseNotifyLang,
 } from '../_shared/notify.ts';
@@ -161,11 +162,20 @@ Deno.serve(async (req) => {
   const results = wantsDecision
     ? await notifyClientChannels({
         email: live.client_email,
-        phone: wantsWhatsapp ? live.client_phone : null,
+        phone: wantsWhatsapp
+          ? await resolveClientPhone(admin, live.client_phone, live.client_user_id)
+          : null,
         subject: copy.subject,
         text: copy.text,
+        wa: copy.wa,
+        log: {
+          admin,
+          type: live.status === 'approved' ? 'CONFIRMED' : 'REJECTED',
+          businessId: live.business_id,
+          appointmentId: live.id,
+        },
       })
-    : [{ ok: true, channel: 'email' as const, stub: true }];
+    : [{ ok: false, channel: 'email' as const, error: 'opted_out' }];
 
   // popup push catre client (aprobat/respins) — sound+priority high via shared helper
   let pushSent = 0;

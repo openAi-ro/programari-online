@@ -453,3 +453,7 @@ verify_jwt = false
 # Callback OAuth Google: redirectul vine fără JWT Supabase (state semnat HMAC în funcție)
 [functions.google-calendar-callback]
 verify_jwt = false
+
+[functions.whatsapp-webhook]
+# Meta calls this unauthenticated; auth = verify token (GET) + X-Hub-Signature-256 (POST).
+verify_jwt = false

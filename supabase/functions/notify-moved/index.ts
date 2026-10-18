@@ -15,6 +15,7 @@ import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import {
   messageMoved,
   notifyClientChannels,
+  resolveClientPhone,
   notifyLocale,
   parseNotifyLang,
 } from '../_shared/notify.ts';
@@ -111,9 +112,11 @@ Deno.serve(async (req) => {
 
   const results = await notifyClientChannels({
     email: live.client_email,
-    phone: live.client_phone,
+    phone: await resolveClientPhone(admin, live.client_phone, live.client_user_id),
     subject: copy.subject,
     text: copy.text,
+    wa: copy.wa,
+    log: { admin, type: 'MOVED', businessId: live.business_id, appointmentId: live.id },
   });
 
   let pushSent = 0;

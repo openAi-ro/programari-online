@@ -340,6 +340,12 @@ Deno.serve(async (req) => {
       phone: ownerProfile.phone ?? null,
       subject: msg.subject,
       text: msg.text,
+      log: {
+        admin,
+        type: rescheduled ? 'OWNER_RESCHEDULED' : 'OWNER_PENDING',
+        businessId: record!.business_id,
+        appointmentId: record!.id,
+      },
     });
     for (const r of channelResults) {
       if (r.channel === 'whatsapp' && r.ok) sentWhatsapp = true;

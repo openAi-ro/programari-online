@@ -8,7 +8,13 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageTest, parseNotifyLang, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
+import {
+  logNotification,
+  messageTest,
+  parseNotifyLang,
+  sendWhatsApp,
+  whatsappUserHint,
+} from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 Deno.serve(async (req) => {
@@ -85,23 +91,43 @@ Deno.serve(async (req) => {
   const copy = messageTest(lang);
   const result = await sendWhatsApp(phone, copy.text);
 
-  if (!result.ok && !result.stub) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: 'whatsapp_send_failed',
-        phone,
-        result,
-        hint: whatsappUserHint(result, lang),
-      },
-      502
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (serviceKey) {
+    await logNotification(
+      { admin: createClient(supabaseUrl, serviceKey), type: 'TEST' },
+      phone,
+      result
     );
+  }
+
+  // Safe subset for the app (no raw provider body).
+  const safeResult = {
+    ok: result.ok,
+    stub: result.stub ?? false,
+    outcome: result.outcome,
+    provider: result.provider,
+    status: result.status,
+    errorCode: result.errorCode,
+    errorMessage: result.errorMessage,
+    template: result.template,
+    messageId: result.messageId,
+  };
+
+  if (!result.ok && !result.stub) {
+    // 200 so the app receives the body (supabase-js drops the body on non-2xx) and shows the real error.
+    return jsonResponse({
+      ok: false,
+      error: 'whatsapp_send_failed',
+      phone,
+      result: safeResult,
+      hint: `${whatsappUserHint(result, lang)}${result.errorCode ? ` (Meta ${result.errorCode})` : ''}`,
+    });
   }
 
   return jsonResponse({
     ok: result.ok,
     phone,
-    result,
+    result: safeResult,
     hint: result.stub
       ? lang === 'en'
         ? 'WhatsApp is not configured on the server — the message was only logged (WHATSAPP_STUB). Set the Meta or Twilio secrets.'

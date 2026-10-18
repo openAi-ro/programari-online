@@ -13,10 +13,13 @@ import {
   messageReminder,
   messageReminder24h,
   notifyClientChannels,
+  notifyLocale,
+  parseNotifyLang,
 } from '../_shared/notify.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
-type Admin = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type Admin = any;
 
 function formatTimeLocal(iso: string, timezone: string, lang: 'ro' | 'en'): string {
   try {
@@ -57,18 +60,22 @@ async function processWindow(
   const outcomes: { id: string; ok: boolean; detail?: string; kind: string }[] = [];
 
   const clientIds = [
-    ...new Set(list.map((r) => r.client_user_id).filter((v): v is string => !!v)),
+    ...new Set(list.map((r: { client_user_id: string | null }) => r.client_user_id).filter((v: string | null): v is string => !!v)),
   ];
   const notifyByUser: Record<string, boolean> = {};
   const whatsappByUser: Record<string, boolean> = {};
+  const langByUser: Record<string, 'ro' | 'en'> = {};
+  const phoneByUser: Record<string, string | null> = {};
   if (clientIds.length) {
     const { data: profiles } = await admin
       .from('profiles')
-      .select('id, notify_reminders, notify_whatsapp, language')
+      .select('id, notify_reminders, notify_whatsapp, language, phone')
       .in('id', clientIds);
     for (const p of profiles ?? []) {
       notifyByUser[p.id as string] = p.notify_reminders !== false;
       whatsappByUser[p.id as string] = p.notify_whatsapp !== false;
+      langByUser[p.id as string] = parseNotifyLang(p.language);
+      phoneByUser[p.id as string] = (p.phone as string | null) ?? null;
     }
   }
 
@@ -98,6 +105,7 @@ async function processWindow(
     const businessName = business?.name ?? 'business';
     const timezone = business?.timezone ?? 'Europe/Bucharest';
     const lang: 'ro' | 'en' = appt.client_user_id ? (langByUser[appt.client_user_id] ?? 'ro') : 'ro';
+    const timeLocal = formatTimeLocal(appt.start_at, timezone, lang);
     const copy =
       opts.kind === '24h'
         ? messageReminder24h(businessName, timeLocal, timezone, lang)
@@ -106,11 +114,24 @@ async function processWindow(
     try {
       const wantsWhatsapp =
         !appt.client_user_id || whatsappByUser[appt.client_user_id] !== false;
+      const phone =
+        appt.client_phone && `${appt.client_phone}`.trim()
+          ? appt.client_phone
+          : appt.client_user_id
+            ? phoneByUser[appt.client_user_id] ?? null
+            : null;
       await notifyClientChannels({
         email: appt.client_email,
-        phone: wantsWhatsapp ? appt.client_phone : null,
+        phone: wantsWhatsapp ? phone : null,
         subject: copy.subject,
         text: copy.text,
+        wa: copy.wa,
+        log: {
+          admin,
+          type: opts.kind === '24h' ? 'REMINDER_24H' : 'REMINDER_SOON',
+          businessId: appt.business_id,
+          appointmentId: appt.id,
+        },
       });
 
       // Best-effort client push (even if email/phone missing); do not fail reminder

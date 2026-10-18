@@ -1,6 +1,12 @@
 /**
  * Shared client notification channels: email (Resend) + WhatsApp (Twilio / Meta Cloud).
- * When env keys are missing, stubs log to console and return ok.
+ * When env keys are missing, stubs log to console and return ok:false + stub:true
+ * (nothing was delivered — callers must not treat a stub as sent).
+ *
+ * WhatsApp business-initiated messages: when a Meta template name is configured for the
+ * message type (WHATSAPP_TPL_<KEY>), an approved template is sent with body variables in a
+ * fixed order (see WA_TEMPLATE_VARS). Otherwise free-form text is sent (only delivered by
+ * Meta inside the 24h customer-service window).
  */
 import { normalizePhoneE164, phoneForMetaApi } from './phone.ts';
 
@@ -16,6 +22,9 @@ export function notifyLocale(lang: NotifyLang): string {
   return lang === 'en' ? 'en-GB' : 'ro-RO';
 }
 
+/** Final delivery state we know at send time (webhook may later move it to sent/delivered/read/failed). */
+export type SendOutcome = 'accepted' | 'stub' | 'failed' | 'invalid_phone';
+
 export type SendResult = {
   ok: boolean;
   stub?: boolean;
@@ -23,7 +32,83 @@ export type SendResult = {
   channel: 'email' | 'whatsapp';
   error?: string;
   provider?: 'twilio' | 'meta' | 'stub';
+  outcome?: SendOutcome;
+  /** Meta message id (wamid...) or Twilio SID when accepted. */
+  messageId?: string;
+  /** Template name used (Meta), when a template was sent. */
+  template?: string;
+  errorCode?: string;
+  errorMessage?: string;
 };
+
+/** Message types that can use an approved Meta template (env WHATSAPP_TPL_<KEY>). */
+export type WaTemplateKey =
+  | 'CONFIRMED'
+  | 'REJECTED'
+  | 'MOVED'
+  | 'REMINDER_24H'
+  | 'REMINDER_SOON'
+  | 'REBOOK'
+  | 'WAITLIST';
+
+/**
+ * Fixed body-variable order per template ({{1}}, {{2}}, ...). Must match
+ * docs/whatsapp-templates.md and the templates approved in Meta.
+ */
+export const WA_TEMPLATE_VARS: Record<WaTemplateKey, string[]> = {
+  CONFIRMED: ['business_name', 'date_time'],
+  REJECTED: ['business_name', 'date_time'],
+  MOVED: ['business_name', 'new_date_time'],
+  REMINDER_24H: ['business_name', 'time'],
+  REMINDER_SOON: ['business_name', 'time'],
+  REBOOK: ['business_name', 'service_name'],
+  WAITLIST: ['business_name', 'date', 'booking_link'],
+};
+
+export type WaTemplateRef = { key: WaTemplateKey; vars: string[] };
+
+/** Template name configured for a key, or null (=> free-form text). */
+export function waTemplateName(key: WaTemplateKey): string | null {
+  const v = Deno.env.get(`WHATSAPP_TPL_${key}`)?.trim();
+  return v ? v : null;
+}
+
+/** Meta rejects template params containing newlines/tabs or 4+ consecutive spaces. */
+export function sanitizeTemplateParam(v: string): string {
+  const t = `${v ?? ''}`.replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim();
+  return (t || '-').slice(0, 1000);
+}
+
+/** +40712345900 -> +407***900 ; email -> da***@domain */
+export function maskRecipient(v: string | null | undefined): string | null {
+  if (!v) return null;
+  if (v.includes('@')) {
+    const [user, dom] = v.split('@');
+    return `${user.slice(0, 2)}***@${dom}`;
+  }
+  const d = normalizePhoneE164(v) ?? v.replace(/[^\d+]/g, '');
+  if (d.length <= 6) return '***';
+  return `${d.slice(0, 4)}***${d.slice(-3)}`;
+}
+
+/** Parse a Meta Graph error body into code + message (safe to store/show). */
+export function parseMetaError(body: string): { code?: string; message?: string } {
+  try {
+    const j = JSON.parse(body) as {
+      error?: { code?: number | string; message?: string; error_data?: { details?: string } };
+    };
+    if (j?.error) {
+      const details = j.error.error_data?.details;
+      return {
+        code: j.error.code != null ? String(j.error.code) : undefined,
+        message: [j.error.message, details].filter(Boolean).join(' — ') || undefined,
+      };
+    }
+  } catch {
+    /* not json */
+  }
+  return { message: body ? body.slice(0, 500) : undefined };
+}
 
 export async function sendEmail(
   to: string,
@@ -32,8 +117,8 @@ export async function sendEmail(
 ): Promise<SendResult> {
   const key = Deno.env.get('RESEND_API_KEY');
   if (!key) {
-    console.log('EMAIL_STUB', { to, subject, text });
-    return { ok: true, stub: true, channel: 'email' };
+    console.log('EMAIL_STUB', { to: maskRecipient(to), subject });
+    return { ok: false, stub: true, channel: 'email', provider: 'stub', outcome: 'stub', error: 'email_not_configured' };
   }
 
   try {
@@ -53,22 +138,22 @@ export async function sendEmail(
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error('Resend error', res.status, body);
-      return { ok: false, status: res.status, channel: 'email', error: body };
+      return { ok: false, status: res.status, channel: 'email', error: body, outcome: 'failed', errorCode: String(res.status), errorMessage: body.slice(0, 500) };
     }
-    return { ok: true, status: res.status, channel: 'email' };
+    const j = (await res.json().catch(() => null)) as { id?: string } | null;
+    return { ok: true, status: res.status, channel: 'email', outcome: 'accepted', messageId: j?.id };
   } catch (e) {
     console.error('sendEmail exception', e);
-    return {
-      ok: false,
-      channel: 'email',
-      error: e instanceof Error ? e.message : String(e),
-    };
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, channel: 'email', error: msg, outcome: 'failed', errorMessage: msg };
   }
 }
 
 export type SendWhatsAppOpts = {
   /** Prefer an approved template (required for OTP / first contact outside 24h). */
   otpCode?: string;
+  /** Business-initiated notification: use WHATSAPP_TPL_<key> when configured. */
+  template?: WaTemplateRef;
 };
 
 /** User hint from Meta/Twilio error payload — safe to show in the app. */
@@ -95,6 +180,21 @@ export function whatsappUserHint(result: SendResult, lang: NotifyLang = 'ro'): s
       ? 'WhatsApp blocks free-form messages. Add an approved OTP template: WHATSAPP_OTP_TEMPLATE (Meta) or TWILIO_WHATSAPP_CONTENT_SID (Twilio).'
       : 'WhatsApp blochează mesajele libere. Adaugă un șablon OTP aprobat: WHATSAPP_OTP_TEMPLATE (Meta) sau TWILIO_WHATSAPP_CONTENT_SID (Twilio).';
   }
+  if (e.includes('whatsapp_not_configured')) {
+    return en
+      ? 'WhatsApp is not configured on the server (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID missing). Nothing was sent.'
+      : 'WhatsApp nu e configurat pe server (lipsesc WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID). Nu s-a trimis nimic.';
+  }
+  if (e.includes('131030') || e.includes('not in allowed list')) {
+    return en
+      ? 'Meta test number: this recipient is not in the allowed list. Add it in Meta > WhatsApp > API Setup > To (Manage phone number list).'
+      : 'Număr de test Meta: destinatarul nu e în lista permisă. Adaugă-l în Meta > WhatsApp > API Setup > To (Manage phone number list).';
+  }
+  if (result.errorCode === '100' || e.includes('"code":100') || e.includes('unsupported post request') || e.includes('does not exist, cannot be loaded')) {
+    return en
+      ? 'Meta rejected the request: WHATSAPP_PHONE_NUMBER_ID is wrong (use the Phone number ID from API Setup, not the WABA ID) or the token has no access to it.'
+      : 'Meta a respins cererea: WHATSAPP_PHONE_NUMBER_ID e greșit (folosește Phone number ID din API Setup, nu WABA ID) sau token-ul nu are acces la el.';
+  }
   if (e.includes('133010') || e.includes('not a whatsapp user')) {
     return en ? 'This number has no active WhatsApp.' : 'Acest număr nu are WhatsApp activ.';
   }
@@ -108,6 +208,7 @@ export function whatsappUserHint(result: SendResult, lang: NotifyLang = 'ro'): s
       : 'Nu am putut trimite codul: WhatsApp cere aprobarea numelui afișat al numărului de business. Approbă-l în WhatsApp Manager (Meta Business), apoi reîncearcă.';
   }
   if (
+    result.errorCode === '190' ||
     e.includes('"code":190') ||
     e.includes('errorcod":190') ||
     (e.includes('oauth') && e.includes('expired')) ||
@@ -117,10 +218,15 @@ export function whatsappUserHint(result: SendResult, lang: NotifyLang = 'ro'): s
       ? 'The WhatsApp token expired. Refresh WHATSAPP_ACCESS_TOKEN in the Supabase secrets.'
       : 'Token-ul WhatsApp a expirat. Reînnoiește WHATSAPP_ACCESS_TOKEN în secrets Supabase.';
   }
+  if (e.includes('132000') || e.includes('number of parameters')) {
+    return en
+      ? 'The WhatsApp template variables do not match the approved template (count/order). See docs/whatsapp-templates.md.'
+      : 'Variabilele nu se potrivesc cu șablonul aprobat (număr/ordine). Vezi docs/whatsapp-templates.md.';
+  }
   if (e.includes('132001') || e.includes('template name does not exist')) {
     return en
-      ? 'The WhatsApp template does not exist or is not approved. Check WHATSAPP_OTP_TEMPLATE and the language.'
-      : 'Șablonul WhatsApp nu există sau nu e aprobat. Verifică WHATSAPP_OTP_TEMPLATE și limba.';
+      ? 'The WhatsApp template does not exist or is not approved. Check WHATSAPP_OTP_TEMPLATE / WHATSAPP_TPL_* and the language.'
+      : 'Șablonul WhatsApp nu există sau nu e aprobat. Verifică WHATSAPP_OTP_TEMPLATE / WHATSAPP_TPL_* și limba.';
   }
   if (e.includes('21608') || e.includes('unverified')) {
     return en
@@ -148,18 +254,45 @@ async function postMetaMessage(
       body: JSON.stringify(payload),
     }
   );
+  const template = (payload.template as { name?: string } | undefined)?.name;
   if (!res.ok) {
     const errBody = await res.text().catch(() => '');
     console.error('Meta WhatsApp error', res.status, errBody);
+    const pe = parseMetaError(errBody);
     return {
       ok: false,
       status: res.status,
       channel: 'whatsapp',
       provider: 'meta',
       error: errBody,
+      outcome: 'failed',
+      errorCode: pe.code,
+      errorMessage: pe.message,
+      template,
     };
   }
-  return { ok: true, status: res.status, channel: 'whatsapp', provider: 'meta' };
+  const j = (await res.json().catch(() => null)) as { messages?: { id?: string }[] } | null;
+  return {
+    ok: true,
+    status: res.status,
+    channel: 'whatsapp',
+    provider: 'meta',
+    outcome: 'accepted',
+    messageId: j?.messages?.[0]?.id,
+    template,
+  };
+}
+
+function stubResult(provider: string, toE164: string): SendResult {
+  console.log('WHATSAPP_STUB', { to: maskRecipient(toE164), provider });
+  return {
+    ok: false,
+    stub: true,
+    channel: 'whatsapp',
+    provider: 'stub',
+    outcome: 'stub',
+    error: 'whatsapp_not_configured',
+  };
 }
 
 async function sendWhatsAppMeta(
@@ -170,8 +303,7 @@ async function sendWhatsAppMeta(
   const token = Deno.env.get('WHATSAPP_ACCESS_TOKEN');
   const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
   if (!token || !phoneNumberId) {
-    console.log('WHATSAPP_STUB', { toE164, text, provider: 'meta' });
-    return { ok: true, stub: true, channel: 'whatsapp', provider: 'stub' };
+    return stubResult('meta', toE164);
   }
 
   const to = phoneForMetaApi(toE164);
@@ -213,6 +345,29 @@ async function sendWhatsAppMeta(
       });
     }
 
+    const tplName = opts?.template ? waTemplateName(opts.template.key) : null;
+    if (opts?.template && tplName) {
+      const lang = Deno.env.get('WHATSAPP_TPL_LANG')?.trim() || 'ro';
+      return await postMetaMessage(phoneNumberId, token, {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'template',
+        template: {
+          name: tplName,
+          language: { code: lang },
+          components: [
+            {
+              type: 'body',
+              parameters: opts.template.vars.map((v) => ({
+                type: 'text',
+                text: sanitizeTemplateParam(v),
+              })),
+            },
+          ],
+        },
+      });
+    }
+
     return await postMetaMessage(phoneNumberId, token, {
       messaging_product: 'whatsapp',
       to,
@@ -221,11 +376,14 @@ async function sendWhatsAppMeta(
     });
   } catch (e) {
     console.error('sendWhatsAppMeta exception', e);
+    const msg = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
       channel: 'whatsapp',
       provider: 'meta',
-      error: e instanceof Error ? e.message : String(e),
+      error: msg,
+      outcome: 'failed',
+      errorMessage: msg,
     };
   }
 }
@@ -247,8 +405,7 @@ async function sendWhatsAppTwilio(
     apiKeySid?.startsWith('SK') && apiKeySecret ? apiKeySecret : authToken;
 
   if (!sid || !authPass || !from) {
-    console.log('WHATSAPP_STUB', { toE164, text, provider: 'twilio' });
-    return { ok: true, stub: true, channel: 'whatsapp', provider: 'stub' };
+    return stubResult('twilio', toE164);
   }
 
   try {
@@ -280,23 +437,29 @@ async function sendWhatsAppTwilio(
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');
       console.error('Twilio error', res.status, errBody);
+      let code: string | undefined;
+      try {
+        code = String((JSON.parse(errBody) as { code?: number }).code ?? '') || undefined;
+      } catch {
+        /* ignore */
+      }
       return {
         ok: false,
         status: res.status,
         channel: 'whatsapp',
         provider: 'twilio',
         error: errBody,
+        outcome: 'failed',
+        errorCode: code,
+        errorMessage: errBody.slice(0, 500),
       };
     }
-    return { ok: true, status: res.status, channel: 'whatsapp', provider: 'twilio' };
+    const tj = (await res.json().catch(() => null)) as { sid?: string } | null;
+    return { ok: true, status: res.status, channel: 'whatsapp', provider: 'twilio', outcome: 'accepted', messageId: tj?.sid };
   } catch (e) {
     console.error('sendWhatsAppTwilio exception', e);
-    return {
-      ok: false,
-      channel: 'whatsapp',
-      provider: 'twilio',
-      error: e instanceof Error ? e.message : String(e),
-    };
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, channel: 'whatsapp', provider: 'twilio', error: msg, outcome: 'failed', errorMessage: msg };
   }
 }
 
@@ -307,11 +470,13 @@ export async function sendWhatsApp(
 ): Promise<SendResult> {
   const toE164 = normalizePhoneE164(toRaw);
   if (!toE164) {
-    console.error('sendWhatsApp invalid phone', toRaw);
+    console.error('sendWhatsApp invalid phone', maskRecipient(toRaw));
     return {
       ok: false,
       channel: 'whatsapp',
       error: 'invalid_phone',
+      outcome: 'invalid_phone',
+      errorCode: 'invalid_phone',
     };
   }
 
@@ -337,8 +502,68 @@ export async function sendWhatsApp(
   if (hasMeta) return sendWhatsAppMeta(toE164, text, opts);
   if (hasTwilio) return sendWhatsAppTwilio(toE164, text, opts);
 
-  console.log('WHATSAPP_STUB', { toE164, text, provider: 'none' });
-  return { ok: true, stub: true, channel: 'whatsapp', provider: 'stub' };
+  return stubResult('none', toE164);
+}
+
+// deno-lint-ignore no-explicit-any
+type AnyClient = { from: (table: string) => any };
+
+export type NotifyLogCtx = {
+  /** Service-role client (notification_log is written by service role only). */
+  admin: AnyClient;
+  type: string;
+  businessId?: string | null;
+  appointmentId?: string | null;
+};
+
+/** Best-effort row in public.notification_log; never throws. */
+export async function logNotification(
+  ctx: NotifyLogCtx | undefined,
+  to: string | null,
+  r: SendResult
+): Promise<void> {
+  if (!ctx?.admin) return;
+  try {
+    const { error } = await ctx.admin.from('notification_log').insert({
+      business_id: ctx.businessId ?? null,
+      appointment_id: ctx.appointmentId ?? null,
+      channel: r.channel,
+      type: ctx.type,
+      to_masked: maskRecipient(to),
+      template: r.template ?? null,
+      wamid: r.channel === 'whatsapp' ? r.messageId ?? null : null,
+      status: r.outcome ?? (r.ok ? 'accepted' : r.stub ? 'stub' : 'failed'),
+      error_code: r.errorCode ?? (r.stub ? 'not_configured' : null),
+      error_message: r.errorMessage ?? (r.ok ? null : r.error ? `${r.error}`.slice(0, 500) : null),
+    });
+    if (error) console.error('notification_log insert failed', error.message);
+  } catch (e) {
+    console.error('notification_log insert exception', e);
+  }
+}
+
+/**
+ * Booking phone first, else the client's profile phone (when the client has an account).
+ * Returns null when neither exists.
+ */
+export async function resolveClientPhone(
+  admin: AnyClient,
+  bookingPhone: string | null | undefined,
+  clientUserId: string | null | undefined
+): Promise<string | null> {
+  if (bookingPhone && bookingPhone.trim()) return bookingPhone;
+  if (!clientUserId) return null;
+  try {
+    const { data } = await admin
+      .from('profiles')
+      .select('phone')
+      .eq('id', clientUserId)
+      .maybeSingle();
+    const p = (data as { phone?: string | null } | null)?.phone;
+    return p && p.trim() ? p : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function notifyClientChannels(opts: {
@@ -346,13 +571,20 @@ export async function notifyClientChannels(opts: {
   phone: string | null;
   subject: string;
   text: string;
+  /** Template ref from the message builder (copy.wa); used when WHATSAPP_TPL_<key> is set. */
+  wa?: WaTemplateRef;
+  log?: NotifyLogCtx;
 }): Promise<SendResult[]> {
   const results: SendResult[] = [];
   if (opts.email) {
-    results.push(await sendEmail(opts.email, opts.subject, opts.text));
+    const r = await sendEmail(opts.email, opts.subject, opts.text);
+    results.push(r);
+    await logNotification(opts.log, opts.email, r);
   }
   if (opts.phone) {
-    results.push(await sendWhatsApp(opts.phone, opts.text));
+    const r = await sendWhatsApp(opts.phone, opts.text, opts.wa ? { template: opts.wa } : undefined);
+    results.push(r);
+    await logNotification(opts.log, opts.phone, r);
   }
   if (!opts.email && !opts.phone) {
     console.log('NOTIFY_SKIP_NO_CONTACT', opts.subject);
@@ -403,36 +635,34 @@ export function messageApproved(
   businessName: string,
   whenLabel: string,
   lang: NotifyLang = 'ro'
-): {
-  subject: string;
-  text: string;
-} {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'CONFIRMED', vars: [businessName, whenLabel] };
   if (lang === 'en') {
     return {
       subject: 'Booking confirmed',
       text: `Your booking at ${businessName} on ${whenLabel} was confirmed.`,
+      wa,
     };
   }
   const text = `Programarea ta la ${businessName} pe ${whenLabel} a fost confirmată.`;
-  return { subject: 'Programare confirmată', text };
+  return { subject: 'Programare confirmată', text, wa };
 }
 
 export function messageRejected(
   businessName: string,
   whenLabel: string,
   lang: NotifyLang = 'ro'
-): {
-  subject: string;
-  text: string;
-} {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'REJECTED', vars: [businessName, whenLabel] };
   if (lang === 'en') {
     return {
       subject: 'Booking rejected',
       text: `Your booking at ${businessName} on ${whenLabel} was rejected. The slot was released.`,
+      wa,
     };
   }
   const text = `Programarea ta la ${businessName} pe ${whenLabel} a fost respinsă. Slotul a fost eliberat.`;
-  return { subject: 'Programare respinsă', text };
+  return { subject: 'Programare respinsă', text, wa };
 }
 
 export function messageReminder(
@@ -440,15 +670,17 @@ export function messageReminder(
   timeLocal: string,
   timezone: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'REMINDER_SOON', vars: [businessName, timeLocal] };
   if (lang === 'en') {
     return {
       subject: 'Booking reminder — 30 minutes',
       text: `Hi! You have a booking at ${businessName} in 30 minutes (${timeLocal}, ${timezone}).`,
+      wa,
     };
   }
   const text = `Salut! Ai o programare la ${businessName} în 30 de minute (${timeLocal}, ${timezone}).`;
-  return { subject: 'Reminder programare — 30 de minute', text };
+  return { subject: 'Reminder programare — 30 de minute', text, wa };
 }
 
 export function messageReminder24h(
@@ -456,29 +688,34 @@ export function messageReminder24h(
   timeLocal: string,
   timezone: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'REMINDER_24H', vars: [businessName, timeLocal] };
   if (lang === 'en') {
     return {
+      wa,
       subject: 'Booking reminder — 24 hours',
       text: `Hi! You have a booking at ${businessName} tomorrow at ${timeLocal} (${timezone}). Confirm attendance from the app, under My bookings.`,
     };
   }
   const text = `Salut! Ai o programare la ${businessName} mâine la ${timeLocal} (${timezone}). Confirmă prezența din aplicație, la Programările mele.`;
-  return { subject: 'Reminder programare — 24 de ore', text };
+  return { subject: 'Reminder programare — 24 de ore', text, wa };
 }
 
 export function messageRebook(
   businessName: string,
   serviceName: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'REBOOK', vars: [businessName, serviceName] };
   if (lang === 'en') {
     return {
+      wa,
       subject: 'Time to come back',
       text: `Hi! It's time for ${serviceName} at ${businessName}. Book your next visit from the app.`,
     };
   }
   return {
+    wa,
     subject: 'E timpul sa revii',
     text: `Salut! A venit timpul pentru ${serviceName} la ${businessName}. Programeaza urmatoarea vizita din aplicatie.`,
   };
@@ -490,19 +727,21 @@ export function messagePostpone(
   newTimeLocal: string,
   timezone: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'MOVED', vars: [businessName, newTimeLocal] };
   const hoursLabel =
     lang === 'en'
       ? `${hours} ${hours === 1 ? 'hour' : 'hours'}`
       : `${hours} ${hours === 1 ? 'oră' : 'ore'}`;
   if (lang === 'en') {
     return {
+      wa,
       subject: `Booking postponed by ${hoursLabel}`,
       text: `The booking at ${businessName} is postponed by ${hoursLabel}. New time: ${newTimeLocal} (${timezone}).`,
     };
   }
   const text = `Programarea la ${businessName} se amână cu ${hoursLabel}. Noua oră: ${newTimeLocal} (${timezone}).`;
-  return { subject: `Programare amânată cu ${hoursLabel}`, text };
+  return { subject: `Programare amânată cu ${hoursLabel}`, text, wa };
 }
 
 export function messageMoved(
@@ -510,15 +749,17 @@ export function messageMoved(
   newTimeLocal: string,
   timezone: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'MOVED', vars: [businessName, newTimeLocal] };
   if (lang === 'en') {
     return {
+      wa,
       subject: 'Booking moved',
       text: `Your booking at ${businessName} was moved. New time: ${newTimeLocal} (${timezone}).`,
     };
   }
   const text = `Programarea ta la ${businessName} a fost mutata. Noua ora: ${newTimeLocal} (${timezone}).`;
-  return { subject: 'Programare mutata', text };
+  return { subject: 'Programare mutata', text, wa };
 }
 
 export function messageTest(lang: NotifyLang = 'ro'): { subject: string; text: string } {
@@ -548,19 +789,21 @@ export function messageAuthOtp(code: string, lang: NotifyLang = 'ro'): {
   return { subject: 'Cod autentificare Programari', text };
 }
 
-/** Notify business owner about a new pending booking request. */
+/** Notify a waitlisted client that a slot freed up. */
 export function messageWaitlistSpot(
   businessName: string,
   dateLabel: string,
   bookingUrl: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'WAITLIST', vars: [businessName, dateLabel, bookingUrl] };
   if (lang === 'en') {
     return {
+      wa,
       subject: 'Slot freed up — Programari',
       text: `A slot freed up at ${businessName} on ${dateLabel}. Book now: ${bookingUrl}`,
     };
   }
   const text = `S-a eliberat un loc la ${businessName} pe ${dateLabel}. Rezervă acum: ${bookingUrl}`;
-  return { subject: 'Loc eliberat — Programari', text };
+  return { subject: 'Loc eliberat — Programari', text, wa };
 }

@@ -14,6 +14,7 @@ import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import {
   messagePostpone,
   notifyClientChannels,
+  resolveClientPhone,
   notifyLocale,
   parseNotifyLang,
 } from '../_shared/notify.ts';
@@ -140,9 +141,11 @@ Deno.serve(async (req) => {
 
   const results = await notifyClientChannels({
     email: live.client_email,
-    phone: live.client_phone,
+    phone: await resolveClientPhone(admin, live.client_phone, live.client_user_id),
     subject: copy.subject,
     text: copy.text,
+    wa: copy.wa,
+    log: { admin, type: 'POSTPONE', businessId: live.business_id, appointmentId: live.id },
   });
   // push popup client pentru amânare — sound+priority high via shared helper
   let pushSent = 0;

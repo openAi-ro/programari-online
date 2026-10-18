@@ -6,7 +6,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { messageAuthOtp, parseNotifyLang, sendWhatsApp, whatsappUserHint } from '../_shared/notify.ts';
+import { messageAuthOtp, parseNotifyLang, sendWhatsApp, whatsappUserHint, logNotification } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
 
 const COOLDOWN_MS = 60_000;
@@ -104,6 +104,7 @@ Deno.serve(async (req) => {
 
   const copy = messageAuthOtp(code, lang);
   const wa = await sendWhatsApp(phone, copy.text, { otpCode: code });
+  await logNotification({ admin, type: 'OTP' }, phone, wa);
 
   if (!wa.ok && !wa.stub) {
     console.error('auth-whatsapp-otp send failed', wa);

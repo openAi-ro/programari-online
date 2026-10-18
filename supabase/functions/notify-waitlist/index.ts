@@ -133,6 +133,8 @@ Deno.serve(async (req) => {
       phone,
       subject: copy.subject,
       text: copy.text,
+      wa: copy.wa,
+      log: { admin, type: 'WAITLIST', businessId },
     });
 
     const delivered = results.some((r) => r.ok && !r.stub);
