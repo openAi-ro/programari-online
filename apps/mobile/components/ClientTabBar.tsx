@@ -8,6 +8,7 @@ import { useTheme } from '@/components/ui';
 import { fetchUnreadTotal } from '@/lib/chatRpc';
 import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
+import { TabCountBadge } from '@/components/CountBadge';
 
 type TabKey = 'home' | 'search' | 'appointments' | 'favorites' | 'account';
 
@@ -108,13 +109,7 @@ export function ClientTabBar({
           >
             <View>
               <Ionicons name={tab.icon} size={22} color={color} />
-              {count > 0 ? (
-                <View style={[styles.badge, { backgroundColor: t.colors.danger }]}>
-                  <Text style={styles.badgeText} numberOfLines={1}>
-                    {count > 9 ? '9+' : String(count)}
-                  </Text>
-                </View>
-              ) : null}
+              <TabCountBadge count={count} />
             </View>
             <Text
               style={[styles.label, { color }]}
@@ -156,21 +151,5 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: '100%',
     textAlign: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -10,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
   },
 });
