@@ -36,6 +36,7 @@ import {
 } from '@/lib/themePreference';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
 import { setLanguage } from '@/lib/language';
+import { confirmAction } from '@/lib/confirm';
 import { FlagRO, FlagUS } from '@/components/LanguageFlag';
 import { useBack } from '@/lib/nav';
 import {
@@ -1014,21 +1015,18 @@ export default function SettingsScreen() {
     if (!res.ok) setError(trKey('set.exportFailed'));
   }
 
-  function handleDeleteAccount() {
-    Alert.alert(trKey('set.deleteAccount'), trKey('set.deleteAccountBody'), [
-      { text: trKey('common.cancel'), style: 'cancel' },
-      {
-        text: trKey('set.deleteAccountConfirm'),
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            setError(null);
-            const res = await deleteMyAccount();
-            if (!res.ok) setError(trKey('set.deleteAccountFailed'));
-          })();
-        },
-      },
-    ]);
+  async function handleDeleteAccount() {
+    const ok = await confirmAction({
+      title: trKey('set.deleteAccount'),
+      message: trKey('set.deleteAccountBody'),
+      confirmText: trKey('set.deleteAccountConfirm'),
+      cancelText: trKey('common.cancel'),
+      destructive: true,
+    });
+    if (!ok) return;
+    setError(null);
+    const res = await deleteMyAccount();
+    if (!res.ok) setError(trKey('set.deleteAccountFailed'));
   }
   async function handleLogout() {
     setError(null);
@@ -1846,7 +1844,7 @@ export default function SettingsScreen() {
         icon="trash-outline"
         title={tr('set.deleteAccount')}
         description={tr('set.deleteAccountBody')}
-        onPress={handleDeleteAccount}
+        onPress={() => void handleDeleteAccount()}
         danger
       />
 <SettingRow
