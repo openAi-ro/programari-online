@@ -168,13 +168,37 @@ export async function createEvent(
   return data.id;
 }
 
+export async function updateEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  body: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) throw new Error(`google_update_failed_${res.status}`);
+}
+
 export async function deleteEvent(
   accessToken: string,
   calendarId: string,
   eventId: string
 ): Promise<void> {
-  await fetch(
+  const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  // 404/410 înseamnă că evenimentul nu mai există — scopul e atins.
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    throw new Error(`google_delete_failed_${res.status}`);
+  }
 }

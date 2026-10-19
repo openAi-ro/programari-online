@@ -14,6 +14,7 @@ import {
   googleEnv,
   listEvents,
   refreshAccessToken,
+  updateEvent,
 } from '../_shared/googleCalendar.ts';
 
 Deno.serve(async (req) => {
@@ -144,10 +145,55 @@ Deno.serve(async (req) => {
         start: { dateTime: apt.start_at, timeZone: business.timezone ?? 'Europe/Bucharest' },
         end: { dateTime: apt.end_at, timeZone: business.timezone ?? 'Europe/Bucharest' },
       });
-      await admin.from('appointments').update({ google_event_id: eventId }).eq('id', apt.id);
+      const { error: linkErr } = await admin
+        .from('appointments')
+        .update({ google_event_id: eventId })
+        .eq('id', apt.id);
+      if (linkErr) {
+        // Fără legătură salvată, evenimentul ar fi duplicat la următoarea
+        // sincronizare — îl ștergem înapoi din Google.
+        await deleteEvent(accessToken, calendarId, eventId).catch(() => {});
+        continue;
+      }
       pushed += 1;
     } catch {
       // Un eveniment eșuat nu oprește restul sincronizării.
+    }
+  }
+
+  // Actualizează evenimentele Google ale programărilor reprogramate:
+  // dacă ora din Google diferă de ora curentă din DB, o corectăm prin PATCH.
+  const googleById = new Map(
+    events
+      .filter((ev) => ev.start?.dateTime && ev.end?.dateTime)
+      .map((ev) => [ev.id, ev]),
+  );
+  const { data: toUpdate } = await admin
+    .from('appointments')
+    .select('id, start_at, end_at, service_name, client_email, client_phone, google_event_id')
+    .eq('business_id', businessId)
+    .eq('status', 'approved')
+    .not('google_event_id', 'is', null)
+    .gte('start_at', now.toISOString())
+    .lte('start_at', timeMax)
+    .limit(100);
+  let updated = 0;
+  for (const apt of toUpdate ?? []) {
+    const ev = googleById.get(apt.google_event_id as string);
+    if (!ev) continue;
+    const sameStart = Date.parse(ev.start!.dateTime!) === Date.parse(apt.start_at);
+    const sameEnd = Date.parse(ev.end!.dateTime!) === Date.parse(apt.end_at);
+    if (sameStart && sameEnd) continue;
+    try {
+      await updateEvent(accessToken, calendarId, apt.google_event_id as string, {
+        summary: `${business.name}: ${apt.service_name ?? 'Programare'}`,
+        description: [apt.client_email, apt.client_phone].filter(Boolean).join(' '),
+        start: { dateTime: apt.start_at, timeZone: business.timezone ?? 'Europe/Bucharest' },
+        end: { dateTime: apt.end_at, timeZone: business.timezone ?? 'Europe/Bucharest' },
+      });
+      updated += 1;
+    } catch {
+      // Rămâne ora veche în Google; reîncercăm la următoarea sincronizare.
     }
   }
 
@@ -159,13 +205,19 @@ Deno.serve(async (req) => {
     .in('status', ['cancelled', 'rejected'])
     .not('google_event_id', 'is', null)
     .limit(100);
+  let removed = 0;
+  let removeFailed = 0;
   for (const apt of toRemove ?? []) {
     try {
       await deleteEvent(accessToken, calendarId, apt.google_event_id as string);
     } catch {
-      // Eveniment deja șters în Google.
+      // Ștergerea a eșuat: păstrăm legătura ca să reîncercăm data viitoare,
+      // în loc să lăsăm evenimentul orfan în Google.
+      removeFailed += 1;
+      continue;
     }
     await admin.from('appointments').update({ google_event_id: null }).eq('id', apt.id);
+    removed += 1;
   }
 
   await admin
@@ -173,5 +225,5 @@ Deno.serve(async (req) => {
     .update({ last_synced_at: new Date().toISOString() })
     .eq('business_id', businessId);
 
-  return jsonResponse({ ok: true, imported: blocks.length, pushed });
+  return jsonResponse({ ok: true, imported: blocks.length, pushed, updated, removed, removeFailed });
 });
