@@ -218,8 +218,10 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
 }
 const styles = StyleSheet.create({
   body: { flex: 1, width: '100%' },
-  messages: { paddingHorizontal: spacing.sm, gap: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.sm },
-  bubbleWrap: { alignSelf: 'flex-start', maxWidth: '80%', gap: 2 },
+  messages: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.sm },
+  // Spacing lives inside each cell: a container `gap` is not part of measured cell lengths,
+  // which broke scroll-up (wheel) on web for the inverted list.
+  bubbleWrap: { alignSelf: 'flex-start', maxWidth: '80%', gap: 2, paddingVertical: spacing.xs },
   bubble: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleTime: { fontSize: 10, marginTop: 1 },
