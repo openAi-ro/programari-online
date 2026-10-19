@@ -66,6 +66,8 @@ export default function BusinessRequestsScreen() {
   // Id-uri deja văzute — ca popup-ul din bara de notificări să apară
   // doar pentru cereri NOI, nu la fiecare refresh / focus.
   const seenIdsRef = useRef<Set<string>>(new Set());
+  const statusBusyRef = useRef<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const businessIdsRef = useRef<string[]>([]);
   businessIdsRef.current = businessIds;
 
@@ -213,18 +215,27 @@ export default function BusinessRequestsScreen() {
   }, [businessIds]);
 
   async function updateStatus(id: string, status: 'approved' | 'rejected') {
+    if (statusBusyRef.current) return;
+    statusBusyRef.current = id;
+    try {
     setError(null);
     setSuccess(null);
-    const { error: err } = await supabase
+    const { data: updatedRows, error: err } = await supabase
       .from('appointments')
       .update({
         status,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .select('id');
     if (err) {
       setError(err.message);
+      return;
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      setError(trKey('req.alreadyDecided'));
+      await load();
       return;
     }
     // Cardul se actualizeaza imediat; notificarea si reincarcarea vin dupa.
@@ -244,6 +255,9 @@ export default function BusinessRequestsScreen() {
     }
 
     await load();
+    } finally {
+      statusBusyRef.current = null;
+    }
   }
 
   function notifyWaitlistForRow(row: Row | undefined) {
@@ -425,11 +439,16 @@ export default function BusinessRequestsScreen() {
   async function deleteAppointment(id: string) {
     setError(null);
     setSuccess(null);
+    const row = rows.find((r) => r.id === id);
     const { error: err } = await supabase.rpc('delete_appointment_and_chats', { p_appointment_id: id });
     if (err) {
       setError(err.message);
       return;
     }
+    if (row?.payment_status === 'paid') {
+      await invokeRefundDeposit(id);
+    }
+    notifyWaitlistForRow(row);
     setRows((prev) => prev.filter((r) => r.id !== id));
     setSuccess(trKey('req.deleted'));
     await load();
@@ -527,7 +546,7 @@ export default function BusinessRequestsScreen() {
             postponeBusy={postponeBusyId === item.id}
             onMarkNoShow={() => void markNoShow(item.id)}
             onClearNoShow={() => void clearNoShow(item.id)}
-            onDelete={() => void deleteAppointment(item.id)}
+            onDelete={() => { setError(null); setSuccess(null); setDeleteTarget(item); }}
             onQuickMessage={(txt) => sendQuickMessage(item, txt)}
             onWaiveDeposit={() => void waiveDeposit(item.id)}
           />
@@ -625,6 +644,45 @@ export default function BusinessRequestsScreen() {
                   loading={moveSaving}
                   disabled={!moveSlot || moveSaving}
                   onPress={() => void saveMove()}
+                />
+              </View>
+            </ButtonRow>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={deleteTarget != null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDeleteTarget(null)}
+        statusBarTranslucent
+      >
+        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+          <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
+            <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
+              {tr('req.confirmDeleteTitle')}
+            </Text>
+            <Text style={{ color: t.colors.textMuted }}>{tr('req.confirmDeleteBody')}</Text>
+            <ButtonRow>
+              <View style={styles.actionFlex}>
+                <Button
+                  label={tr('appt.giveUp')}
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => setDeleteTarget(null)}
+                />
+              </View>
+              <View style={styles.actionFlex}>
+                <Button
+                  label={tr('appt.deleteSession')}
+                  icon="trash-outline"
+                  variant="danger"
+                  size="sm"
+                  onPress={() => {
+                    const target = deleteTarget;
+                    setDeleteTarget(null);
+                    if (target) void deleteAppointment(target.id);
+                  }}
                 />
               </View>
             </ButtonRow>

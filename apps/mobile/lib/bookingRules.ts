@@ -1,5 +1,6 @@
 import { CHECKIN_OPEN_BEFORE_MS } from './checkin';
 import { generateFreeSlots } from './slots';
+import { addOneDay, formatInTimeZone } from './timezone';
 import { trKey } from './i18n';
 import type { Appointment, BreakHours, BusinessProfile, Staff, WorkingHours } from './types';
 
@@ -23,15 +24,12 @@ export function firstBookableDateYmd(opts: {
 }): string {
   const blocked = opts.blockedDates ?? [];
   const notBefore = addMinutes(new Date(), opts.minNoticeMinutes ?? 0);
-  const last = new Date();
-  last.setHours(0, 0, 0, 0);
-  last.setDate(last.getDate() + (opts.maxAdvanceDays ?? 90));
+  const maxDays = Math.max(1, opts.maxAdvanceDays ?? 90);
 
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  for (let i = 0; i < 21; i++) {
-    if (d > last) break;
-    const ymd = toYmd(d);
+  // Zilele se parcurg in fusul firmei, nu in fusul telefonului.
+  let ymd = formatInTimeZone(new Date(), opts.timezone, 'yyyy-MM-dd');
+  const todayYmd = ymd;
+  for (let i = 0; i < maxDays; i++) {
     const slots = generateFreeSlots({
       dateLocal: ymd,
       timezone: opts.timezone,
@@ -44,9 +42,9 @@ export function firstBookableDateYmd(opts: {
       notBeforeUtc: notBefore,
     });
     if (slots.length > 0) return ymd;
-    d.setDate(d.getDate() + 1);
+    ymd = addOneDay(ymd);
   }
-  return toYmd(new Date());
+  return todayYmd;
 }
 
 export function addMinutes(date: Date, minutes: number): Date {
@@ -58,12 +56,20 @@ export function notBeforeUtc(business: Pick<BusinessProfile, 'min_notice_minutes
 }
 
 export function maxBookingDate(
-  business: Pick<BusinessProfile, 'max_advance_days'>
+  business: Pick<BusinessProfile, 'max_advance_days' | 'timezone'>
 ): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + (business.max_advance_days ?? 90));
-  return d;
+  const days = business.max_advance_days ?? 90;
+  if (!business.timezone) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + days);
+    return d;
+  }
+  // Data maxima se calculeaza pe calendarul firmei; pranzul local evita
+  // decalajele de fus la conversia inapoi in YYYY-MM-DD.
+  let ymd = formatInTimeZone(new Date(), business.timezone, 'yyyy-MM-dd');
+  for (let i = 0; i < days; i++) ymd = addOneDay(ymd);
+  return new Date(`${ymd}T12:00:00`);
 }
 
 export function canClientCancel(

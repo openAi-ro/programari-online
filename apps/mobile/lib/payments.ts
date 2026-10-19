@@ -75,11 +75,18 @@ export async function invokeWaiveDeposit(
   return { ok: true };
 }
 
-export async function invokeRefundDeposit(appointmentId: string): Promise<void> {
-  const { error } = await supabase.functions.invoke('refund-deposit', {
+export async function invokeRefundDeposit(
+  appointmentId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke('refund-deposit', {
     body: { appointment_id: appointmentId },
   });
   if (error) {
-    console.warn('refund-deposit failed', error.message);
+    return { ok: false, error: await functionErrorCode(error) };
   }
+  const payload = data as { ok?: boolean; error?: string } | null;
+  if (payload?.ok === false) {
+    return { ok: false, error: payload.error ?? 'refund_failed' };
+  }
+  return { ok: true };
 }

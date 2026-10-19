@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, router, useSegments } from 'expo-router';
+import { Redirect, router, useFocusEffect, useSegments } from 'expo-router';
 
 import { ClientTabBar } from '@/components/ClientTabBar';
 import {
@@ -60,6 +60,7 @@ import { PromoVideo } from '@/components/PromoVideo';
 import { supabase } from '@/lib/supabase';
 import { scheduleMessageDismiss } from '@/lib/transientMessage';
 import { isGoogleConnected } from '@/lib/googleCalendar';
+import { getSelectedBusinessId } from '@/lib/myBusiness';
 import {
   serviceChecklistState,
   type ServiceChecklistState,
@@ -136,18 +137,32 @@ export default function SettingsScreen() {
     void getThemePreference().then(setThemePref);
   }, []);
 
-  useEffect(() => {
+  const loadGcalStatus = useCallback(async () => {
     if (!businessId) {
       setGcalStatus(null);
       return;
     }
-    void supabase
-      .rpc('get_google_calendar_status', { p_business_id: businessId })
-      .then(({ data }) => {
-        const row = Array.isArray(data) ? data[0] : data;
-        setGcalStatus(row ?? null);
-      });
+    const { data, error: statusErr } = await supabase.rpc('get_google_calendar_status', {
+      p_business_id: businessId,
+    });
+    if (statusErr) {
+      setError(trKey('gcal.statusFail'));
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    setGcalStatus(row ?? null);
   }, [businessId]);
+
+  useEffect(() => {
+    void loadGcalStatus();
+  }, [loadGcalStatus]);
+
+  // Dupa intoarcerea din OAuth in browser, statusul se reincarca la focus.
+  useFocusEffect(
+    useCallback(() => {
+      void loadGcalStatus();
+    }, [loadGcalStatus])
+  );
 
   async function handleGoogleConnect() {
     if (!businessId) return;
@@ -178,9 +193,27 @@ export default function SettingsScreen() {
       body: { business_id: businessId },
     });
     setGcalBusy(false);
-    const payload = data as { imported?: number; pushed?: number } | null;
+    const payload = data as {
+      ok?: boolean;
+      imported?: number;
+      pushed?: number;
+      pushFailed?: number;
+      updateFailed?: number;
+      removeFailed?: number;
+      errors?: string[];
+    } | null;
     if (err || !payload) {
       setError(trKey('gcal.syncFail'));
+      return;
+    }
+    const failedCount =
+      (payload.pushFailed ?? 0) + (payload.updateFailed ?? 0) + (payload.removeFailed ?? 0);
+    if (payload.ok === false) {
+      setError(
+        trKey('gcal.syncPartial', {
+          failed: failedCount + (payload.errors?.length ?? 0),
+        })
+      );
       return;
     }
     setMessage(
@@ -285,16 +318,20 @@ export default function SettingsScreen() {
           .from('business_profiles')
           .select('id, name, public_code, logo_url, promo_video_url, county, city, address, latitude, longitude')
           .eq('owner_user_id', user.id)
-          .maybeSingle();
+          .order('created_at', { ascending: true });
         if (!full.error) {
-          biz = full.data as BizRow | null;
+          const rows = (full.data ?? []) as BizRow[];
+          const selectedId = await getSelectedBusinessId();
+          biz = rows.find((r) => r.id === selectedId) ?? rows[0] ?? null;
         } else if (/promo_video_url/i.test(full.error.message)) {
           const base = await supabase
             .from('business_profiles')
             .select('id, name, public_code, logo_url, county, city, address, latitude, longitude')
             .eq('owner_user_id', user.id)
-            .maybeSingle();
-          biz = base.data as BizRow | null;
+            .order('created_at', { ascending: true });
+          const baseRows = (base.data ?? []) as BizRow[];
+          const baseSelectedId = await getSelectedBusinessId();
+          biz = baseRows.find((r) => r.id === baseSelectedId) ?? baseRows[0] ?? null;
         } else {
           console.warn('business load failed', full.error.message);
         }
@@ -1427,20 +1464,34 @@ export default function SettingsScreen() {
                 <Toggle
                   value={whatsappEnabled}
                   onValueChange={(next) => {
-                    setWhatsappEnabled(next);
-                    void AsyncStorage.setItem('settings.whatsappEnabled', next ? '1' : '0');
-                    // Sync DB (v31); ignoră dacă coloana lipsește încă.
-                    if (profile?.id) {
-                      void supabase
-                        .from('profiles')
-                        .update({ notify_whatsapp: next })
-                        .eq('id', profile.id)
-                        .then(({ error: waErr }) => {
-                          if (waErr && !/notify_whatsapp/i.test(waErr.message)) {
-                            console.warn('notify_whatsapp sync', waErr.message);
-                          }
-                        });
-                    }
+                    void (async () => {
+                      const prev = whatsappEnabled;
+                      setWhatsappEnabled(next);
+                      setError(null);
+                      try {
+                        await AsyncStorage.setItem('settings.whatsappEnabled', next ? '1' : '0');
+                      } catch {
+                        // Stocarea locala a esuat: revenim la starea anterioara.
+                        setWhatsappEnabled(prev);
+                        setError(trKey('set.waSyncFail'));
+                        return;
+                      }
+                      // Sync DB (v31); ignoră dacă coloana lipsește încă.
+                      if (profile?.id) {
+                        const { error: waErr } = await supabase
+                          .from('profiles')
+                          .update({ notify_whatsapp: next })
+                          .eq('id', profile.id);
+                        if (waErr && !/notify_whatsapp/i.test(waErr.message)) {
+                          setWhatsappEnabled(prev);
+                          await AsyncStorage.setItem(
+                            'settings.whatsappEnabled',
+                            prev ? '1' : '0'
+                          ).catch(() => {});
+                          setError(trKey('set.waSyncFail'));
+                        }
+                      }
+                    })();
                   }}
                   accessibilityLabel={tr('set.waUse')}
                 />

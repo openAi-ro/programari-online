@@ -1,11 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, Linking, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Linking, Modal, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
 import { ClientTabBar } from '@/components/ClientTabBar';
 import {
   Button,
+  ButtonRow,
   Callout,
   EmptyState,
   Field,
@@ -191,27 +192,31 @@ export default function MyAppointmentsScreen() {
     );
     const aptIds = list.map((a) => a.id);
     const map: Record<string, Review> = {};
+    let partialFail = false;
     if (aptIds.length) {
-      const { data: revs } = await supabase
+      const { data: revs, error: revErr } = await supabase
         .from('reviews')
         .select(
           'id, business_id, appointment_id, client_user_id, staff_id, rating, comment, created_at'
         )
         .in('appointment_id', aptIds);
+      if (revErr) partialFail = true;
       for (const r of (revs ?? []) as Review[]) map[r.appointment_id] = r;
     }
-    const { data: wl } = await supabase
+    const { data: wl, error: wlErr } = await supabase
       .from('waitlist')
       .select('id, desired_date, status, business_id')
       .eq('client_user_id', user.id)
       .in('status', ['active', 'notified'])
       .order('desired_date', { ascending: true });
+    if (wlErr) partialFail = true;
     setMyWaitlist((wl ?? []) as Array<{ id: string; desired_date: string; status: string; business_id: string }>);
-    const { data: pkgs } = await supabase
+    const { data: pkgs, error: pkgErr } = await supabase
       .from('client_packages')
       .select('id, sessions_total, sessions_used, packages(name), business_profiles(name)')
       .eq('client_user_id', user.id)
       .order('created_at', { ascending: false });
+    if (pkgErr) partialFail = true;
     setMyPackages((pkgs ?? []) as unknown as typeof myPackages);
     const { data: me } = await supabase
       .from('profiles')
@@ -220,17 +225,24 @@ export default function MyAppointmentsScreen() {
       .maybeSingle();
     let code = (me?.referral_code as string | null) ?? null;
     if (!code) {
-      code = makeReferralCode();
-      await supabase.from('profiles').update({ referral_code: code }).eq('id', user.id);
+      const generated = makeReferralCode();
+      const { error: saveErr } = await supabase
+        .from('profiles')
+        .update({ referral_code: generated })
+        .eq('id', user.id);
+      // Codul se afiseaza doar daca a fost salvat; altfel prietenul nu l-ar putea folosi.
+      if (!saveErr) code = generated;
     }
     setMyReferralCode(code);
-    const { data: refs } = await supabase
+    const { data: refs, error: refsErr } = await supabase
       .from('referrals')
       .select('id, status, created_at')
       .eq('referrer_user_id', user.id)
       .order('created_at', { ascending: false });
+    if (refsErr) partialFail = true;
     setMyReferrals((refs ?? []) as typeof myReferrals);
     setReviewsByApt(map);
+    if (partialFail) setError(trKey('my.partialLoadFail'));
     setLoading(false);
   }, []);
 
@@ -258,6 +270,8 @@ export default function MyAppointmentsScreen() {
     await load();
   }
   const [checkInBusyId, setCheckInBusyId] = useState<string | null>(null);
+  const [seriesTarget, setSeriesTarget] = useState<Row | null>(null);
+  const [tickNow, setTickNow] = useState(() => new Date());
 
   async function handleCheckIn(item: Row) {
     setCheckInBusyId(item.id);
@@ -330,8 +344,10 @@ export default function MyAppointmentsScreen() {
       return;
     }
     setRows((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: 'cancelled' } : r)));
+    let refundFailed = false;
     if (item.payment_status === 'paid') {
-      void invokeRefundDeposit(item.id);
+      const refund = await invokeRefundDeposit(item.id);
+      refundFailed = !refund.ok;
     }
     const tz = item.business_profiles?.timezone ?? 'Europe/Bucharest';
     const desiredDate = formatInTimeZone(new Date(item.start_at), tz, 'yyyy-MM-dd');
@@ -342,6 +358,9 @@ export default function MyAppointmentsScreen() {
       booking_url: code ? getWebBookingUrl(code) : '',
     });
     await load();
+    if (refundFailed) {
+      setError(trKey('my.refundFailed'));
+    }
   }
 
   async function confirmAttendance(id: string) {
@@ -374,8 +393,14 @@ export default function MyAppointmentsScreen() {
     await load();
   }
 
+  // Butoanele sensibile la timp se re-evalueaza periodic cat ecranul e deschis.
+  useEffect(() => {
+    const timer = setInterval(() => setTickNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const shown = useMemo(() => {
-    const now = Date.now();
+    const now = tickNow.getTime();
     if (filter === 'upcoming') {
       return rows.filter((r) => new Date(r.end_at).getTime() >= now);
     }
@@ -383,7 +408,7 @@ export default function MyAppointmentsScreen() {
       return rows.filter((r) => new Date(r.end_at).getTime() < now);
     }
     return rows;
-  }, [rows, filter]);
+  }, [rows, filter, tickNow]);
 
   if (loading && rows.length === 0) {
     return (
@@ -619,10 +644,10 @@ export default function MyAppointmentsScreen() {
               });
             }}
             onCancel={() => cancelAppointment(item)}
-            onCancelSeries={item.recurring_series_id ? () => void cancelSeries(item) : undefined}
-            canCancel={canClientCancel(item, item.business_profiles)}
+            onCancelSeries={item.recurring_series_id ? () => { setError(null); setSuccess(null); setSeriesTarget(item); } : undefined}
+            canCancel={canClientCancel(item, item.business_profiles, tickNow)}
             canReschedule={
-              canClientReschedule(item, item.business_profiles) &&
+              canClientReschedule(item, item.business_profiles, tickNow) &&
               Boolean(item.business_profiles?.public_code)
             }
             onReschedule={() => {
@@ -632,10 +657,10 @@ export default function MyAppointmentsScreen() {
                 `/(app)/book/${code}?rescheduleId=${item.id}` as never
               );
             }}
-            canConfirm={canConfirmAttendance(item)}
+            canConfirm={canConfirmAttendance(item, tickNow)}
             onConfirmAttendance={() => confirmAttendance(item.id)}
             onReview={
-              canReview(item)
+              canReview(item, tickNow)
                 ? () => {
                     setReviewingId(item.id);
                     setReviewRating(reviewsByApt[item.id]?.rating ?? 5);
@@ -651,27 +676,53 @@ export default function MyAppointmentsScreen() {
             onCheckIn={
               canCheckIn(
                 { status: item.status, startAt: item.start_at, checkedInAt: item.checked_in_at ?? null },
-                new Date()
+                tickNow
               )
                 ? () => void handleCheckIn(item)
                 : undefined
             }
             onGoogleReview={
               item.status === 'approved' &&
-              new Date(item.end_at).getTime() < Date.now() &&
+              new Date(item.end_at).getTime() < tickNow.getTime() &&
               item.business_profiles?.google_review_url
                 ? () => void Linking.openURL(item.business_profiles!.google_review_url!)
                 : undefined
             }
-            onAddToCalendar={() =>
-              void addAppointmentToCalendar({
+            onAddToCalendar={() => {
+              void (async () => {
+                const result = await addAppointmentToCalendar({
                 id: item.id,
                 title: tr('my.calTitle', { name: item.business_profiles?.name ?? 'business' }),
-                description: item.service_name ?? undefined,
+                description: [item.service_name, item.staff_name, item.business_profiles?.name]
+                  .filter(Boolean)
+                  .join('\n') || undefined,
+                location: item.business_profiles
+                  ? formatAddress(
+                      locationFromBusiness(item.business_profiles as BusinessProfile),
+                    ) ?? undefined
+                  : undefined,
                 startIso: item.start_at,
                 endIso: item.end_at,
-              })
-            }
+                });
+                if (result === 'failed') {
+                  setSuccess(null);
+                  setError(tr('cal.addFailed'));
+                } else {
+                  setError(null);
+                  setSuccess(
+                    tr(
+                      result === 'added'
+                        ? 'cal.added'
+                        : result === 'file'
+                          ? 'cal.fileShared'
+                          : result === 'download'
+                            ? 'cal.downloaded'
+                            : 'cal.googleOpened',
+                    ),
+                  );
+                }
+              })();
+            }}
             onDrive={
               item.business_profiles &&
               hasLocation(locationFromBusiness(item.business_profiles as BusinessProfile))
@@ -692,6 +743,38 @@ export default function MyAppointmentsScreen() {
         )}
       />
     </Screen>
+    <Modal
+      visible={seriesTarget != null}
+      animationType="fade"
+      transparent
+      onRequestClose={() => setSeriesTarget(null)}
+      statusBarTranslucent
+    >
+      <View style={{ flex: 1, justifyContent: 'center', padding: spacing.lg, backgroundColor: t.colors.overlay }}>
+        <View style={{ backgroundColor: t.colors.bgElevated, borderColor: t.colors.border, borderWidth: 1, borderRadius: 16, padding: spacing.lg, gap: spacing.md }}>
+          <Text style={{ color: t.colors.text, fontWeight: '800', fontSize: 16 }}>{tr('my.cancelSeriesTitle')}</Text>
+          <Text style={{ color: t.colors.textMuted }}>{tr('my.cancelSeriesBody')}</Text>
+          <ButtonRow>
+            <View style={{ flex: 1 }}>
+              <Button label={tr('appt.giveUp')} variant="secondary" size="sm" onPress={() => setSeriesTarget(null)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label={tr('appt.cancelSeries')}
+                icon="repeat-outline"
+                variant="danger"
+                size="sm"
+                onPress={() => {
+                  const target = seriesTarget;
+                  setSeriesTarget(null);
+                  if (target) void cancelSeries(target);
+                }}
+              />
+            </View>
+          </ButtonRow>
+        </View>
+      </View>
+    </Modal>
     <ClientTabBar badges={{ appointments: pendingCount }} />
     </View>
   );

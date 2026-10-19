@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +60,7 @@ export default function BusinessCalendarScreen() {
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [rows, setRows] = useState<Appointment[]>([]);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
+  const dayInitRef = useRef(false);
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
   const [staffList, setStaffList] = useState<{ id: string; name: string; color: string }[]>([]);
@@ -101,6 +102,10 @@ export default function BusinessCalendarScreen() {
     }
     const profile = biz as BusinessProfile;
     setBusiness(profile);
+    if (!dayInitRef.current && profile.timezone) {
+      dayInitRef.current = true;
+      setDateLocal(formatInTimeZone(new Date(), profile.timezone, 'yyyy-MM-dd'));
+    }
     const { data: team } = await supabase
       .from('staff')
       .select('id, name, color')
@@ -146,7 +151,17 @@ export default function BusinessCalendarScreen() {
     if (!business) return;
     setSaving(true);
     setError(null);
-    const current = [...(business.blocked_dates ?? [])];
+    const { data: fresh, error: readErr } = await supabase
+      .from('business_profiles')
+      .select('blocked_dates')
+      .eq('id', business.id)
+      .maybeSingle();
+    if (readErr) {
+      setSaving(false);
+      setError(readErr.message);
+      return;
+    }
+    const current = [...((fresh?.blocked_dates ?? business.blocked_dates ?? []) as string[])];
     const next = blocked
       ? current.filter((d) => d !== dateLocal)
       : [...current, dateLocal];

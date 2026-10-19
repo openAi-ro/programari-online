@@ -56,4 +56,15 @@ export function localDayBoundsUtc(
   return { startUtc, endUtc };
 }
 
+/** Verifică dacă un nume de fus orar e un identificator IANA valid. */
+export function isValidTimeZone(timezone: string): boolean {
+  if (!timezone || typeof timezone !== 'string') return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export { formatInTimeZone, fromZonedTime, toZonedTime };

@@ -2,7 +2,7 @@
  * Run: npx tsx lib/recurringRules.test.ts
  * from apps/mobile
  */
-import { buildWeeklyStarts, clampRepeatCount } from './recurringRules';
+import { buildWeeklyStarts, clampRepeatCount, normalizeRepeatSelection } from './recurringRules';
 
 let passed = 0;
 let failed = 0;
@@ -44,6 +44,28 @@ console.log('recurringRules tests\n');
   assert(clampRepeatCount(1) === 2, 'clamp jos la 2');
   assert(clampRepeatCount(4) === 4, 'clamp pastreaza 4');
   assert(clampRepeatCount(99) === 8, 'clamp sus la 8');
+}
+
+// 5) cu timezone, ora locala ramane 09:00 si peste trecerea DST (25 oct 2026)
+{
+  const out = buildWeeklyStarts('2026-10-20T06:00:00.000Z', 2, 'Europe/Bucharest');
+  assert(
+    JSON.stringify(out) === JSON.stringify([
+      '2026-10-20T06:00:00.000Z', // 09:00 EEST
+      '2026-10-27T07:00:00.000Z', // 09:00 EET
+    ]),
+    'serie cu timezone pastreaza ora locala peste DST',
+    JSON.stringify(out)
+  );
+}
+
+// 4) selectia din UI: 1 ramane o singura sedinta (nu e fortat la serie de 2)
+{
+  assert(normalizeRepeatSelection(1) === 1, 'selectie 1 → o singura data');
+  assert(normalizeRepeatSelection(0) === 1, 'selectie 0 → o singura data');
+  assert(normalizeRepeatSelection(NaN) === 1, 'selectie NaN → o singura data');
+  assert(normalizeRepeatSelection(3) === 3, 'selectie 3 → serie de 3');
+  assert(normalizeRepeatSelection(99) === 8, 'selectie 99 → serie de 8');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

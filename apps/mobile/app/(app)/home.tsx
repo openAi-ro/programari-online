@@ -14,6 +14,7 @@ import {
   Banner,
   Body,
   Button,
+  Callout,
   Card,
   EmptyState,
   Field,
@@ -24,7 +25,7 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { resolveAppMode, type AppMode } from '@/lib/appMode';
-import { mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
+import { canConfirmAttendance, mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { extractPublicCode } from '@/lib/bookingLink';
 import {
   hasLocation,
@@ -114,6 +115,7 @@ export default function HomeScreen() {
   const [business, setBusiness] = useState<Biz | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [nextApt, setNextApt] = useState<NextAppointment | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loyalty, setLoyalty] = useState<LoyaltyCard[]>([]);
   const [recentBusinesses, setRecentBusinesses] = useState<RecentBusiness[]>([]);
   const [favoriteIds, setFavoriteIdsState] = useState<string[]>([]);
@@ -279,6 +281,11 @@ export default function HomeScreen() {
             staff_name?: string | null;
             attendance_confirmed?: boolean;
           };
+          if (upcomingRes.error || recentRes.error) {
+            if (!cancelled) setLoadError(trKey('home.loadFail'));
+          } else if (!cancelled) {
+            setLoadError(null);
+          }
           const byId = new Map<string, AptRow>();
           for (const r of [...((recentRes.data ?? []) as AptRow[]), ...((upcomingRes.data ?? []) as AptRow[])]) {
             byId.set(r.id, r);
@@ -302,12 +309,13 @@ export default function HomeScreen() {
             }
           > = {};
           if (bizIds.length) {
-            const { data: bizRows } = await supabase
+            const { data: bizRows, error: bizErr } = await supabase
               .from('business_profiles')
               .select(
                 'id, name, timezone, loyalty_every, public_code, latitude, longitude, county, city, address, maps_url'
               )
               .in('id', bizIds);
+            if (bizErr && !cancelled) setLoadError(trKey('home.loadFail'));
             for (const b of bizRows ?? []) {
               bizById[b.id] = {
                 name: b.name,
@@ -324,6 +332,7 @@ export default function HomeScreen() {
             }
           }
 
+          const now = Date.now();
           const recentMap = new Map<
             string,
             {
@@ -334,6 +343,8 @@ export default function HomeScreen() {
             }
           >();
           for (const r of rows) {
+            // Recente = doar vizite deja incheiate si confirmate (nu viitoare/anulate).
+            if (r.status !== 'approved' || new Date(r.end_at).getTime() > now) continue;
             const prev = recentMap.get(r.business_id);
             if (!prev || new Date(r.start_at).getTime() > new Date(prev.lastAt).getTime()) {
               recentMap.set(r.business_id, {
@@ -364,12 +375,11 @@ export default function HomeScreen() {
             (a, b) => new Date(b.lastVisitAt).getTime() - new Date(a.lastVisitAt).getTime()
           );
 
-          const now = Date.now();
           const upcoming = rows
             .filter(
               (r) =>
                 (r.status === 'pending' || r.status === 'approved') &&
-                new Date(r.start_at).getTime() >= now
+                new Date(r.end_at).getTime() >= now
             )
             .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 
@@ -400,11 +410,19 @@ export default function HomeScreen() {
             };
           }
 
+          // Vizite = doar programări aprobate deja încheiate, numărate separat
+          // de fereastra recentă (limitată), ca loialitatea să nu fie plafonată.
+          const { data: visitRows, error: visitErr } = await scopedApts()
+            .eq('status', 'approved')
+            .lte('end_at', new Date(now).toISOString());
+          if (visitErr && !cancelled) setLoadError(trKey('home.loadFail'));
+          const completedVisits = ((visitRows ?? []) as AptRow[]).filter((r) => !r.no_show);
+
           const cards: LoyaltyCard[] = [];
           for (const bizId of bizIds) {
             const biz = bizById[bizId];
             if (!biz || !biz.loyalty_every || biz.loyalty_every < 2) continue;
-            const visits = rows.filter(
+            const visits = completedVisits.filter(
               (r) =>
                 r.business_id === bizId &&
                 r.status === 'approved' &&
@@ -520,6 +538,7 @@ export default function HomeScreen() {
         bottomInset={insets.bottom + spacing['3xl'] + 56}
         favoriteIds={favoriteIds}
         pendingClientCount={pendingClientCount}
+        loadError={loadError}
         onToggleFavorite={(id) => void toggleFavorite(id)}
         onAttendanceConfirmed={() =>
           setNextApt((prev) =>
@@ -559,6 +578,7 @@ function ClientHome({
   bottomInset,
   favoriteIds,
   pendingClientCount,
+  loadError,
   onToggleFavorite,
   onAttendanceConfirmed,
 }: {
@@ -568,6 +588,7 @@ function ClientHome({
   bottomInset: number;
   favoriteIds: string[];
   pendingClientCount: number;
+  loadError: string | null;
   onToggleFavorite: (businessId: string) => void;
   onAttendanceConfirmed: () => void;
 }) {
@@ -628,6 +649,8 @@ function ClientHome({
       </View>
 
       <UpdateBanner />
+
+      {loadError ? <Callout tone="danger" title={loadError} /> : null}
 
       {next && nextStatus ? (
         <View
@@ -694,7 +717,7 @@ function ClientHome({
           ) : null}
 
           <View style={styles.nextActions}>
-            {next.status === 'approved' && !next.attendanceConfirmed ? (
+            {canConfirmAttendance({ status: next.status, start_at: next.start_at, attendance_confirmed: next.attendanceConfirmed, no_show: false }) ? (
               <View style={styles.nextAction}>
                 <Button
                   label={tr('appt.confirmAttendance')}

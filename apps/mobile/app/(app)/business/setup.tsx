@@ -49,6 +49,8 @@ import {
   localitatiPentruJudet,
 } from '@/lib/roGeo';
 import { getSelectedBusinessId, setSelectedBusinessId } from '@/lib/myBusiness';
+import { validateSchedule } from '@/lib/workingHoursRules';
+import { isValidTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/withTimeout';
 import {
@@ -194,17 +196,21 @@ export default function BusinessSetupScreen() {
 
   useEffect(() => {
     if (!existingId) return;
+    let cancelled = false;
     void supabase
       .from('business_profiles')
       .select('google_review_url, instagram_url, facebook_url')
       .eq('id', existingId)
       .maybeSingle()
       .then(({ data }) => {
-        if (!data) return;
+        if (cancelled || !data) return;
         setGoogleReviewUrl(data.google_review_url ?? '');
         setInstagramInput(data.instagram_url ?? '');
         setFacebookInput(data.facebook_url ?? '');
       });
+    return () => {
+      cancelled = true;
+    };
   }, [existingId]);
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
@@ -214,6 +220,7 @@ export default function BusinessSetupScreen() {
   const [blockRangeStart, setBlockRangeStart] = useState(todayYmd);
   const [blockRangeEnd, setBlockRangeEnd] = useState(todayYmd);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   // Mesajul de confirmare / informare dispare singur (nu rămâne peste „Salvează”).
@@ -256,11 +263,18 @@ export default function BusinessSetupScreen() {
       if (!user) {
         return;
       }
-      const { data } = await supabase
+      const { data, error: loadErr } = await supabase
         .from('business_profiles')
         .select('*')
         .eq('owner_user_id', user.id)
         .order('created_at', { ascending: true });
+      if (loadErr) {
+        if (!cancelled) {
+          setLoadFailed(true);
+          setError(trKey('setup.loadFail'));
+        }
+        return;
+      }
       if (data) {
         const rows = (data ?? []) as BusinessProfile[];
         setMyBusinesses(rows);
@@ -302,6 +316,9 @@ export default function BusinessSetupScreen() {
         setCity(localitateCanonica(judet, b.city) || b.city || '');
         setAddress(b.address ?? '');
         setMapsUrl(b.maps_url ?? '');
+        setGoogleReviewUrl(b.google_review_url ?? '');
+        setInstagramInput(b.instagram_url ?? '');
+        setFacebookInput(b.facebook_url ?? '');
         setLatitude(b.latitude != null ? String(b.latitude) : '');
         setLongitude(b.longitude != null ? String(b.longitude) : '');
         setBlockedDates(Array.isArray(b.blocked_dates) ? b.blocked_dates : []);
@@ -401,6 +418,9 @@ export default function BusinessSetupScreen() {
     setCity(localitateCanonica(judet, b.city) || b.city || '');
     setAddress(b.address ?? '');
     setMapsUrl(b.maps_url ?? '');
+    setGoogleReviewUrl(b.google_review_url ?? '');
+    setInstagramInput(b.instagram_url ?? '');
+    setFacebookInput(b.facebook_url ?? '');
     setLatitude(b.latitude != null ? String(b.latitude) : '');
     setLongitude(b.longitude != null ? String(b.longitude) : '');
     setBlockedDates(Array.isArray(b.blocked_dates) ? b.blocked_dates : []);
@@ -409,6 +429,11 @@ export default function BusinessSetupScreen() {
   }
 
   async function handleSave() {
+    if (loadFailed) {
+      // Încărcarea firmei a eșuat: nu salvăm, ca să nu creăm un duplicat.
+      setError(trKey('setup.loadFail'));
+      return;
+    }
     setError(null);
     setMessage(null);
     const trimmed = name.trim();
@@ -423,6 +448,15 @@ export default function BusinessSetupScreen() {
     }
     if (!timezone.trim()) {
       setError(trKey('setup.tzRequired'));
+      return;
+    }
+    if (!isValidTimeZone(timezone.trim())) {
+      setError(trKey('setup.badTimezone'));
+      return;
+    }
+    const scheduleErr = validateSchedule(workingHours, breakHours);
+    if (scheduleErr) {
+      setError(trKey(scheduleErr === 'hours' ? 'setup.badHours' : 'setup.badBreak'));
       return;
     }
     const minNotice = Math.round(Number(String(minNoticeHours).replace(',', '.')) * 60);
@@ -605,33 +639,44 @@ export default function BusinessSetupScreen() {
     const b = data as BusinessProfile;
     setExistingId(b.id);
     setPublicCode(b.public_code);
-    setMessage(trKey('setup.created'));
-    const { data: existingServices } = await supabase
+    let seedFailed = false;
+    const { data: existingServices, error: svcCheckErr } = await supabase
       .from('services')
       .select('id')
       .eq('business_id', b.id)
       .limit(1);
-    if (!existingServices?.length) {
-      await supabase.from('services').insert({
+    if (svcCheckErr) {
+      seedFailed = true;
+    } else if (!existingServices?.length) {
+      const { error: svcErr } = await supabase.from('services').insert({
         business_id: b.id,
         name: trKey('cli.session'),
         duration_minutes: minutes,
         price: 0,
         sort_order: 0,
       });
+      if (svcErr) seedFailed = true;
     }
-    const { data: existingStaff } = await supabase
+    const { data: existingStaff, error: staffCheckErr } = await supabase
       .from('staff')
       .select('id')
       .eq('business_id', b.id)
       .limit(1);
-    if (!existingStaff?.length) {
-      await supabase.from('staff').insert({
+    if (staffCheckErr) {
+      seedFailed = true;
+    } else if (!existingStaff?.length) {
+      const { error: staffErr } = await supabase.from('staff').insert({
         business_id: b.id,
         name: trimmed,
         color: '#5B6CFF',
         sort_order: 0,
       });
+      if (staffErr) seedFailed = true;
+    }
+    if (seedFailed) {
+      setError(trKey('setup.defaultSeedFail'));
+    } else {
+      setMessage(trKey('setup.created'));
     }
   }
 

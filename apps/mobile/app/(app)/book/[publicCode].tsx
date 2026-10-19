@@ -24,6 +24,7 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import {
+  canClientReschedule,
   firstBookableDateYmd,
   mapBookingRpcError,
   maxBookingDate,
@@ -42,7 +43,7 @@ import {
 import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
 import { discountedPrice, isOffpeakStart } from '@/lib/offpeak';
 import { parseTipInput, tipOptions } from '@/lib/tip';
-import { clampRepeatCount } from '@/lib/recurringRules';
+import { normalizeRepeatSelection } from '@/lib/recurringRules';
 import {
   waitlistJoinBody,
   waitlistJoinCta,
@@ -56,9 +57,9 @@ import { locationFromBusiness, formatAddress } from '@/lib/location';
 import { markWaitlistBooked, invokePendingPush } from '@/lib/notify-client';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
-import { localDayBoundsUtc } from '@/lib/timezone';
+import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
-import type { BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
+import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
 import {
   getFavoriteIds,
   isFavoriteSync,
@@ -160,10 +161,15 @@ export default function BookScreen() {
   const stepIndex = Math.max(0, steps.indexOf(step));
 
   const minDate = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+    if (!business) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    // Azi pe calendarul firmei, la pranz local (evita decalajul de fus).
+    const ymd = formatInTimeZone(new Date(), business.timezone, 'yyyy-MM-dd');
+    return new Date(`${ymd}T12:00:00`);
+  }, [business]);
 
   const maxDate = useMemo(
     () => (business ? maxBookingDate(business) : minDate),
@@ -286,7 +292,7 @@ export default function BookScreen() {
         }
       }
 
-      const { data: svcRows } = await supabase
+      const { data: svcRows, error: svcErr } = await supabase
         .from('services')
         .select('*')
         .eq('business_id', biz.id)
@@ -304,7 +310,7 @@ export default function BookScreen() {
         setServiceIds([fromQsSvc && list.some((s) => s.id === fromQsSvc) ? fromQsSvc : list[0].id]);
       }
 
-      const { data: staffRows } = await supabase
+      const { data: staffRows, error: staffErr } = await supabase
         .from('staff')
         .select('*')
         .eq('business_id', biz.id)
@@ -320,6 +326,12 @@ export default function BookScreen() {
             : null;
       if (team.length > 0) {
         setStaffId(fromQsStaff && team.some((s) => s.id === fromQsStaff) ? fromQsStaff : team[0].id);
+      }
+
+      if (svcErr || staffErr) {
+        setError(trKey('book.errLoadCatalog'));
+        setLoading(false);
+        return;
       }
 
       const hours = staffSchedule(team[0] ?? null, biz);
@@ -340,9 +352,21 @@ export default function BookScreen() {
       if (rescheduleId) {
         const { data: apt } = await supabase
           .from('appointments')
-          .select('service_id, service_ids, staff_id')
+          .select('service_id, service_ids, staff_id, status, start_at, client_user_id')
           .eq('id', String(rescheduleId))
           .maybeSingle();
+        if (
+          !apt ||
+          apt.client_user_id !== viewer?.id ||
+          !canClientReschedule(
+            { status: apt.status as Appointment['status'], start_at: apt.start_at as string },
+            biz
+          )
+        ) {
+          setError(trKey('book.errCannotReschedule'));
+          setLoading(false);
+          return;
+        }
         const aptServiceIds = Array.isArray(apt?.service_ids)
           ? (apt.service_ids as string[]).filter((id) => list.some((s) => s.id === id))
           : apt?.service_id && list.some((s) => s.id === apt.service_id)
@@ -639,6 +663,18 @@ export default function BookScreen() {
     }
     setError(null);
     setStep(steps[i - 1]);
+  }
+
+  if (!stepsReady && error && !loading) {
+    return (
+      <Screen title={tr('book.title')} onBack={goBack}>
+        <ErrorState
+          title={tr('book.loadFail')}
+          description={error}
+          action={<Button label={tr('common.back')} variant="secondary" onPress={goBack} />}
+        />
+      </Screen>
+    );
   }
 
   if (loading || !stepsReady) {
@@ -1124,7 +1160,7 @@ export default function BookScreen() {
           {!isReschedule ? (
             <Segmented
               value={String(repeatCount)}
-              onChange={(v) => setRepeatCount(clampRepeatCount(Number(v)))}
+              onChange={(v) => setRepeatCount(normalizeRepeatSelection(Number(v)))}
               options={[
                 { value: '1', label: tr('book.onceShort') },
                 { value: '2', label: tr('book.times2') },

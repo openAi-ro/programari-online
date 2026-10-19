@@ -21,6 +21,11 @@ export async function invokeDecisionNotify(
     return { ok: false, error: error.message };
   }
 
+  const payload = data as { ok?: boolean; error?: string } | null;
+  if (payload?.error || payload?.ok === false) {
+    return { ok: false, error: payload.error ?? 'decision_notify_failed', data };
+  }
+
   return { ok: true, data };
 }
 
@@ -136,6 +141,11 @@ export async function invokePendingPush(
   if (error) {
     console.warn('notify-pending-push invoke failed', error.message);
     return { ok: false, error: error.message };
+  }
+
+  const pendingPayload = data as (PendingPushResult & { ok?: boolean; error?: string }) | null;
+  if (pendingPayload?.error || pendingPayload?.ok === false) {
+    return { ok: false, error: pendingPayload.error ?? 'pending_push_failed', data: pendingPayload ?? undefined };
   }
 
   return { ok: true, data: data as PendingPushResult };

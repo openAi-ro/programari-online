@@ -60,6 +60,7 @@ export default function BusinessClientsScreen() {
   const [inactiveOnly, setInactiveOnly] = useState(false);
   const [bizName, setBizName] = useState('');
   const [bizId, setBizId] = useState<string | null>(null);
+  const [bizTimezone, setBizTimezone] = useState('Europe/Bucharest');
   const [openRecordId, setOpenRecordId] = useState<string | null>(null);
   const [records, setRecords] = useState<Record<string, { intake: ClientIntake | null; photos: ClientPhoto[] }>>({});
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -81,6 +82,7 @@ export default function BusinessClientsScreen() {
       : { data: null };
     if (biz?.name) setBizName(biz.name);
     if (biz?.id) setBizId(biz.id);
+    if (biz?.timezone) setBizTimezone(biz.timezone);
     if (typeof biz?.no_show_block_after === 'number') {
       setBlockAfter(biz.no_show_block_after);
     }
@@ -103,27 +105,35 @@ export default function BusinessClientsScreen() {
     }, [load, rows.length])
   );
 
+  const recordKey = (row: BusinessClientRow) => `${row.business_id}:${row.client_user_id}`;
+
   async function toggleRecord(row: BusinessClientRow) {
-    if (openRecordId === row.client_user_id) {
+    if (openRecordId === recordKey(row)) {
       setOpenRecordId(null);
       return;
     }
-    setOpenRecordId(row.client_user_id);
-    if (records[row.client_user_id] || !bizId) return;
+    setOpenRecordId(recordKey(row));
+    if (records[recordKey(row)]) return;
+    if (!row.business_id) return;
+    setError(null);
     const [intakeRes, photosRes] = await Promise.all([
       supabase
         .from('client_intake')
         .select('*')
-        .eq('business_id', bizId)
+        .eq('business_id', row.business_id)
         .eq('client_user_id', row.client_user_id)
         .maybeSingle(),
       supabase
         .from('client_photos')
         .select('*')
-        .eq('business_id', bizId)
+        .eq('business_id', row.business_id)
         .eq('client_user_id', row.client_user_id)
         .order('created_at', { ascending: false }),
     ]);
+    if (intakeRes.error || photosRes.error) {
+      setError(tr('cli.recordFail'));
+      return;
+    }
     const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
     setRecords((m) => ({
       ...m,
@@ -135,8 +145,8 @@ export default function BusinessClientsScreen() {
   }
 
   async function addClientPhoto(row: BusinessClientRow, kind: 'before' | 'after') {
-    if (!bizId) return;
-    if (!records[row.client_user_id]?.intake?.photo_consent) {
+    if (!row.business_id) return;
+    if (!records[recordKey(row)]?.intake?.photo_consent) {
       setError(tr('int.photoNeedsConsent'));
       return;
     }
@@ -150,13 +160,13 @@ export default function BusinessClientsScreen() {
     setError(null);
     try {
       const { buffer, contentType, ext } = await readLocalImageBytes(result.assets[0].uri);
-      const path = clientPhotoPath(bizId, row.client_user_id, ext);
+      const path = clientPhotoPath(row.business_id, row.client_user_id, ext);
       const { error: upErr } = await supabase.storage
         .from(CLIENT_PHOTO_BUCKET)
         .upload(path, buffer, { contentType, upsert: false });
       if (upErr) throw upErr;
       const { error: insErr } = await supabase.from('client_photos').insert({
-        business_id: bizId,
+        business_id: row.business_id,
         client_user_id: row.client_user_id,
         storage_path: path,
         kind,
@@ -170,21 +180,25 @@ export default function BusinessClientsScreen() {
   }
 
   async function toggleRecordRefresh(row: BusinessClientRow) {
-    if (!bizId) return;
+    if (!row.business_id) return;
     const [intakeRes, photosRes] = await Promise.all([
       supabase
         .from('client_intake')
         .select('*')
-        .eq('business_id', bizId)
+        .eq('business_id', row.business_id)
         .eq('client_user_id', row.client_user_id)
         .maybeSingle(),
       supabase
         .from('client_photos')
         .select('*')
-        .eq('business_id', bizId)
+        .eq('business_id', row.business_id)
         .eq('client_user_id', row.client_user_id)
         .order('created_at', { ascending: false }),
     ]);
+    if (intakeRes.error || photosRes.error) {
+      setError(tr('cli.recordFail'));
+      return;
+    }
     const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
     setRecords((m) => ({
       ...m,
@@ -222,13 +236,19 @@ export default function BusinessClientsScreen() {
     }
     setOpenId(row.client_user_id);
     setNote(row.note ?? '');
-    const { data } = await supabase
+    setHistory([]);
+    setError(null);
+    const { data, error: histErr } = await supabase
       .from('appointments')
       .select('*')
       .eq('business_id', row.business_id)
       .eq('client_user_id', row.client_user_id)
       .order('start_at', { ascending: false })
       .limit(20);
+    if (histErr) {
+      setError(tr('cli.historyFail'));
+      return;
+    }
     setHistory((data ?? []) as Appointment[]);
   }
 
@@ -341,7 +361,7 @@ export default function BusinessClientsScreen() {
         shown.map((row) => {
           const open = openId === row.client_user_id;
           const last = row.last_start_at
-            ? formatInTimeZone(new Date(row.last_start_at), 'Europe/Bucharest', 'dd.MM.yyyy')
+            ? formatInTimeZone(new Date(row.last_start_at), bizTimezone, 'dd.MM.yyyy')
             : '—';
           return (
             <View
@@ -405,39 +425,39 @@ export default function BusinessClientsScreen() {
                   </View>
                   {history.map((a) => (
                     <Text key={a.id} style={[styles.hist, { color: t.colors.textMuted }]}>
-                      {formatInTimeZone(new Date(a.start_at), 'Europe/Bucharest', 'dd.MM.yyyy HH:mm')}
+                      {formatInTimeZone(new Date(a.start_at), bizTimezone, 'dd.MM.yyyy HH:mm')}
                       {' · '}
                       {a.service_name ?? tr('cli.session')}
                       {' · '}
                       {a.no_show ? tr('cli.noShow') : statusLabel(a.status)}
                     </Text>
                   ))}
-                  {openRecordId === row.client_user_id ? (
+                  {openRecordId === recordKey(row) ? (
                     <View style={styles.record}>
                       <Text style={[styles.meta, { color: t.colors.text, fontWeight: '700' }]}>
                         {tr('int.record')}
                       </Text>
-                      {records[row.client_user_id] ? (
+                      {records[recordKey(row)] ? (
                         <>
-                          {records[row.client_user_id]?.intake ? (
+                          {records[recordKey(row)]?.intake ? (
                             <>
-                              {records[row.client_user_id]?.intake?.allergies ? (
+                              {records[recordKey(row)]?.intake?.allergies ? (
                                 <Text style={[styles.meta, { color: t.colors.text }]}>
-                                  {tr('int.allergyLabel', { text: records[row.client_user_id]?.intake?.allergies ?? '' })}
+                                  {tr('int.allergyLabel', { text: records[recordKey(row)]?.intake?.allergies ?? '' })}
                                 </Text>
                               ) : null}
-                              {records[row.client_user_id]?.intake?.conditions ? (
+                              {records[recordKey(row)]?.intake?.conditions ? (
                                 <Text style={[styles.meta, { color: t.colors.text }]}>
-                                  {tr('int.conditionsLabel', { text: records[row.client_user_id]?.intake?.conditions ?? '' })}
+                                  {tr('int.conditionsLabel', { text: records[recordKey(row)]?.intake?.conditions ?? '' })}
                                 </Text>
                               ) : null}
-                              {records[row.client_user_id]?.intake?.notes ? (
+                              {records[recordKey(row)]?.intake?.notes ? (
                                 <Text style={[styles.meta, { color: t.colors.text }]}>
-                                  {tr('int.notesLabel', { text: records[row.client_user_id]?.intake?.notes ?? '' })}
+                                  {tr('int.notesLabel', { text: records[recordKey(row)]?.intake?.notes ?? '' })}
                                 </Text>
                               ) : null}
                               <Text style={[styles.meta, { color: t.colors.textMuted }]}>
-                                {records[row.client_user_id]?.intake?.photo_consent ? tr('int.consentYes') : tr('int.consentNo')}
+                                {records[recordKey(row)]?.intake?.photo_consent ? tr('int.consentYes') : tr('int.consentNo')}
                               </Text>
                             </>
                           ) : (
@@ -446,7 +466,7 @@ export default function BusinessClientsScreen() {
                             </Text>
                           )}
                           <View style={styles.photoRow}>
-                            {(records[row.client_user_id]?.photos ?? []).map((p) => (
+                            {(records[recordKey(row)]?.photos ?? []).map((p) => (
                               <View key={p.id} style={styles.photoItem}>
                                 {p.signedUrl ? <Image source={{ uri: p.signedUrl }} style={styles.photoThumb} /> : null}
                                 <Text style={[styles.meta, { color: t.colors.textMuted }]}>
@@ -456,14 +476,14 @@ export default function BusinessClientsScreen() {
                               </View>
                             ))}
                           </View>
-                          {!records[row.client_user_id]?.intake?.photo_consent ? (
+                          {!records[recordKey(row)]?.intake?.photo_consent ? (
                             <Text style={[styles.meta, { color: t.colors.textMuted }]}>
                               {tr('int.photoNeedsConsent')}
                             </Text>
                           ) : null}
                           <View style={styles.btnRow}>
-                            <Button label={tr('int.addBefore')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[row.client_user_id]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'before')} />
-                            <Button label={tr('int.addAfter')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[row.client_user_id]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'after')} />
+                            <Button label={tr('int.addBefore')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[recordKey(row)]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'before')} />
+                            <Button label={tr('int.addAfter')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[recordKey(row)]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'after')} />
                           </View>
                         </>
                       ) : (
