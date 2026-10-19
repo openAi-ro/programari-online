@@ -113,6 +113,8 @@ export type GoogleEvent = {
   id: string;
   summary?: string;
   status?: string;
+  /** 'transparent' = marcat Disponibil in Google; nu blocheaza. */
+  transparency?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
 };

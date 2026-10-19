@@ -675,6 +675,7 @@ export const ro = {
   'req.msgSent': 'Mesaj trimis.',
   'req.deleted': 'Programarea și chaturile legate au fost șterse.',
   'req.alreadyDecided': 'Programarea a fost deja decisă între timp. Lista s-a reîncărcat.',
+  'req.refundFailedNoDelete': 'Rambursarea avansului a eșuat, așa că ședința nu a fost ștearsă. Încearcă din nou sau rambursează din Stripe.',
   'req.confirmDeleteTitle': 'Ștergi definitiv ședința?',
   'req.confirmDeleteBody': 'Ședința și chaturile legate se șterg definitiv. Dacă avansul a fost plătit, pornim rambursarea, iar slotul eliberat este oferit listei de așteptare.',
   'req.pending': 'În așteptare',

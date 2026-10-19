@@ -135,7 +135,8 @@ Deno.serve(async (req) => {
 
   const bizTz = business.timezone ?? 'Europe/Bucharest';
   const blocks = events
-    .filter((ev) => ev.status !== 'cancelled')
+    // Evenimentele marcate „Disponibil” (implicit la cele de o zi intreaga) nu blocheaza.
+    .filter((ev) => ev.status !== 'cancelled' && ev.transparency !== 'transparent')
     .filter((ev) => !ownIds.has(ev.id))
     .flatMap((ev) => {
       // Evenimente cu oră: blocul copiază intervalul.

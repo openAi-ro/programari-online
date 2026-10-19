@@ -677,6 +677,7 @@ export const en: typeof ro = {
   'req.msgSent': 'Message sent.',
   'req.deleted': 'The booking and related chats were deleted.',
   'req.alreadyDecided': 'That booking was already decided in the meantime. The list has been refreshed.',
+  'req.refundFailedNoDelete': 'The deposit refund failed, so the session was not deleted. Try again or refund it in Stripe.',
   'req.confirmDeleteTitle': 'Delete this session for good?',
   'req.confirmDeleteBody': 'The session and its chats are deleted permanently. If the deposit was paid, we start the refund, and the freed slot is offered to the waitlist.',
   'req.pending': 'Pending',

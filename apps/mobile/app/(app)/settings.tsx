@@ -153,11 +153,7 @@ export default function SettingsScreen() {
     setGcalStatus(row ?? null);
   }, [businessId]);
 
-  useEffect(() => {
-    void loadGcalStatus();
-  }, [loadGcalStatus]);
-
-  // Dupa intoarcerea din OAuth in browser, statusul se reincarca la focus.
+  // Se incarca la focus (inclusiv prima afisare si dupa intoarcerea din OAuth).
   useFocusEffect(
     useCallback(() => {
       void loadGcalStatus();

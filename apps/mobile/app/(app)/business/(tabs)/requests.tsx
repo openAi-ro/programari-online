@@ -440,13 +440,18 @@ export default function BusinessRequestsScreen() {
     setError(null);
     setSuccess(null);
     const row = rows.find((r) => r.id === id);
+    // Rambursarea se face inainte de stergere: dupa stergere functia nu mai gaseste programarea.
+    if (row?.payment_status === 'paid') {
+      const refund = await invokeRefundDeposit(id);
+      if (!refund.ok) {
+        setError(trKey('req.refundFailedNoDelete'));
+        return;
+      }
+    }
     const { error: err } = await supabase.rpc('delete_appointment_and_chats', { p_appointment_id: id });
     if (err) {
       setError(err.message);
       return;
-    }
-    if (row?.payment_status === 'paid') {
-      await invokeRefundDeposit(id);
     }
     notifyWaitlistForRow(row);
     setRows((prev) => prev.filter((r) => r.id !== id));
