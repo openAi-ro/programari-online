@@ -703,6 +703,8 @@ export const en: typeof ro = {
   'cli.empty': 'No clients yet',
   'cli.emptyDesc': 'Clients appear here after the first booking.',
   'cli.visits': 'visits',
+  'cli.visitOne': 'visit',
+  'cli.visitsMany': 'visits',
   'cli.last': 'last',
   'cli.upcoming': 'upcoming',
   'cli.noShows': 'no-shows',

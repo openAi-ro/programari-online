@@ -22,6 +22,7 @@ import { mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { formatInTimeZone } from '@/lib/timezone';
 import { ensureChatConversationForClient } from '@/lib/chatRpc';
 import { isWinbackCandidate } from '@/lib/winback';
+import { visitCountKey } from '@/lib/visitLabel';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import type { ClientIntake, ClientPhoto } from '@/lib/types';
@@ -63,33 +64,39 @@ export default function BusinessClientsScreen() {
   const [bizTimezone, setBizTimezone] = useState('Europe/Bucharest');
   const [openRecordId, setOpenRecordId] = useState<string | null>(null);
   const [records, setRecords] = useState<Record<string, { intake: ClientIntake | null; photos: ClientPhoto[] }>>({});
+  const [recordErrors, setRecordErrors] = useState<Record<string, boolean>>({});
   const [photoBusy, setPhotoBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
-    const { data, error: err } = await supabase.rpc('list_business_clients');
-    if (err) {
-      setError(err.message);
-      setRows([]);
-    } else {
-      setRows((data ?? []) as BusinessClientRow[]);
+    try {
+      const { data, error: err } = await supabase.rpc('list_business_clients');
+      if (err) {
+        setError(err.message);
+        setRows([]);
+      } else {
+        setRows((data ?? []) as BusinessClientRow[]);
+      }
+      const {
+        data: { user: me },
+      } = await supabase.auth.getUser();
+      const { data: biz } = me
+        ? await fetchMyBusinessResult(me.id)
+        : { data: null };
+      if (biz?.name) setBizName(biz.name);
+      if (biz?.id) setBizId(biz.id);
+      if (biz?.timezone) setBizTimezone(biz.timezone);
+      if (typeof biz?.no_show_block_after === 'number') {
+        setBlockAfter(biz.no_show_block_after);
+      }
+      if (typeof biz?.loyalty_every === 'number') {
+        setLoyaltyEvery(biz.loyalty_every);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
     }
-    const {
-      data: { user: me },
-    } = await supabase.auth.getUser();
-    const { data: biz } = me
-      ? await fetchMyBusinessResult(me.id)
-      : { data: null };
-    if (biz?.name) setBizName(biz.name);
-    if (biz?.id) setBizId(biz.id);
-    if (biz?.timezone) setBizTimezone(biz.timezone);
-    if (typeof biz?.no_show_block_after === 'number') {
-      setBlockAfter(biz.no_show_block_after);
-    }
-    if (typeof biz?.loyalty_every === 'number') {
-      setLoyaltyEvery(biz.loyalty_every);
-    }
-    setLoading(false);
   }, []);
 
   useFocusEffect(
@@ -107,41 +114,44 @@ export default function BusinessClientsScreen() {
 
   const recordKey = (row: BusinessClientRow) => `${row.business_id}:${row.client_user_id}`;
 
+  /** Loads intake + photos for one (business, client) record. Always ends: data or error. */
+  async function loadRecord(row: BusinessClientRow) {
+    const key = recordKey(row);
+    setRecordErrors((m) => ({ ...m, [key]: false }));
+    try {
+      const [intakeRes, photosRes] = await Promise.all([
+        supabase
+          .from('client_intake')
+          .select('*')
+          .eq('business_id', row.business_id)
+          .eq('client_user_id', row.client_user_id)
+          .maybeSingle(),
+        supabase
+          .from('client_photos')
+          .select('*')
+          .eq('business_id', row.business_id)
+          .eq('client_user_id', row.client_user_id)
+          .order('created_at', { ascending: false }),
+      ]);
+      if (intakeRes.error || photosRes.error) throw intakeRes.error ?? photosRes.error;
+      const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
+      setRecords((m) => ({
+        ...m,
+        [key]: { intake: (intakeRes.data ?? null) as ClientIntake | null, photos },
+      }));
+    } catch {
+      setRecordErrors((m) => ({ ...m, [key]: true }));
+    }
+  }
+
   async function toggleRecord(row: BusinessClientRow) {
     if (openRecordId === recordKey(row)) {
       setOpenRecordId(null);
       return;
     }
     setOpenRecordId(recordKey(row));
-    if (records[recordKey(row)]) return;
-    if (!row.business_id) return;
-    setError(null);
-    const [intakeRes, photosRes] = await Promise.all([
-      supabase
-        .from('client_intake')
-        .select('*')
-        .eq('business_id', row.business_id)
-        .eq('client_user_id', row.client_user_id)
-        .maybeSingle(),
-      supabase
-        .from('client_photos')
-        .select('*')
-        .eq('business_id', row.business_id)
-        .eq('client_user_id', row.client_user_id)
-        .order('created_at', { ascending: false }),
-    ]);
-    if (intakeRes.error || photosRes.error) {
-      setError(tr('cli.recordFail'));
-      return;
-    }
-    const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
-    setRecords((m) => ({
-      ...m,
-      [row.client_user_id]: {
-        intake: (intakeRes.data ?? null) as ClientIntake | null,
-        photos,
-      },
-    }));
+    if (records[recordKey(row)] || !row.business_id) return;
+    await loadRecord(row);
   }
 
   async function addClientPhoto(row: BusinessClientRow, kind: 'before' | 'after') {
@@ -172,41 +182,11 @@ export default function BusinessClientsScreen() {
         kind,
       });
       if (insErr) throw insErr;
-      await toggleRecordRefresh(row);
+      await loadRecord(row);
     } catch (e) {
       setError(e instanceof Error ? e.message : tr('team.photoFail'));
     }
     setPhotoBusy(false);
-  }
-
-  async function toggleRecordRefresh(row: BusinessClientRow) {
-    if (!row.business_id) return;
-    const [intakeRes, photosRes] = await Promise.all([
-      supabase
-        .from('client_intake')
-        .select('*')
-        .eq('business_id', row.business_id)
-        .eq('client_user_id', row.client_user_id)
-        .maybeSingle(),
-      supabase
-        .from('client_photos')
-        .select('*')
-        .eq('business_id', row.business_id)
-        .eq('client_user_id', row.client_user_id)
-        .order('created_at', { ascending: false }),
-    ]);
-    if (intakeRes.error || photosRes.error) {
-      setError(tr('cli.recordFail'));
-      return;
-    }
-    const photos = await withSignedUrls((photosRes.data ?? []) as ClientPhoto[]);
-    setRecords((m) => ({
-      ...m,
-      [row.client_user_id]: {
-        intake: (intakeRes.data ?? null) as ClientIntake | null,
-        photos,
-      },
-    }));
   }
 
   async function deleteClientPhoto(row: BusinessClientRow, photo: ClientPhoto) {
@@ -216,7 +196,7 @@ export default function BusinessClientsScreen() {
       return;
     }
     await supabase.storage.from(CLIENT_PHOTO_BUCKET).remove([photo.storage_path]);
-    await toggleRecordRefresh(row);
+    await loadRecord(row);
   }
 
   const shown = rows.filter((r) => {
@@ -230,11 +210,11 @@ export default function BusinessClientsScreen() {
   });
 
   async function openClient(row: BusinessClientRow) {
-    if (openId === row.client_user_id) {
+    if (openId === recordKey(row)) {
       setOpenId(null);
       return;
     }
-    setOpenId(row.client_user_id);
+    setOpenId(recordKey(row));
     setNote(row.note ?? '');
     setHistory([]);
     setError(null);
@@ -359,13 +339,13 @@ export default function BusinessClientsScreen() {
         />
       ) : (
         shown.map((row) => {
-          const open = openId === row.client_user_id;
+          const open = openId === recordKey(row);
           const last = row.last_start_at
             ? formatInTimeZone(new Date(row.last_start_at), bizTimezone, 'dd.MM.yyyy')
             : '—';
           return (
             <View
-              key={row.client_user_id}
+              key={recordKey(row)}
               style={[
                 styles.card,
                 { backgroundColor: t.colors.surface, borderColor: t.colors.border },
@@ -377,7 +357,7 @@ export default function BusinessClientsScreen() {
                     {row.display_name || row.contact}
                   </Text>
                   <Text style={[styles.meta, { color: t.colors.textMuted }]}>
-                    {row.contact} · {row.visit_count} {tr('cli.visits')} · {tr('cli.last')} {last}
+                    {row.contact} · {row.visit_count} {tr(visitCountKey(Number(row.visit_count)))} · {tr('cli.last')} {last}
                     {row.upcoming_count > 0 ? ` · ${row.upcoming_count} ${tr('cli.upcoming')}` : ''}
                     {row.no_show_count > 0 ? ` · ${row.no_show_count} ${tr('cli.noShows')}` : ''}
                     {row.blocked ? ` · ${tr('cli.blocked')}` : ''}
@@ -485,6 +465,11 @@ export default function BusinessClientsScreen() {
                             <Button label={tr('int.addBefore')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[recordKey(row)]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'before')} />
                             <Button label={tr('int.addAfter')} size="sm" variant="secondary" loading={photoBusy} disabled={!records[recordKey(row)]?.intake?.photo_consent} onPress={() => void addClientPhoto(row, 'after')} />
                           </View>
+                        </>
+                      ) : recordErrors[recordKey(row)] ? (
+                        <>
+                          <Callout tone="danger">{tr('cli.recordFail')}</Callout>
+                          <Button label={tr('ui.retryDefault')} size="sm" variant="secondary" icon="refresh-outline" onPress={() => void loadRecord(row)} />
                         </>
                       ) : (
                         <Text style={[styles.meta, { color: t.colors.textMuted }]}>

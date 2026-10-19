@@ -701,6 +701,8 @@ export const ro = {
   'cli.empty': 'Niciun client încă',
   'cli.emptyDesc': 'Clienții apar aici după prima programare.',
   'cli.visits': 'vizite',
+  'cli.visitOne': 'vizită',
+  'cli.visitsMany': 'de vizite',
   'cli.last': 'ultima',
   'cli.upcoming': 'viitoare',
   'cli.noShows': 'absențe',
