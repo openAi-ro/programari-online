@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { ChatConversation, ChatMessage } from './types';
+import { CHAT_PAGE_SIZE, olderThanFilter, pageFromNewestFirst, type ChatCursor } from './chatPaging';
 
 function rpcErrorText(error: { message?: string; details?: string; hint?: string }): string {
   return [
@@ -150,65 +151,61 @@ export async function listConversations(): Promise<{
 }
 
 /**
- * Latest message per conversation, for list previews.
- * Fetches a bounded set of messages (newest last) and keeps the last row
- * seen for each conversation_id, which is the most recent message.
+ * Latest message per conversation, for list previews: one newest-first,
+ * limit-1 query per conversation, so it is correct however long a chat is.
  */
 export async function fetchLatestMessages(
   conversationIds: string[]
 ): Promise<{ latest: Record<string, ChatMessage | null>; error: string | null }> {
-  if (!conversationIds.length) {
-    return { latest: Object.fromEntries(conversationIds.map((id) => [id, null])), error: null };
-  }
-
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('id,body,conversation_id,created_at')
-    .order('conversation_id')
-    .order('created_at')
-    .limit(500);
-
-  if (error) {
-    return { latest: Object.fromEntries(conversationIds.map((id) => [id, null])), error: rpcErrorText(error) };
-  }
-
   const latest: Record<string, ChatMessage | null> = Object.fromEntries(
     conversationIds.map((id) => [id, null])
   );
+  let firstError: string | null = null;
 
-  for (const row of (data ?? []) as ChatMessage[]) {
-    if (!latest[row.conversation_id]) {
-      continue;
-    }
-    latest[row.conversation_id] = {
-      id: row.id,
-      body: row.body,
-      conversation_id: row.conversation_id,
-      created_at: row.created_at,
-    } as ChatMessage;
-  }
+  await Promise.all(
+    conversationIds.map(async (conversationId) => {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('id,body,conversation_id,created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1);
+      if (error) {
+        firstError ??= rpcErrorText(error);
+        return;
+      }
+      latest[conversationId] = ((data ?? [])[0] ?? null) as ChatMessage | null;
+    })
+  );
 
-  return { latest, error: null };
+  return { latest, error: firstError };
 }
 
 /**
- * List messages for a conversation, oldest first.
+ * One page of a conversation: the newest `limit` messages, or the `limit`
+ * messages just before `before` (scroll-up pagination). Returned oldest → newest.
  * RLS select policy (participant) filters to rows the user can read.
  */
 export async function listMessages(
   conversationId: string,
-  opts?: { limit: number }
-): Promise<{ messages: ChatMessage[]; error: string | null }> {
-  const { data, error } = await supabase
+  opts?: { limit?: number; before?: ChatCursor }
+): Promise<{ messages: ChatMessage[]; hasMore: boolean; error: string | null }> {
+  const limit = opts?.limit ?? CHAT_PAGE_SIZE;
+  let query = supabase
     .from('chat_messages')
     .select('*')
-    .filter('conversation_id', 'eq', conversationId)
-    .order('created_at', { ascending: true })
-    .limit(opts?.limit ?? 100);
+    .eq('conversation_id', conversationId);
+  if (opts?.before) query = query.or(olderThanFilter(opts.before));
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
 
   if (error) {
-    return { messages: [], error: rpcErrorText(error) };
+    return { messages: [], hasMore: false, error: rpcErrorText(error) };
   }
 
-  return { messages: (data ?? []) as ChatMessage[], error: null };
+  const page = pageFromNewestFirst((data ?? []) as ChatMessage[], limit);
+  return { ...page, error: null };
 }
