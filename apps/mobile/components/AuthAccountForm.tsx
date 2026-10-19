@@ -191,11 +191,11 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
         return;
       }
       if (isDuplicateSignupUser(data.user)) {
+        // Supabase raspunde asa doar pentru un cont deja activat si nu trimite email,
+        // deci nu afisam butonul de retrimitere a linkului.
         setLoading(false);
-        setActivationEmail(e);
-        setError(
-          tr('auth.accountExists')
-        );
+        setActivationEmail(null);
+        setError(tr('auth.accountExists'));
         return;
       }
       setActivationEmail(e);
