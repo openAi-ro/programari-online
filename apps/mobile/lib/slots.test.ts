@@ -9,6 +9,7 @@ const TZ = 'Europe/Bucharest';
 
 /** Monday 2026-08-03 is a Monday */
 const MONDAY = '2026-08-03';
+const TUESDAY = '2026-08-04';
 
 const openMonFri: WorkingHours = {
   mon: { closed: false, start: '09:00', end: '12:00' },
@@ -181,29 +182,86 @@ console.log('slots tests\n');
   );
 }
 
-// 8) program peste miezul nopții 18:00–02:00 → sloturi și după 00:00
+// 8) program peste miezul nopții 18:00–02:00 → sloturile de după 00:00 apar pe data de marți
 {
   const night: WorkingHours = {
     ...openMonFri,
     mon: { closed: false, start: '18:00', end: '02:00' },
   };
-  const slots = generateFreeSlots({
-    dateLocal: MONDAY,
-    timezone: TZ,
-    sessionDurationMinutes: 60,
-    workingHours: night,
-    breakHours: noBreak,
-    busy: [],
-  });
+  const base = { timezone: TZ, sessionDurationMinutes: 60, workingHours: night, breakHours: noBreak, busy: [] };
+  const mon = generateFreeSlots({ ...base, dateLocal: MONDAY });
   assertEq(
-    slots.map((s) => s.labelLocal),
-    ['18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00', '01:00'],
-    'tura de noapte genereaza sloturi peste miezul noptii'
+    mon.map((s) => s.labelLocal),
+    ['18:00', '19:00', '20:00', '21:00', '22:00', '23:00'],
+    'luni: doar sloturile de luni (până la miezul nopții)'
+  );
+  const tue = generateFreeSlots({ ...base, dateLocal: TUESDAY });
+  assertEq(
+    tue.map((s) => s.labelLocal),
+    ['00:00', '01:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'],
+    'marți: 00:00 și 01:00 din tura de luni, apoi programul de marți'
   );
   assert(
-    slots[6].startUtc === '2026-08-03T21:00:00.000Z',
-    'slotul 00:00 local cade pe 21:00 UTC ziua precedenta (EEST)',
-    slots[6].startUtc
+    tue[0].startUtc === '2026-08-03T21:00:00.000Z',
+    'slotul marți 00:00 local = luni 21:00 UTC (EEST)',
+    tue[0].startUtc
+  );
+}
+
+// 8b) luni 22:00–02:00, marți închis: marți arată doar 00:00 și 01:00; miercuri nimic din marți
+{
+  const night: WorkingHours = {
+    ...openMonFri,
+    mon: { closed: false, start: '22:00', end: '02:00' },
+    tue: { closed: true },
+  };
+  const base = { timezone: TZ, sessionDurationMinutes: 60, workingHours: night, breakHours: noBreak, busy: [] };
+  assertEq(generateFreeSlots({ ...base, dateLocal: MONDAY }).map((s) => s.labelLocal), ['22:00', '23:00'], 'luni 22–02: luni 22:00, 23:00');
+  assertEq(generateFreeSlots({ ...base, dateLocal: TUESDAY }).map((s) => s.labelLocal), ['00:00', '01:00'], 'marți închis: doar continuarea turei de luni');
+  assertEq(
+    generateFreeSlots({ ...base, dateLocal: '2026-08-05' }).map((s) => s.labelLocal),
+    ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'],
+    'miercuri: nimic din marți (închis)'
+  );
+  // duminică 22–02 → continuarea apare luni dimineață, înaintea programului de luni
+  const sun: WorkingHours = { ...night, sun: { closed: false, start: '22:00', end: '02:00' } };
+  assertEq(
+    generateFreeSlots({ ...base, workingHours: sun, dateLocal: MONDAY }).map((s) => s.labelLocal),
+    ['00:00', '01:00', '22:00', '23:00'],
+    'luni: continuarea de duminică + tura de luni, în ordine'
+  );
+  // zile blocate
+  assertEq(
+    generateFreeSlots({ ...base, dateLocal: TUESDAY, blockedDates: [MONDAY] }).map((s) => s.labelLocal),
+    [],
+    'luni blocată: tura de luni (inclusiv după miezul nopții) nu se oferă'
+  );
+  assertEq(generateFreeSlots({ ...base, dateLocal: TUESDAY, blockedDates: [TUESDAY] }), [], 'marți blocată: nimic pe marți');
+  // ocupat marți 00:00–01:00
+  assertEq(
+    generateFreeSlots({
+      ...base,
+      dateLocal: TUESDAY,
+      busy: [{ startUtc: '2026-08-03T21:00:00.000Z', endUtc: '2026-08-03T22:00:00.000Z' }],
+    }).map((s) => s.labelLocal),
+    ['01:00'],
+    'programare marți 00:00 ocupă slotul de după miezul nopții'
+  );
+  // pauze în tura de noapte
+  assertEq(
+    [MONDAY, TUESDAY].flatMap((d) => generateFreeSlots({ ...base, dateLocal: d, breakHours: { enabled: true, start: '23:00', end: '00:00' } }).map((s) => `${d}:${s.labelLocal}`)),
+    [`${MONDAY}:22:00`, `${TUESDAY}:00:00`, `${TUESDAY}:01:00`],
+    'pauză 23:00–00:00 în tura 22–02'
+  );
+  assertEq(
+    generateFreeSlots({ ...base, dateLocal: TUESDAY, breakHours: { enabled: true, start: '00:30', end: '01:00' } }).map((s) => s.labelLocal),
+    ['01:00'],
+    'pauză 00:30–01:00 după miezul nopții exclude slotul 00:00'
+  );
+  assertEq(
+    generateFreeSlots({ ...base, dateLocal: MONDAY, breakHours: { enabled: true, start: '13:00', end: '14:00' } }).map((s) => s.labelLocal),
+    ['22:00', '23:00'],
+    'pauza de prânz nu afectează tura de noapte'
   );
 }
 

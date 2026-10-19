@@ -2,7 +2,7 @@
  * Run: npx tsx lib/workingHoursRules.test.ts
  * from apps/mobile
  */
-import { validateSchedule } from './workingHoursRules';
+import { formatTimeRange, isOvernightRange, validateSchedule } from './workingHoursRules';
 import type { WorkingHours } from './types';
 
 let passed = 0;
@@ -38,9 +38,36 @@ assert(
   'oră imposibilă 99:99 respinsă',
 );
 assert(
-  validateSchedule({ ...valid, mon: { closed: false, start: '18:00', end: '09:00' } }, noBreak) === 'hours',
-  'început după sfârșit respins',
+  validateSchedule({ ...valid, mon: { closed: false, start: '22:00', end: '02:00' } }, noBreak) === null,
+  'program peste noapte 22:00–02:00 acceptat',
 );
+assert(
+  validateSchedule({ ...valid, mon: { closed: false, start: '18:00', end: '09:00' } }, noBreak) === null,
+  'sfârșit înainte de început = a doua zi (acceptat)',
+);
+assert(
+  validateSchedule({ ...valid, mon: { closed: false, start: '10:00', end: '10:00' } }, noBreak) === 'hours',
+  'început egal cu sfârșit respins',
+);
+assert(
+  validateSchedule({ ...valid, mon: { closed: false, start: '22:00', end: '24:00' } }, noBreak) === 'hours',
+  '24:00 respins (format)',
+);
+assert(
+  validateSchedule({ ...valid, mon: { closed: false, start: '22:00', end: '2:00' } }, noBreak) === 'hours',
+  'oră fără zero în față respinsă și peste noapte',
+);
+assert(
+  validateSchedule(valid, { enabled: true, start: '23:30', end: '00:30' }) === null,
+  'pauză peste miezul nopții acceptată',
+);
+assert(
+  validateSchedule(valid, { enabled: true, start: '13:00', end: '13:00' }) === 'break',
+  'pauză de durată zero respinsă',
+);
+assert(formatTimeRange('22:00', '02:00', '(+1 zi)') === '22:00–02:00 (+1 zi)', 'afișare 22:00–02:00 (+1 zi)');
+assert(formatTimeRange('09:00', '18:00', '(+1 zi)') === '09:00–18:00', 'afișare normală fără +1 zi');
+assert(isOvernightRange('22:00', '02:00') && !isOvernightRange('09:00', '18:00'), 'detectare peste noapte');
 assert(
   validateSchedule({ ...valid, mon: { closed: false, start: '', end: '18:00' } }, noBreak) === 'hours',
   'oră lipsă respinsă',
@@ -48,10 +75,6 @@ assert(
 assert(
   validateSchedule({ ...valid, mon: { closed: false, start: '9:00', end: '18:00' } }, noBreak) === 'hours',
   'format fără zero în față respins',
-);
-assert(
-  validateSchedule(valid, { enabled: true, start: '14:00', end: '13:00' }) === 'break',
-  'pauză inversată respinsă',
 );
 assert(
   validateSchedule(valid, { enabled: true, start: '', end: '' }) === 'break',

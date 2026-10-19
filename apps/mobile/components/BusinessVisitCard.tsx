@@ -10,6 +10,7 @@ import { formatAddress, type BusinessLocation } from '@/lib/location';
 import { formatPhoneDisplay } from '@/lib/phone';
 import type { DayHours, DayKey, WorkingHours } from '@/lib/types';
 import { formatPublicLocation } from '@/lib/visitCard';
+import { formatTimeRange } from '@/lib/workingHoursRules';
 import { trKey, useT, type TrKey } from '@/lib/i18n';
 
 const DAY_ORDER: { key: DayKey; dayKey: TrKey }[] = [
@@ -45,7 +46,7 @@ export function summarizeWorkingHours(hours: WorkingHours): string[] {
     if (day.closed) {
       lines.push(`${label}: ${trKey('card.closedDay')}`);
     } else {
-      lines.push(`${label}: ${day.start}–${day.end}`);
+      lines.push(`${label}: ${formatTimeRange(day.start, day.end, trKey('hours.nextDay'))}`);
     }
   }
   return lines;

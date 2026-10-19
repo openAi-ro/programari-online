@@ -6,6 +6,7 @@ import { SectionTitle, Toggle, useTheme } from '@/components/ui';
 import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import type { DayHours, DayKey, WorkingHours } from '@/lib/types';
+import { formatTimeRange, isOvernightRange, isValidTimeRange } from '@/lib/workingHoursRules';
 
 const DAY_LABELS: { key: DayKey; labelKey: TrKey }[] = [
   { key: 'mon', labelKey: 'hours.mon' },
@@ -143,10 +144,9 @@ export function WorkingHoursForm({ value, onChange }: Props) {
   }
 
   function applyBulkHours() {
-    const start = isValidHhMm(bulkStart) ? bulkStart : null;
-    const end = isValidHhMm(bulkEnd) ? bulkEnd : null;
-    if (!start || !end) return;
-    if (start >= end) return;
+    if (!isValidTimeRange(bulkStart, bulkEnd)) return;
+    const start = bulkStart;
+    const end = bulkEnd;
     const next: WorkingHours = { ...value };
     for (const { key } of DAY_LABELS) {
       if (!next[key].closed) {
@@ -156,7 +156,7 @@ export function WorkingHoursForm({ value, onChange }: Props) {
     onChange(next);
   }
 
-  const bulkOk = isValidHhMm(bulkStart) && isValidHhMm(bulkEnd) && bulkStart < bulkEnd;
+  const bulkOk = isValidTimeRange(bulkStart, bulkEnd);
 
   return (
     <View style={styles.wrap}>
@@ -219,6 +219,10 @@ export function WorkingHoursForm({ value, onChange }: Props) {
         {!bulkOk ? (
           <Text style={[styles.configError, { color: t.colors.danger }]}>
             {tr('hours.formatError')}
+          </Text>
+        ) : isOvernightRange(bulkStart, bulkEnd) ? (
+          <Text style={[styles.configHint, { color: t.colors.textMuted }]}>
+            {formatTimeRange(bulkStart, bulkEnd, tr('hours.nextDay'))}
           </Text>
         ) : null}
       </View>
@@ -288,6 +292,9 @@ export function WorkingHoursForm({ value, onChange }: Props) {
                       placeholder="17:00"
                       accessibilityLabel={tr('hours.endA11y', { day: label })}
                     />
+                    {isOvernightRange(day.start, day.end) ? (
+                      <Text style={[styles.miniLabel, { color: t.colors.accent }]}>{tr('hours.nextDay')}</Text>
+                    ) : null}
                   </View>
                 </View>
               ) : (
