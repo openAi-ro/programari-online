@@ -14,6 +14,7 @@ import DateTimePicker, {
 
 import { useTheme } from '@/components/ui';
 import { localeTag, useT } from '@/lib/i18n';
+import { isCompleteYmd } from '@/lib/dateInput';
 import { fontSize, radius, spacing } from '@/constants/theme';
 
 type Props = {
@@ -115,7 +116,8 @@ export function DatePickerField({
               min={minimumDate ? toYmd(minimumDate) : undefined}
               max={maximumDate ? toYmd(maximumDate) : undefined}
               onChange={(e: { target: { value: string } }) => {
-                if (e.target.value) onChange(e.target.value);
+                // Partial years while typing ("0002-…") are not dates yet.
+                if (isCompleteYmd(e.target.value)) onChange(e.target.value);
               }}
               style={{
                 flex: 1,

@@ -677,24 +677,7 @@ export default function BookScreen() {
     );
   }
 
-  if (loading || !stepsReady) {
-    return (
-      <SkeletonScreen title={tr('book.title')} onBack={goBack} blocks={5} label={tr('book.loadingAgenda')} />
-    );
-  }
-
-  if (!business) {
-    return (
-      <Screen title={tr('book.title')} onBack={goBack}>
-        <ErrorState
-          title={tr('book.loadFail')}
-          description={error ?? tr('auth.cbUnknownError')}
-          action={<Button label={tr('common.back')} variant="secondary" onPress={goBack} />}
-        />
-      </Screen>
-    );
-  }
-
+  // Proprietarul își vede propria firmă: încărcarea se oprește înainte de pași (stepsReady rămâne false).
   if (ownBusinessBlock) {
     return (
       <Screen title={tr('book.title')} onBack={goBack}>
@@ -708,6 +691,24 @@ export default function BookScreen() {
               onPress={() => router.replace('/(app)/business/calendar' as never)}
             />
           }
+        />
+      </Screen>
+    );
+  }
+
+  if (loading || !stepsReady) {
+    return (
+      <SkeletonScreen title={tr('book.title')} onBack={goBack} blocks={5} label={tr('book.loadingAgenda')} />
+    );
+  }
+
+  if (!business) {
+    return (
+      <Screen title={tr('book.title')} onBack={goBack}>
+        <ErrorState
+          title={tr('book.loadFail')}
+          description={error ?? tr('auth.cbUnknownError')}
+          action={<Button label={tr('common.back')} variant="secondary" onPress={goBack} />}
         />
       </Screen>
     );
