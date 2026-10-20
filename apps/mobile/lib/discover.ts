@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+import { grantSignal, timeoutAfterGrant } from '@/lib/locateTiming';
 import { withTimeout } from '@/lib/withTimeout';
 import type { WorkingHours } from '@/lib/types';
 import { localeTag, trKey } from './i18n';
@@ -40,6 +41,8 @@ export type ListPublicBusinessesOpts = {
 };
 
 const GEO_TIMEOUT_MS = 15000;
+/** Poziție din cache acceptată pentru locația aproximativă. */
+const CACHED_POSITION_MAX_AGE_MS = 10 * 60000;
 
 function asNumber(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -249,7 +252,9 @@ export type DeviceCoordsOptions = {
 
 /**
  * Locația dispozitivului — web: navigator.geolocation; native: expo-location.
- * Implicit: aceeași strategie ca în business/setup (timeout 15 s + Balanced).
+ * Timeout-ul (implicit 15 s) pornește abia după ce permisiunea e acordată:
+ * timpul petrecut în dialogul de permisiune nu se numără.
+ * `approximate`: precizie redusă și poziție recentă din cache (max 10 min).
  */
 export async function getDeviceCoords(opts: DeviceCoordsOptions = {}): Promise<DeviceCoords> {
   const timeoutMs = opts.timeoutMs ?? GEO_TIMEOUT_MS;
@@ -257,34 +262,53 @@ export async function getDeviceCoords(opts: DeviceCoordsOptions = {}): Promise<D
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       throw new Error('location_unavailable');
     }
-    return withTimeout(
-      new Promise<DeviceCoords>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (p) =>
-            resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
-          (err) =>
-            reject(
-              new Error(
-                err.code === err.PERMISSION_DENIED ? 'permission_denied' : 'location_failed'
-              )
-            ),
-          opts.approximate
-            ? { enableHighAccuracy: false, timeout: Math.max(1000, timeoutMs - 1000), maximumAge: 10 * 60000 }
-            : { enableHighAccuracy: true, timeout: timeoutMs - 2000, maximumAge: 60000 }
-        );
-      }),
-      timeoutMs,
-      'location_timeout'
+    const perms = navigator.permissions;
+    const signal = grantSignal(
+      perms?.query ? () => perms.query({ name: 'geolocation' as PermissionName }) : null
     );
+    try {
+      // Timeout-ul nativ (options.timeout) nu include dialogul de permisiune; timer-ul de
+      // siguranță pentru browserele care nu-l respectă pornește tot doar după acordare.
+      return await timeoutAfterGrant(
+        new Promise<DeviceCoords>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
+            (err) =>
+              reject(
+                new Error(
+                  err.code === err.PERMISSION_DENIED
+                    ? 'permission_denied'
+                    : err.code === err.TIMEOUT
+                      ? 'location_timeout'
+                      : 'location_failed'
+                )
+              ),
+            {
+              enableHighAccuracy: !opts.approximate,
+              timeout: timeoutMs,
+              maximumAge: opts.approximate ? CACHED_POSITION_MAX_AGE_MS : 60000,
+            }
+          );
+        }),
+        signal.granted,
+        timeoutMs + 2000
+      );
+    } finally {
+      signal.dispose();
+    }
   }
 
   const Location = await import('expo-location');
-  const { status } = await withTimeout(
-    Location.requestForegroundPermissionsAsync(),
-    GEO_TIMEOUT_MS,
-    'permission_timeout'
-  );
+  // Fără timeout: dialogul de permisiune așteaptă răspunsul utilizatorului.
+  const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') throw new Error('permission_denied');
+
+  if (opts.approximate) {
+    const last = await Location.getLastKnownPositionAsync({ maxAge: CACHED_POSITION_MAX_AGE_MS }).catch(
+      () => null
+    );
+    if (last) return { latitude: last.coords.latitude, longitude: last.coords.longitude };
+  }
 
   const pos = await withTimeout(
     Location.getCurrentPositionAsync({

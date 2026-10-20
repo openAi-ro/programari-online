@@ -168,7 +168,7 @@ export function NearbyCarousel() {
         </View>
       ) : null}
 
-      {showPrompt && (locState === 'denied' || locState === 'failed') ? (
+      {showPrompt && locState !== 'idle' && !area ? (
         <Callout tone="warning" title={tr('nearby.locFailTitle')}>
           {locState === 'denied' ? tr('nearby.deniedDesc') : tr('nearby.failedDesc')}
         </Callout>
