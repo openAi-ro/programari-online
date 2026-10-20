@@ -28,6 +28,11 @@ function translate(lang: AppLanguage, key: TrKey, vars?: TrVars): string {
   return fill(hit, vars);
 }
 
+/** Traduce o cheie într-o limbă specificată, indiferent de limba curentă. */
+export function translateTo(lang: AppLanguage, key: TrKey, vars?: TrVars): string {
+  return translate(lang, key, vars);
+}
+
 /**
  * Traducere pentru cod non-React (lib/*): citește limba curentă din memorie.
  * Componentele primesc re-render prin provider; aici limba e cea setată

@@ -1,4 +1,4 @@
-import { trKey } from './i18n';
+import { trKey, translateTo } from './i18n';
 import { normalizePhoneE164 } from './phone';
 
 /** Limite aliniate cu migrarea v60 (check-uri în DB). */
@@ -64,28 +64,28 @@ export function buildAutoDescription(input: {
     : '';
   if (name) {
     if (category && city) {
-      parts.push(trKey('page.autoWelcomeCatCity', { name, category, city }));
+      parts.push(translateTo('ro', 'page.autoWelcomeCatCity', { name, category, city }));
     } else if (category) {
-      parts.push(trKey('page.autoWelcomeCat', { name, category }));
+      parts.push(translateTo('ro', 'page.autoWelcomeCat', { name, category }));
     } else {
-      parts.push(trKey('page.autoWelcome', { name }));
+      parts.push(translateTo('ro', 'page.autoWelcome', { name }));
     }
   }
 
   const place = [city, input.county?.trim()].filter(Boolean).join(', ');
   // Orașul deja numit în prima propoziție nu se repetă.
-  if (place && !(category && city)) parts.push(trKey('page.autoPlace', { place }));
+  if (place && !(category && city)) parts.push(translateTo('ro', 'page.autoPlace', { place }));
 
   const names = input.serviceNames.map((s) => s.trim()).filter(Boolean);
   if (names.length > 0) {
     const listed = names.slice(0, AUTO_DESCRIPTION_SERVICES).join(', ');
     const suffix =
-      names.length > AUTO_DESCRIPTION_SERVICES ? ` ${trKey('page.autoMore')}` : '';
-    parts.push(trKey('page.autoServices', { services: `${listed}${suffix}` }));
+      names.length > AUTO_DESCRIPTION_SERVICES ? ` ${translateTo('ro', 'page.autoMore')}` : '';
+    parts.push(translateTo('ro', 'page.autoServices', { services: `${listed}${suffix}` }));
   }
 
-  parts.push(trKey('page.autoCta'));
-  return parts.join(' ');
+  parts.push(translateTo('ro', 'page.autoCta'));
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 /**

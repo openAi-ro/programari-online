@@ -485,7 +485,7 @@ export default function PublicBookScreen() {
   const descriptionText = effectiveDescription({
     description: business.description,
     name: business.name,
-    categoryLabel: categoryLabelForKey(business.category),
+    categoryLabel: categoryLabelForKey(business.category, 'ro'),
     city: business.city,
     county: business.county,
     serviceNames: services.map((s) => s.name),

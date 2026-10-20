@@ -1,6 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
-import { trKey, type TrKey } from './i18n';
+import { translateTo, trKey, type TrKey } from './i18n';
+import type { AppLanguage } from './language';
 
 /**
  * Client browse ("Caută") — 14 business/service categories.
@@ -123,10 +124,12 @@ export function categoryLabel(cat: BrowseCategory): string {
   return trKey(cat.labelKey);
 }
 
-export function categoryLabelForKey(key: string | null | undefined): string {
+/** `lang` forțează limba (ex. 'ro' pentru descrierea automată a paginii publice). */
+export function categoryLabelForKey(key: string | null | undefined, lang?: AppLanguage): string {
   if (!key) return '';
   const cat = BROWSE_CATEGORIES.find((c) => c.key === key);
-  return cat ? categoryLabel(cat) : '';
+  if (!cat) return '';
+  return lang ? translateTo(lang, cat.labelKey) : categoryLabel(cat);
 }
 
 export function categoryKeyForLabel(label: string): string | null {

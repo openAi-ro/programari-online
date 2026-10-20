@@ -167,7 +167,7 @@ export default function BusinessPageSettingsScreen() {
     setDescription(
       buildAutoDescription({
         name: business.name,
-        categoryLabel: categoryLabelForKey(business.category),
+        categoryLabel: categoryLabelForKey(business.category, 'ro'),
         city: business.city,
         county: business.county,
         serviceNames,
