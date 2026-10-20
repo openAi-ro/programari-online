@@ -6,6 +6,7 @@ import {
   AI_RATE_LIMITS,
   buildAgentKnowledge,
   buildLlmMessages,
+  jwtClaims,
   classifyWithLlmDetailed,
   redactPersonalData,
   buildCallerKey,
@@ -242,6 +243,12 @@ async function main() {
   assert(hung.status === 'error' && Date.now() - t0 < 1000, 'timeout -> error');
   const sure = await runAgentCore({ knowledge: kPriv, message: 'Cât costă tunsul?', llm: { apiKey: 'k', model: 'm', baseUrl: 'https://x' }, fetchImpl: throwing });
   assert(sure.llmStatus === 'not_needed' && sure.source === 'rules', 'reguli sigure -> fără LLM');
+
+  // jwtClaims
+  const enc = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const tok = `${enc({ alg: 'HS256' })}.${enc({ role: 'anon', ref: 'abc', iss: 'supabase' })}.sig`;
+  assert(jwtClaims(tok)?.role === 'anon' && jwtClaims(tok)?.ref === 'abc', 'jwtClaims: role + ref');
+  assert(jwtClaims('sb_publishable_xyz') === null && jwtClaims('a.b.c') === null, 'jwtClaims: non-JWT -> null');
 
   console.log(`aiCore: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

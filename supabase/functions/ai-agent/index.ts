@@ -23,6 +23,7 @@ import {
   buildAgentKnowledge,
   buildCallerKey,
   clientIpFrom,
+  jwtClaims,
   parseRateVerdict,
   rateLimitMessage,
   runAgentCore,
@@ -70,6 +71,11 @@ async function authorize(req: Request, channel: AgentChannel): Promise<Caller | 
 
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   if (anonKey && bearer === anonKey) return { kind: 'anon', userId: null };
+  // The gateway (verify_jwt) has already verified the signature; the project's
+  // legacy anon JWT may differ from SUPABASE_ANON_KEY (new key formats).
+  const claims = jwtClaims(bearer);
+  if (claims?.role === 'anon') return { kind: 'anon', userId: null };
+  if (claims?.role !== 'authenticated') return null;
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   if (!supabaseUrl || !anonKey) return null;

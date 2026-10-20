@@ -705,3 +705,25 @@ export function rateLimitMessage(scope: RateScope | null, retryAfterS: number): 
   }
   return 'Ai atins limita de mesaje pentru astăzi. Încearcă din nou mâine sau contactează direct business-ul.';
 }
+
+/**
+ * Claims of a JWT WITHOUT verifying the signature. Only safe behind the Supabase
+ * gateway with verify_jwt on (default), which has already verified it. Used to
+ * recognise the project's anon key even when SUPABASE_ANON_KEY holds another format.
+ */
+export function jwtClaims(token: string): { role?: string; ref?: string; sub?: string } | null {
+  const parts = (token ?? '').split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    const c = JSON.parse(json) as Record<string, unknown>;
+    return {
+      role: typeof c.role === 'string' ? c.role : undefined,
+      ref: typeof c.ref === 'string' ? c.ref : undefined,
+      sub: typeof c.sub === 'string' ? c.sub : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
