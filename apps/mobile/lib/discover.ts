@@ -15,6 +15,10 @@ export type PublicBusiness = {
   latitude: number | null;
   longitude: number | null;
   logo_url: string | null;
+  /** Coperta paginii publice (v60/v61); null = fallback pe logo/categorie. */
+  cover_url: string | null;
+  /** Vitrina publică activă (v60/v62); false = fără copertă în descoperire. */
+  website_enabled: boolean;
   maps_url: string | null;
   avg_rating: number | null;
   review_count: number;
@@ -72,6 +76,8 @@ function normalizeRow(raw: Record<string, unknown>): PublicBusiness | null {
     latitude: asNumber(raw.latitude),
     longitude: asNumber(raw.longitude),
     logo_url: typeof raw.logo_url === 'string' ? raw.logo_url : null,
+    cover_url: typeof raw.cover_url === 'string' ? raw.cover_url : null,
+    website_enabled: raw.website_enabled !== false,
     working_hours: isWorkingHours(raw.working_hours) ? (raw.working_hours as WorkingHours) : null,
     timezone: typeof raw.timezone === 'string' && raw.timezone ? raw.timezone : null,
     promo_video_url: typeof raw.promo_video_url === 'string' ? raw.promo_video_url : null,
@@ -128,7 +134,7 @@ export async function listPublicBusinesses(
   // Fallback: SELECT pe câmpuri publice (merge pe live fără migrarea v26).
   let query = supabase
     .from('business_profiles')
-    .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, maps_url, working_hours, timezone, promo_video_url, category, country')
+    .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, cover_url, website_enabled, maps_url, working_hours, timezone, promo_video_url, category, country')
     .order('name', { ascending: true })
     .limit(limit);
 
@@ -143,7 +149,7 @@ export async function listPublicBusinesses(
   }
 
   let selectResult = await query;
-  if (selectResult.error && /category|country/i.test(selectResult.error.message)) {
+  if (selectResult.error && /category|country|cover_url|website_enabled/i.test(selectResult.error.message)) {
     let retry = supabase
       .from('business_profiles')
       .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, maps_url, working_hours, timezone, promo_video_url, country')
@@ -160,7 +166,7 @@ export async function listPublicBusinesses(
     }
     selectResult = (await retry) as typeof selectResult;
   }
-  if (selectResult.error && /promo_video_url|working_hours|country/i.test(selectResult.error.message)) {
+  if (selectResult.error && /promo_video_url|working_hours|country|cover_url|website_enabled/i.test(selectResult.error.message)) {
     let retry = supabase
       .from('business_profiles')
       .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, maps_url, timezone')

@@ -1,6 +1,17 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 
@@ -32,7 +43,22 @@ import {
 } from '@/lib/bookingRules';
 import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
-import { formatAddress, locationFromBusiness } from '@/lib/location';
+import {
+  buildMapsUrl,
+  buildNativeMapsUrl,
+  formatAddress,
+  locationFromBusiness,
+  openMaps,
+} from '@/lib/location';
+import { BROWSE_CATEGORIES, categoryLabelForKey } from '@/lib/browseCategories';
+import {
+  effectiveDescription,
+  normalizeGalleryUrls,
+  presentationEnabled,
+  telUrl,
+  whatsAppUrl,
+} from '@/lib/businessPage';
+import { formatTimeRange } from '@/lib/workingHoursRules';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { markWaitlistBooked } from '@/lib/notify-client';
@@ -42,8 +68,9 @@ import { parseTipInput, tipOptions } from '@/lib/tip';
 import { generateFreeSlots } from '@/lib/slots';
 import { createRequestTracker } from '@/lib/latestRequest';
 import { localDayBoundsUtc } from '@/lib/timezone';
+import { fireAndForget } from '@/lib/fireAndForget';
 import { supabase } from '@/lib/supabase';
-import type { BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
+import type { BusinessProfile, DayKey, FreeSlot, Service, Staff } from '@/lib/types';
 
 /** Public HTTPS booking page: /b/{publicCode} — works in browser without installing the app. */
 export default function PublicBookScreen() {
@@ -79,6 +106,7 @@ export default function PublicBookScreen() {
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const [tipRon, setTipRon] = useState(0);
   const [tipCustom, setTipCustom] = useState('');
 
@@ -138,22 +166,28 @@ export default function PublicBookScreen() {
       biz.blocked_dates = Array.isArray(biz.blocked_dates) ? biz.blocked_dates : [];
       setBusiness(biz);
 
-      const { data: svcRows } = await supabase
-        .from('services')
-        .select('*')
-        .eq('business_id', biz.id)
-        .eq('active', true)
-        .order('sort_order', { ascending: true });
+      // Restul depinde doar de business → toate cererile pleacă odată.
+      const [{ data: svcRows }, { data: staffRows }, { data: rate }, { data: revRows }] =
+        await Promise.all([
+          supabase
+            .from('services')
+            .select('*')
+            .eq('business_id', biz.id)
+            .eq('active', true)
+            .order('sort_order', { ascending: true }),
+          supabase
+            .from('staff')
+            .select('*')
+            .eq('business_id', biz.id)
+            .eq('active', true)
+            .order('sort_order', { ascending: true }),
+          supabase.rpc('business_rating', { p_business_id: biz.id }),
+          supabase.rpc('list_public_reviews', { p_business_id: biz.id, p_limit: 5 }),
+        ]);
       const list = (svcRows ?? []) as Service[];
       setServices(list);
       if (list.length > 0) setServiceId(list[0].id);
 
-      const { data: staffRows } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('business_id', biz.id)
-        .eq('active', true)
-        .order('sort_order', { ascending: true });
       const team = (staffRows ?? []) as Staff[];
       setStaffList(team);
       if (team.length > 0) setStaffId(team[0].id);
@@ -173,7 +207,6 @@ export default function PublicBookScreen() {
         })
       );
 
-      const { data: rate } = await supabase.rpc('business_rating', { p_business_id: biz.id });
       const row = Array.isArray(rate) ? rate[0] : rate;
       setRating(
         row
@@ -183,10 +216,6 @@ export default function PublicBookScreen() {
             }
           : null
       );
-      const { data: revRows } = await supabase.rpc('list_public_reviews', {
-        p_business_id: biz.id,
-        p_limit: 2,
-      });
       if (Array.isArray(revRows)) {
         setReviewSnippets(
           revRows.map((r: { rating?: number; comment?: string }) => ({
@@ -202,6 +231,12 @@ export default function PublicBookScreen() {
   // Doar ultima încărcare de sloturi are voie să scrie starea (tastarea datei cifră cu cifră
   // pornește câte o cerere pe dată intermediară; un răspuns vechi nu suprascrie unul nou).
   const slotsRequests = useRef(createRequestTracker()).current;
+  const scrollRef = useRef<ScrollView | null>(null);
+  const bookingY = useRef(0);
+
+  function scrollToBooking() {
+    scrollRef.current?.scrollTo({ y: Math.max(0, bookingY.current - 12), animated: true });
+  }
 
   const loadSlots = useCallback(async () => {
     if (!business) return;
@@ -243,6 +278,13 @@ export default function PublicBookScreen() {
     void loadSlots();
   }, [loadSlots]);
 
+  // Titlul filei din browser = numele firmei (doar web).
+  useEffect(() => {
+    if (Platform.OS === 'web' && business?.name && typeof document !== 'undefined') {
+      document.title = business.name;
+    }
+  }, [business?.name]);
+
   function goLogin() {
     setPendingAuthRedirect(`/b/${code}`);
     void setAppMode('client');
@@ -277,15 +319,12 @@ export default function PublicBookScreen() {
     const appointment = created;
     let payError: string | null = null;
     if (appointment?.id) {
-      const notify = await notifyAfterBooking(appointment);
-      if (!notify.ok) {
-        console.warn('notify after book failed', notify.error);
-      }
-      await markWaitlistBooked({
+      fireAndForget(notifyAfterBooking(appointment), 'notify after book failed');
+      void markWaitlistBooked({
         businessId: business.id,
         clientUserId: session.user.id,
         desiredDate: dateLocal,
-      });
+      }).catch((e) => console.warn('markWaitlistBooked failed', e));
       if (appointment.payment_status === 'unpaid') {
         const pay = await startDepositCheckout(appointment.id, tipRon);
         if (!pay.ok) {
@@ -406,6 +445,42 @@ export default function PublicBookScreen() {
   }
 
   const dayBlocked = (business.blocked_dates ?? []).includes(dateLocal);
+  // --- Pagina de prezentare (Faza 1): totul derivă din datele deja încărcate. ---
+  const pageOn = presentationEnabled(business.website_enabled);
+  const category = BROWSE_CATEGORIES.find((c) => c.key === business.category) ?? null;
+  const categoryCity = [categoryLabelForKey(business.category), business.city]
+    .filter(Boolean)
+    .join(' · ');
+  const coverSource = business.cover_url
+    ? { uri: business.cover_url }
+    : (category?.image ?? null);
+  const gallery = normalizeGalleryUrls(business.gallery_urls);
+  const descriptionText = effectiveDescription({
+    description: business.description,
+    name: business.name,
+    categoryLabel: categoryLabelForKey(business.category),
+    city: business.city,
+    county: business.county,
+    serviceNames: services.map((s) => s.name),
+  });
+  const callHref = telUrl(business.contact_phone);
+  const whatsHref = whatsAppUrl(business.contact_phone);
+  const location = locationFromBusiness(business);
+  const mapsHref = buildMapsUrl(location);
+  const reviewCount = rating?.review_count ?? 0;
+  const showReviews = reviewCount >= 3 && reviewSnippets.length > 0;
+  const todayKey = (
+    ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+  )[new Date().getDay()] as DayKey;
+  const weekDays: { key: DayKey; label: string }[] = [
+    { key: 'mon', label: tr('hours.mon') },
+    { key: 'tue', label: tr('hours.tue') },
+    { key: 'wed', label: tr('hours.wed') },
+    { key: 'thu', label: tr('hours.thu') },
+    { key: 'fri', label: tr('hours.fri') },
+    { key: 'sat', label: tr('hours.sat') },
+    { key: 'sun', label: tr('hours.sun') },
+  ];
   const shownSlots = dateIssue ? [] : slots;
   const noSlots = !dateIssue && !slotsLoading && slots.length === 0;
 
@@ -413,11 +488,17 @@ export default function PublicBookScreen() {
     <Screen
       title={business.name}
       subtitle={tr('pub.online')}
+      scrollRef={scrollRef}
       onBack={goBack}
       footer={
         <>
           {error ? <Callout tone="danger">{error}</Callout> : null}
           {message ? <Callout tone="success">{message}</Callout> : null}
+          <Button
+            label={tr('page.bookNow')}
+            icon="calendar-outline"
+            onPress={scrollToBooking}
+          />
           {!session ? (
             <>
             <View style={{ gap: 12 }}>
@@ -462,6 +543,15 @@ export default function PublicBookScreen() {
         </>
       }
     >
+      {pageOn && coverSource ? (
+        <Image
+          source={coverSource}
+          style={styles.cover}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+        />
+      ) : null}
+
       <View style={[styles.summary, { backgroundColor: t.colors.accentSoft }]}>
         <View style={[styles.summaryIcon, { backgroundColor: t.colors.surface, overflow: 'hidden' }]}>
           {business.logo_url && !logoFailed ? (
@@ -478,42 +568,257 @@ export default function PublicBookScreen() {
           <Text style={[styles.summaryName, { color: t.colors.accentSoftText }]}>
             {business.name}
           </Text>
+          {pageOn && categoryCity ? (
+            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
+              {categoryCity}
+            </Text>
+          ) : null}
           {formatAddress(locationFromBusiness(business)) ? (
             <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]} numberOfLines={2}>
               {formatAddress(locationFromBusiness(business))}
             </Text>
           ) : null}
-          {rating && rating.review_count > 0 ? (
+          {showReviews && rating ? (
             <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
               ★ {Number(rating.avg_rating).toFixed(1)} · {rating.review_count} {tr('book.reviewMany')}
             </Text>
-          ) : (
-            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
-              {tr('book.noReviews')}
-            </Text>
-          )}
+          ) : null}
           <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
             {selectedService
               ? `${selectedService.name} · ${formatDuration(selectedService.duration_minutes)} · ${formatRon(selectedService.price)}`
               : `${durationMinutes} min · ${business.timezone}`}
           </Text>
-          {reviewSnippets.length > 0
-            ? reviewSnippets.slice(0, 2).map((r, i) => (
-                <Text
-                  key={i}
-                  style={[styles.summaryMeta, { color: t.colors.accentSoftText, opacity: 0.9 }]}
-                  numberOfLines={2}
-                >
-                  {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
-                  {r.comment?.trim() ? ` — ${r.comment.trim()}` : ''}
-                </Text>
-              ))
-            : null}
         </View>
         <Badge tone="accent">{tr('book.freeCount', { n: shownSlots.length })}</Badge>
       </View>
 
+      {pageOn ? (
+        <>
+          <SectionTitle>{tr('page.about')}</SectionTitle>
+          <Text style={[styles.bodyText, { color: t.colors.text }]}>{descriptionText}</Text>
+
+          {callHref || whatsHref || business.instagram_url || business.facebook_url || mapsHref ? (
+            <View style={styles.contactRow}>
+              {callHref ? (
+                <ContactChip
+                  icon="call-outline"
+                  label={tr('page.call')}
+                  onPress={() => void Linking.openURL(callHref)}
+                />
+              ) : null}
+              {whatsHref ? (
+                <ContactChip
+                  icon="logo-whatsapp"
+                  label={tr('page.whatsapp')}
+                  onPress={() => void Linking.openURL(whatsHref)}
+                />
+              ) : null}
+              {business.instagram_url ? (
+                <ContactChip
+                  icon="logo-instagram"
+                  label="Instagram"
+                  onPress={() => void Linking.openURL(business.instagram_url as string)}
+                />
+              ) : null}
+              {business.facebook_url ? (
+                <ContactChip
+                  icon="logo-facebook"
+                  label="Facebook"
+                  onPress={() => void Linking.openURL(business.facebook_url as string)}
+                />
+              ) : null}
+              {mapsHref ? (
+                <ContactChip
+                  icon="map-outline"
+                  label={tr('page.map')}
+                  onPress={() => void openMaps(mapsHref, buildNativeMapsUrl(location))}
+                />
+              ) : null}
+            </View>
+          ) : null}
+
+{staffList.length > 0 ? (
+            <>
+              <SectionTitle>{tr('page.team')}</SectionTitle>
+              <View style={styles.serviceList}>
+                {staffList.map((member) => {
+                  const portfolio = normalizeGalleryUrls(member.portfolio_urls);
+                  return (
+                    <View
+                      key={member.id}
+                      style={[
+                        styles.teamCard,
+                        { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+                      ]}
+                    >
+                      <View style={styles.teamHead}>
+                        {member.photo_url ? (
+                          <Image
+                            source={{ uri: member.photo_url }}
+                            style={styles.teamPhoto}
+                            accessibilityIgnoresInvertColors
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.teamPhoto,
+                              styles.teamPhotoFallback,
+                              { backgroundColor: t.colors.accentSoft },
+                            ]}
+                          >
+                            <Ionicons name="person" size={20} color={t.colors.accent} />
+                          </View>
+                        )}
+                        <Text style={[styles.serviceName, { color: t.colors.text }]}>
+                          {member.name}
+                        </Text>
+                      </View>
+                      {portfolio.length > 0 ? (
+                        <View style={styles.grid}>
+                          {portfolio.map((url) => (
+                            <Pressable
+                              key={url}
+                              style={styles.thumbWrap}
+                              accessibilityRole="imagebutton"
+                              onPress={() => setLightbox(url)}
+                            >
+                              <Image
+                                source={{ uri: url }}
+                                style={styles.thumb}
+                                resizeMode="cover"
+                                accessibilityIgnoresInvertColors
+                              />
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          {gallery.length > 0 ? (
+            <>
+              <SectionTitle>{tr('page.gallery')}</SectionTitle>
+              <View style={styles.grid}>
+                {gallery.map((url) => (
+                  <Pressable
+                    key={url}
+                    style={styles.thumbWrap}
+                    accessibilityRole="imagebutton"
+                    onPress={() => setLightbox(url)}
+                  >
+                    <Image
+                      source={{ uri: url }}
+                      style={styles.thumb}
+                      resizeMode="cover"
+                      accessibilityIgnoresInvertColors
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {showReviews ? (
+            <>
+              <SectionTitle>{tr('page.reviews')}</SectionTitle>
+              <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
+                ★ {Number(rating?.avg_rating ?? 0).toFixed(1)} ·{' '}
+                {tr('page.reviewCount', { n: reviewCount })}
+              </Text>
+              <View style={styles.serviceList}>
+                {reviewSnippets.map((r, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.serviceRow,
+                      { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+                    ]}
+                  >
+                    <View style={styles.flex}>
+                      <Text style={[styles.reviewStars, { color: t.colors.accent }]}>
+                        {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
+                      </Text>
+                      {r.comment?.trim() ? (
+                        <Text style={[styles.serviceDesc, { color: t.colors.text }]}>
+                          {r.comment.trim()}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          <SectionTitle>{tr('page.hours')}</SectionTitle>
+          <View
+            style={[
+              styles.hoursCard,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
+            {weekDays.map((d) => {
+              const h = business.working_hours?.[d.key];
+              const isToday = d.key === todayKey;
+              return (
+                <View key={d.key} style={styles.hoursRow}>
+                  <Text
+                    style={[
+                      styles.hoursDay,
+                      { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
+                    ]}
+                  >
+                    {d.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.hoursVal,
+                      {
+                        color: isToday ? t.colors.text : t.colors.textMuted,
+                        fontWeight: isToday ? '700' : '400',
+                      },
+                    ]}
+                  >
+                    {h && !h.closed
+                      ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
+                      : tr('hours.closed')}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
+      <Modal
+        visible={lightbox !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightbox(null)}
+      >
+        <Pressable style={styles.lightbox} onPress={() => setLightbox(null)}>
+          {lightbox ? (
+            <Image
+              source={{ uri: lightbox }}
+              style={styles.lightboxImg}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
+
       <LocationCard location={locationFromBusiness(business)} />
+
+      <View
+        onLayout={(e) => {
+          bookingY.current = e.nativeEvent.layout.y;
+        }}
+      />
 
       {(business.deposit_ron ?? 0) > 0 ? (
         <Callout tone="info" title={tr('book.deposit')}>
@@ -680,6 +985,36 @@ export default function PublicBookScreen() {
   );
 }
 
+function ContactChip({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: 'call-outline' | 'logo-whatsapp' | 'logo-instagram' | 'logo-facebook' | 'map-outline';
+  label: string;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.contactChip,
+        {
+          backgroundColor: t.colors.surface,
+          borderColor: t.colors.borderStrong,
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}
+    >
+      <Ionicons name={icon} size={17} color={t.colors.accent} />
+      <Text style={[styles.contactChipText, { color: t.colors.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   summary: {
@@ -710,4 +1045,50 @@ const styles = StyleSheet.create({
   serviceDesc: { fontSize: fontSize.sm, opacity: 0.9 },
   serviceMeta: { fontSize: fontSize.sm },
   slotsLoading: { paddingVertical: spacing['2xl'], alignItems: 'center' },
+  cover: { width: '100%', height: 210, borderRadius: radius.lg },
+  bodyText: { fontSize: fontSize.md, lineHeight: 23 },
+  contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  contactChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    minHeight: spacing.touchTarget,
+  },
+  contactChipText: { fontSize: fontSize.sm, fontWeight: '700' },
+  serviceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  teamCard: {
+    gap: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+  },
+  teamHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  teamPhoto: { width: 48, height: 48, borderRadius: 24 },
+  teamPhotoFallback: { alignItems: 'center', justifyContent: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  thumbWrap: { width: '31%', aspectRatio: 1 },
+  thumb: { width: '100%', height: '100%', borderRadius: radius.md },
+  reviewStars: { fontSize: fontSize.md },
+  hoursCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
+  hoursRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
+  hoursDay: { fontSize: fontSize.sm },
+  hoursVal: { fontSize: fontSize.sm },
+  lightbox: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImg: { width: '100%', height: '100%' },
 });

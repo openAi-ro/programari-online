@@ -75,6 +75,8 @@ type ScreenProps = {
    * Implicit true. Pune false doar dacă ecranul își gestionează singur tastatura.
    */
   keyboardAvoid?: boolean;
+  /** Ref opțional la ScrollView-ul intern, pentru derulare programatică la o secțiune. */
+  scrollRef?: React.RefObject<ScrollView | null>;
 };
 
 export function Screen({
@@ -87,6 +89,7 @@ export function Screen({
   bottomInset = spacing['3xl'],
   footer,
   keyboardAvoid = true,
+  scrollRef,
 }: ScreenProps) {
   const t = useTheme();
   const tr = useT();
@@ -101,6 +104,7 @@ export function Screen({
 
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={styles.flex}
       contentContainerStyle={[styles.scrollContent, styles.shell, { paddingBottom: bottomInset }]}
       keyboardShouldPersistTaps="handled"

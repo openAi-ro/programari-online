@@ -58,6 +58,7 @@ import { uploadBusinessVideo } from '@/lib/businessVideo';
 import { pickerDurationToMs } from '@/lib/videoRules';
 import { PromoVideo } from '@/components/PromoVideo';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import { scheduleMessageDismiss } from '@/lib/transientMessage';
 import { isGoogleConnected } from '@/lib/googleCalendar';
 import { getSelectedBusinessId } from '@/lib/myBusiness';
@@ -242,9 +243,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         setLoading(false);
         return;
@@ -390,9 +389,7 @@ export default function SettingsScreen() {
   }
 
   async function persistAvatarUrl(url: string | null): Promise<void> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) throw new Error(trKey('req.notAuthed'));
     const cols =
       'id, email, phone, display_name, account_kind, notify_reminders, notify_decision, notify_whatsapp, avatar_url';
@@ -427,9 +424,7 @@ export default function SettingsScreen() {
 
   async function handleAvatarResult(result: ImagePicker.ImagePickerResult): Promise<void> {
     if (result.canceled || result.assets.length === 0) return;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setError(trKey('req.notAuthed'));
       return;
@@ -736,9 +731,7 @@ export default function SettingsScreen() {
   }
 
   async function handleSave(): Promise<boolean> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setError(trKey('req.notAuthed'));
       return false;
@@ -1427,9 +1420,7 @@ export default function SettingsScreen() {
             void setLanguage(next);
             void (async () => {
               try {
-                const {
-                  data: { user },
-                } = await supabase.auth.getUser();
+                const user = await getCurrentUser();
                 if (user) {
                   await supabase.from('profiles').update({ language: next }).eq('id', user.id);
                 }
@@ -1716,6 +1707,12 @@ export default function SettingsScreen() {
                 title={tr('qr.title')}
                 description={bizPublicCode ? tr('set.pubCodeRow', { code: bizPublicCode }) : tr('set.shareLink')}
                 onPress={() => router.push('/(app)/business/qr' as never)}
+              />
+              <SettingRow
+                icon="globe-outline"
+                title={tr('set.pageRow')}
+                description={tr('set.pageRowDesc')}
+                onPress={() => router.push('/(app)/business/page' as never)}
               />
               <SettingRow
                 icon="cut-outline"

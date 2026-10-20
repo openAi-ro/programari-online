@@ -67,6 +67,13 @@ export type BusinessProfile = {
   promo_video_url?: string | null;
   /** Cheie categorie browse (BROWSE_CATEGORIES.key), ex. coafura. */
   category?: string | null;
+  /** Pagina publică de prezentare (v60) — toate opționale până la migrare. */
+  description?: string | null;
+  cover_url?: string | null;
+  gallery_urls?: string[] | null;
+  website_enabled?: boolean | null;
+  /** Telefon public al firmei (apel + WhatsApp pe pagină), nu al contului. */
+  contact_phone?: string | null;
   created_at: string;
   updated_at: string;
 };

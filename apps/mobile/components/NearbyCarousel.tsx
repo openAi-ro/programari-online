@@ -19,6 +19,7 @@ import { Button, Callout, EmptyState, SectionTitle, Skeleton, useTheme } from '@
 import { PickerField } from '@/components/PickerField';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { BROWSE_CATEGORIES, categoryLabelForKey } from '@/lib/browseCategories';
+import { visibleCoverUrl } from '@/lib/businessPage';
 import {
   formatDistanceKm,
   getDeviceCoords,
@@ -312,12 +313,15 @@ function BusinessCard({ biz, width }: { biz: PublicBusinessWithDistance; width: 
   const t = useTheme();
   const tr = useT();
   const category = BROWSE_CATEGORIES.find((c) => c.key === biz.category) ?? null;
+  const cover = visibleCoverUrl(biz);
   const distance = formatDistanceKm(biz.distanceKm);
   const meta = [categoryLabelForKey(biz.category), distance, biz.city].filter(Boolean).join(' · ');
   return (
     <View testID="nearby-card" style={[styles.card, { width, backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
       <View style={[styles.media, { backgroundColor: t.colors.surfaceMuted }]}>
-        {biz.logo_url ? (
+        {cover ? (
+          <Image source={{ uri: cover }} style={styles.photo} resizeMode="cover" accessibilityIgnoresInvertColors />
+        ) : biz.logo_url ? (
           <Image source={{ uri: biz.logo_url }} style={styles.logo} resizeMode="contain" accessibilityIgnoresInvertColors />
         ) : category ? (
           <Image source={category.image} style={styles.photo} resizeMode="cover" accessibilityIgnoresInvertColors />
