@@ -384,16 +384,18 @@ export async function completeGoogleSignIn(
     .select('account_kind')
     .eq('id', user.id)
     .maybeSingle();
+
+  // Dacă nu avem profil sau e un signup proaspăt, setăm tipul contului
   if (!profile || isFreshSignup(user)) {
     const pending = await takePendingGoogleKind();
-    await persistAccountKind(
-      resolveGoogleAccountKind({
-        metadataKind: user.user_metadata?.account_kind as string | undefined,
-        pendingKind: pending ?? expectedKind,
-        profileKind: null,
-      })
-    );
+    const finalKind = resolveGoogleAccountKind({
+      metadataKind: user.user_metadata?.account_kind as string | undefined,
+      pendingKind: pending ?? expectedKind,
+      profileKind: null,
+    });
+    await persistAccountKind(finalKind);
   }
+
   const check = await assertAccountKind(expectedKind);
   if (!check.ok) {
     return { session: null, error: check.error };

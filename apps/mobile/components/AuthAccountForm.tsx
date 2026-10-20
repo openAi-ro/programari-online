@@ -270,19 +270,25 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       window.location.assign(url);
       return;
     }
-    const result = await WebBrowser.openAuthSessionAsync(url, getGoogleRedirectTo());
-    if (result.type !== 'success') {
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(url, getGoogleRedirectTo());
+      if (result.type !== 'success') {
+        setGoogleBusy(false);
+        setError(tr('auth.errGoogleCancelled') ?? 'Autentificarea a fost anulată.');
+        return;
+      }
+      const done = await completeGoogleSignIn(result.url, kind);
+      if (done.session) await claimReferralCode();
       setGoogleBusy(false);
-      return;
+      if (done.error || !done.session) {
+        setError(done.error ?? tr('auth.errGoogleDisabled'));
+        return;
+      }
+      setMessage(tr('auth.signedIn'));
+    } catch (e) {
+      setGoogleBusy(false);
+      setError(tr('auth.errGoogleNetwork') ?? 'Eroare de rețea. Încearcă din nou.');
     }
-    const done = await completeGoogleSignIn(result.url, kind);
-    if (done.session) await claimReferralCode();
-    setGoogleBusy(false);
-    if (done.error || !done.session) {
-      setError(done.error ?? tr('auth.errGoogleDisabled'));
-      return;
-    }
-    setMessage(tr('auth.signedIn'));
   }
 
   async function handleSendWhatsAppOtp() {

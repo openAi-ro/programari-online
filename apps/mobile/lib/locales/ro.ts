@@ -124,6 +124,8 @@ export const ro = {
   'auth.backToAccountChoice': 'Înapoi la alegerea contului',
   'auth.signedIn': 'Autentificare reușită.',
   'auth.googleContinue': 'Continuă cu Google',
+  'auth.errGoogleCancelled': 'Conectarea cu Google a fost anulată.',
+  'auth.errGoogleNetwork': 'Nu ne-am putut conecta la Google. Verifică internetul și încearcă din nou.',
   'auth.errGoogleDisabled': 'Logarea cu Google nu e activată încă pe server.',
   'auth.validNumber': 'Folosește un număr valid (07xxxxxxxx sau +40...).',
   'auth.accountExists': 'Contul există deja. Intră în cont sau, dacă ai uitat parola, folosește „Recuperează parola”.',

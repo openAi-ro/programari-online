@@ -126,6 +126,8 @@ export const en: typeof ro = {
   'auth.backToAccountChoice': 'Back to account choice',
   'auth.signedIn': 'Signed in successfully.',
   'auth.googleContinue': 'Continue with Google',
+  'auth.errGoogleCancelled': 'Google sign-in was cancelled.',
+  'auth.errGoogleNetwork': 'Could not reach Google. Check your connection and try again.',
   'auth.errGoogleDisabled': 'Google sign-in is not enabled on the server yet.',
   'auth.validNumber': 'Use a valid number (07xxxxxxxx or +40...).',
   'auth.accountExists': 'This account already exists. Sign in, or if you forgot your password, use “Recover password”.',
