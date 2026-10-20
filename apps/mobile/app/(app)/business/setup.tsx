@@ -59,14 +59,9 @@ import {
   categoryLabelForKey,
 } from '@/lib/browseCategories';
 import { COUNTRY_TIMEZONES, countryByCode, countryByName, countryCodeOf, countryNames, DEFAULT_COUNTRY_CODE } from '@/lib/countries';
+import { getDeviceCoords } from '@/lib/discover';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
-
-/**
- * `getCurrentPositionAsync` nu are timeout propriu: dacă permisiunea e refuzată
- * silențios sau GPS-ul nu răspunde, promisiunea nu se închide niciodată și butonul
- * rămâne pe spinner. Îl limităm explicit.
- */
 
 function todayYmd(): string {
   const d = new Date();
@@ -107,51 +102,6 @@ function eachYmdInclusive(from: string, to: string): string[] {
 }
 
 const GEO_TIMEOUT_MS = 15000;
-
-/**
- * Coordonatele curente, cu timeout pe fiecare pas. Pe web folosim direct
- * `navigator.geolocation` (cu timeout propriu, ca dialogul de permisiune blocat
- * să nu lase butonul pe spinner); pe telefon, expo-location cu acuratețe echilibrată,
- * care răspunde mai repede decât High și e suficientă pentru adresă.
- */
-async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
-  if (Platform.OS === 'web') {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      throw new Error('location_unavailable');
-    }
-    return withTimeout(
-      new Promise<{ lat: number; lon: number }>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
-          (err) =>
-            reject(
-              new Error(
-                err.code === err.PERMISSION_DENIED ? 'permission_denied' : 'location_failed'
-              )
-            ),
-          { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS - 2000, maximumAge: 60000 }
-        );
-      }),
-      GEO_TIMEOUT_MS,
-      'location_timeout'
-    );
-  }
-
-  const Location = await import('expo-location');
-  const { status } = await withTimeout(
-    Location.requestForegroundPermissionsAsync(),
-    GEO_TIMEOUT_MS,
-    'permission_timeout'
-  );
-  if (status !== 'granted') throw new Error('permission_denied');
-
-  const pos = await withTimeout(
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-    GEO_TIMEOUT_MS,
-    'location_timeout'
-  );
-  return { lat: pos.coords.latitude, lon: pos.coords.longitude };
-}
 
 export default function BusinessSetupScreen() {
   const t = useTheme();
@@ -336,7 +286,8 @@ export default function BusinessSetupScreen() {
     setMessage(null);
     setGeoBusy(true);
     try {
-      const { lat, lon } = await getCurrentCoords();
+      // Timeout-ul pornește doar după acordarea permisiunii (lib/locateTiming).
+      const { latitude: lat, longitude: lon } = await getDeviceCoords();
       setLatitude(lat.toFixed(6));
       setLongitude(lon.toFixed(6));
 
