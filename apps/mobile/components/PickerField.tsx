@@ -1,11 +1,22 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { normalizeRo } from '@/lib/roGeo';
+import { useWebKeyboardInset } from '@/lib/keyboardInset';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -36,6 +47,7 @@ export function PickerField({
   const [open, setOpen] = useState(false);
   const shownPlaceholder = placeholder ?? tr('pick.choose');
   const [query, setQuery] = useState('');
+  const webKeyboardInset = useWebKeyboardInset(open);
 
   const filtered = useMemo(() => {
     const q = normalizeRo(query);
@@ -85,7 +97,12 @@ export function PickerField({
         onRequestClose={close}
         statusBarTranslucent
       >
-        <View style={[styles.backdrop, { backgroundColor: t.colors.overlay }]}>
+        {/* Foaia stă deasupra tastaturii: nativ prin KeyboardAvoidingView (fereastra Modal nu se
+            redimensionează în edge-to-edge), pe web prin visualViewport. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'web' ? undefined : 'padding'}
+          style={[styles.backdrop, { backgroundColor: t.colors.overlay, paddingBottom: webKeyboardInset }]}
+        >
           <View style={[styles.sheet, { backgroundColor: t.colors.bgElevated }]}>
             <View style={styles.sheetHead}>
               <Text style={[styles.sheetTitle, { color: t.colors.text }]}>{label}</Text>
@@ -161,7 +178,7 @@ export function PickerField({
               }}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -203,7 +220,8 @@ const styles = StyleSheet.create({
     minHeight: spacing.touchTarget,
   },
   searchInput: { flex: 1, fontSize: fontSize.md },
-  list: { flexGrow: 0 },
+  // flexShrink: lista se micșorează și derulează când tastatura lasă puțin loc.
+  list: { flexGrow: 0, flexShrink: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
