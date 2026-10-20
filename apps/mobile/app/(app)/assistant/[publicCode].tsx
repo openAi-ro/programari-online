@@ -243,7 +243,14 @@ export default function AssistantScreen() {
             onSubmitEditing={() => send(draft)}
             returnKeyType="send"
           />
-          <Button label={tr('as.send')} onPress={() => send(draft)} disabled={!draft.trim()} />
+          {/* Button e implicit fullWidth (width 100%) și strivea inputul din rând. */}
+          <Button
+            label={tr('as.send')}
+            icon="send"
+            fullWidth={false}
+            onPress={() => send(draft)}
+            disabled={!draft.trim()}
+          />
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -262,6 +269,7 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: {
     flex: 1,
+    minHeight: spacing.touchTarget,
     borderWidth: 1,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
