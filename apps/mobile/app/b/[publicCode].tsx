@@ -235,6 +235,15 @@ export default function PublicBookScreen() {
   const bookingY = useRef(0);
 
   function scrollToBooking() {
+    // Pe web, scrollTo({y}) pe coordonata onLayout nu derulează vizibil în Chrome:
+    // ancora reală din DOM e calea sigură. Pe telefon rămâne derularea nativă.
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const el = document.getElementById('booking-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
     scrollRef.current?.scrollTo({ y: Math.max(0, bookingY.current - 12), animated: true });
   }
 
@@ -815,6 +824,7 @@ export default function PublicBookScreen() {
       <LocationCard location={locationFromBusiness(business)} />
 
       <View
+        nativeID="booking-section"
         onLayout={(e) => {
           bookingY.current = e.nativeEvent.layout.y;
         }}
