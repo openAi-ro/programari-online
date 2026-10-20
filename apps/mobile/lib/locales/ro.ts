@@ -1216,6 +1216,7 @@ export const ro = {
   'page.autoMore': 'și altele',
   'page.autoCta': 'Rezervă-ți locul online, fără să suni.',
   'page.reviewCount': '{n} recenzii',
+  'page.priceFrom': 'de la {price}',
   'pageEdit.title': 'Pagina de prezentare',
   'pageEdit.subtitle': 'Cum văd clienții firma ta pe internet',
   'pageEdit.cover': 'Poză de copertă',

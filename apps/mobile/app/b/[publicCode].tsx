@@ -510,6 +510,9 @@ export default function PublicBookScreen() {
   ];
   const shownSlots = dateIssue ? [] : slots;
   const noSlots = !dateIssue && !slotsLoading && slots.length === 0;
+  // "de la X lei" doar când toate serviciile au preț (minimul > 0).
+  const minPrice =
+    services.length > 0 ? Math.min(...services.map((s) => Number(s.price) || 0)) : 0;
 
   return (
     <Screen
@@ -611,11 +614,11 @@ export default function PublicBookScreen() {
               ★ {Number(rating.avg_rating).toFixed(1)} · {rating.review_count} {tr('book.reviewMany')}
             </Text>
           ) : null}
-          <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
-            {selectedService
-              ? `${selectedService.name} · ${formatDuration(selectedService.duration_minutes)} · ${formatRon(selectedService.price)}`
-              : `${durationMinutes} min · ${business.timezone}`}
-          </Text>
+          {minPrice > 0 ? (
+            <Text style={[styles.summaryMeta, { color: t.colors.accentSoftText }]}>
+              {tr('page.priceFrom', { price: formatRon(minPrice) })}
+            </Text>
+          ) : null}
         </View>
         <Badge tone="accent">{tr('book.freeCount', { n: shownSlots.length })}</Badge>
       </View>
