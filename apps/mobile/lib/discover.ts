@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/withTimeout';
 import type { WorkingHours } from '@/lib/types';
-import { trKey } from './i18n';
+import { localeTag, trKey } from './i18n';
 
 export type PublicBusiness = {
   id: string;
@@ -216,7 +216,10 @@ export function haversineKm(
 export function formatDistanceKm(km: number | null | undefined): string | null {
   if (km == null || !Number.isFinite(km)) return null;
   if (km < 1) return `${Math.round(km * 1000)} m`;
-  if (km < 10) return `${km.toFixed(1)} km`;
+  // „3,2 km” în română, „3.2 km” în engleză.
+  if (km < 10) {
+    return `${km.toLocaleString(localeTag(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+  }
   return `${Math.round(km)} km`;
 }
 
@@ -238,11 +241,18 @@ export function formatBizHint(
 
 export type DeviceCoords = { latitude: number; longitude: number };
 
+export type DeviceCoordsOptions = {
+  /** Locație aproximativă (fără GPS precis): rețea / celule, mai rapidă. */
+  approximate?: boolean;
+  timeoutMs?: number;
+};
+
 /**
  * Locația dispozitivului — web: navigator.geolocation; native: expo-location.
- * Aceeași strategie ca în business/setup (timeout + Balanced).
+ * Implicit: aceeași strategie ca în business/setup (timeout 15 s + Balanced).
  */
-export async function getDeviceCoords(): Promise<DeviceCoords> {
+export async function getDeviceCoords(opts: DeviceCoordsOptions = {}): Promise<DeviceCoords> {
+  const timeoutMs = opts.timeoutMs ?? GEO_TIMEOUT_MS;
   if (Platform.OS === 'web') {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       throw new Error('location_unavailable');
@@ -258,10 +268,12 @@ export async function getDeviceCoords(): Promise<DeviceCoords> {
                 err.code === err.PERMISSION_DENIED ? 'permission_denied' : 'location_failed'
               )
             ),
-          { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS - 2000, maximumAge: 60000 }
+          opts.approximate
+            ? { enableHighAccuracy: false, timeout: Math.max(1000, timeoutMs - 1000), maximumAge: 10 * 60000 }
+            : { enableHighAccuracy: true, timeout: timeoutMs - 2000, maximumAge: 60000 }
         );
       }),
-      GEO_TIMEOUT_MS,
+      timeoutMs,
       'location_timeout'
     );
   }
@@ -275,11 +287,32 @@ export async function getDeviceCoords(): Promise<DeviceCoords> {
   if (status !== 'granted') throw new Error('permission_denied');
 
   const pos = await withTimeout(
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-    GEO_TIMEOUT_MS,
+    Location.getCurrentPositionAsync({
+      accuracy: opts.approximate ? Location.Accuracy.Low : Location.Accuracy.Balanced,
+    }),
+    timeoutMs,
     'location_timeout'
   );
   return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+}
+
+/**
+ * Permisiunea de locație e deja acordată? Nu afișează niciun dialog
+ * (web: Permissions API; nativ: getForegroundPermissionsAsync).
+ */
+export async function hasGrantedLocation(): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web') {
+      if (typeof navigator === 'undefined' || !navigator.permissions?.query) return false;
+      const st = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+      return st.state === 'granted';
+    }
+    const Location = await import('expo-location');
+    const { status } = await Location.getForegroundPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
 }
 
 export function locationErrorMessage(err: unknown): string {
