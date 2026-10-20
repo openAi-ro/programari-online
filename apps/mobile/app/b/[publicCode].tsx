@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  useWindowDimensions,
   StyleSheet,
   Text,
   View,
@@ -78,6 +79,8 @@ export default function PublicBookScreen() {
   const goBack = useBack();
   const tr = useT();
   const { publicCode } = useLocalSearchParams<{ publicCode: string }>();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWide = windowWidth >= 900;
   const code = String(publicCode ?? '').trim();
   const [session, setSession] = useState<Session | null>(null);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
@@ -495,6 +498,7 @@ export default function PublicBookScreen() {
 
   return (
     <Screen
+      wide
       title={business.name}
       subtitle={tr('pub.online')}
       scrollRef={scrollRef}
@@ -555,7 +559,7 @@ export default function PublicBookScreen() {
       {pageOn && coverSource ? (
         <Image
           source={coverSource}
-          style={styles.cover}
+          style={[styles.cover, isWide ? styles.coverWide : null]}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
         />
@@ -603,7 +607,9 @@ export default function PublicBookScreen() {
 
       {pageOn ? (
         <>
-          <SectionTitle>{tr('page.about')}</SectionTitle>
+                    <View style={isWide ? styles.wideRow : undefined}>
+            <View style={isWide ? styles.wideMain : styles.colGap}>
+<SectionTitle>{tr('page.about')}</SectionTitle>
           <Text style={[styles.bodyText, { color: t.colors.text }]}>{descriptionText}</Text>
 
           {callHref || whatsHref || business.instagram_url || business.facebook_url || mapsHref ? (
@@ -646,6 +652,49 @@ export default function PublicBookScreen() {
             </View>
           ) : null}
 
+            </View>
+            <View style={isWide ? styles.wideSide : styles.colGap}>
+<SectionTitle>{tr('page.hours')}</SectionTitle>
+          <View
+            style={[
+              styles.hoursCard,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
+            {weekDays.map((d) => {
+              const h = business.working_hours?.[d.key];
+              const isToday = d.key === todayKey;
+              return (
+                <View key={d.key} style={styles.hoursRow}>
+                  <Text
+                    style={[
+                      styles.hoursDay,
+                      { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
+                    ]}
+                  >
+                    {d.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.hoursVal,
+                      {
+                        color: isToday ? t.colors.text : t.colors.textMuted,
+                        fontWeight: isToday ? '700' : '400',
+                      },
+                    ]}
+                  >
+                    {h && !h.closed
+                      ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
+                      : tr('hours.closed')}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+              <LocationCard location={location} />
+            </View>
+          </View>
+
 {staffList.length > 0 ? (
             <>
               <SectionTitle>{tr('page.team')}</SectionTitle>
@@ -687,7 +736,7 @@ export default function PublicBookScreen() {
                           {portfolio.map((url) => (
                             <Pressable
                               key={url}
-                              style={styles.thumbWrap}
+                              style={[styles.thumbWrap, isWide ? styles.thumbWrapWide : null]}
                               accessibilityRole="imagebutton"
                               onPress={() => setLightbox(url)}
                             >
@@ -715,7 +764,7 @@ export default function PublicBookScreen() {
                 {gallery.map((url) => (
                   <Pressable
                     key={url}
-                    style={styles.thumbWrap}
+                    style={[styles.thumbWrap, isWide ? styles.thumbWrapWide : null]}
                     accessibilityRole="imagebutton"
                     onPress={() => setLightbox(url)}
                   >
@@ -763,44 +812,7 @@ export default function PublicBookScreen() {
             </>
           ) : null}
 
-          <SectionTitle>{tr('page.hours')}</SectionTitle>
-          <View
-            style={[
-              styles.hoursCard,
-              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
-            ]}
-          >
-            {weekDays.map((d) => {
-              const h = business.working_hours?.[d.key];
-              const isToday = d.key === todayKey;
-              return (
-                <View key={d.key} style={styles.hoursRow}>
-                  <Text
-                    style={[
-                      styles.hoursDay,
-                      { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
-                    ]}
-                  >
-                    {d.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.hoursVal,
-                      {
-                        color: isToday ? t.colors.text : t.colors.textMuted,
-                        fontWeight: isToday ? '700' : '400',
-                      },
-                    ]}
-                  >
-                    {h && !h.closed
-                      ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
-                      : tr('hours.closed')}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </>
+                  </>
       ) : null}
 
       <Modal
@@ -821,7 +833,7 @@ export default function PublicBookScreen() {
         </Pressable>
       </Modal>
 
-      <LocationCard location={locationFromBusiness(business)} />
+      {!pageOn ? <LocationCard location={locationFromBusiness(business)} /> : null}
 
       <View
         nativeID="booking-section"
@@ -1056,6 +1068,12 @@ const styles = StyleSheet.create({
   serviceMeta: { fontSize: fontSize.sm },
   slotsLoading: { paddingVertical: spacing['2xl'], alignItems: 'center' },
   cover: { width: '100%', height: 210, borderRadius: radius.lg },
+  coverWide: { height: 360 },
+  wideRow: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
+  wideMain: { flex: 1.6, gap: spacing.md, minWidth: 0 },
+  wideSide: { flex: 1, gap: spacing.md, minWidth: 0 },
+  thumbWrapWide: { width: '23%' },
+  colGap: { gap: spacing.md },
   bodyText: { fontSize: fontSize.md, lineHeight: 23 },
   contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   contactChip: {

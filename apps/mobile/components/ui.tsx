@@ -77,6 +77,8 @@ type ScreenProps = {
   keyboardAvoid?: boolean;
   /** Ref opțional la ScrollView-ul intern, pentru derulare programatică la o secțiune. */
   scrollRef?: React.RefObject<ScrollView | null>;
+  /** Conținut lat (până la 1100px) pe ecrane mari; implicit coloana de telefon (560px). */
+  wide?: boolean;
 };
 
 export function Screen({
@@ -90,9 +92,11 @@ export function Screen({
   footer,
   keyboardAvoid = true,
   scrollRef,
+  wide = false,
 }: ScreenProps) {
   const t = useTheme();
   const tr = useT();
+  const shellStyle = wide ? styles.shellWide : styles.shell;
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight(keyboardAvoid && Platform.OS === 'android');
   const footerPaddingBottom = computeFooterPaddingBottom({
@@ -106,7 +110,7 @@ export function Screen({
     <ScrollView
       ref={scrollRef}
       style={styles.flex}
-      contentContainerStyle={[styles.scrollContent, styles.shell, { paddingBottom: bottomInset }]}
+      contentContainerStyle={[styles.scrollContent, shellStyle, { paddingBottom: bottomInset }]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
       automaticallyAdjustKeyboardInsets={keyboardAvoid}
@@ -116,14 +120,14 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.flex, styles.shell, { paddingBottom: bottomInset }]}>{children}</View>
+    <View style={[styles.flex, shellStyle, { paddingBottom: bottomInset }]}>{children}</View>
   );
 
   const content = (
     <>
       <View style={{ paddingTop: insets.top, backgroundColor: t.colors.bgElevated }}>
         {title || onBack ? (
-          <View style={[styles.header, styles.shell]}>
+          <View style={[styles.header, shellStyle]}>
             <View style={styles.headerLeft}>
               {onBack ? (
                 <IconBadge icon="chevron-back" onPress={onBack} accessibilityLabel={tr('common.back')} />
@@ -160,7 +164,7 @@ export function Screen({
             },
           ]}
         >
-          <View style={styles.shell}>{footer}</View>
+          <View style={shellStyle}>{footer}</View>
         </View>
       ) : null}
     </>
@@ -1193,6 +1197,12 @@ const styles = StyleSheet.create({
   shell: {
     width: '100%',
     maxWidth: 560,
+    alignSelf: 'center',
+  },
+
+  shellWide: {
+    width: '100%',
+    maxWidth: 1100,
     alignSelf: 'center',
   },
 
