@@ -5,7 +5,7 @@ import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 
 /** Bucket public al copertei + galeriei firmei (migrarea v60). */
 export const BUSINESS_MEDIA_BUCKET = 'business-media';
-/** Lățimi maxime înainte de upload: coperta 1600px, galeria 1200px. */
+/** Lățimi maxime pe web (canvas): coperta 1600px, galeria 1200px. Pe telefon nu se aplică. */
 export const COVER_MAX_WIDTH = 1600;
 export const GALLERY_MAX_WIDTH = 1200;
 
@@ -13,7 +13,8 @@ export const GALLERY_MAX_WIDTH = 1200;
  * Micșorează poza locală și o urcă în folderul firmei (<business_id>/...).
  * Fără module native noi (aplicația instalată nu le are): pe web redimensionare
  * pe canvas (JPEG 80%), pe telefon citim fișierul dat de expo-image-picker
- * (apelat cu quality 0.8). Întoarce URL-ul public.
+ * (apelat cu quality 0.8), fără micșorarea lățimii; limita rămâne cea a bucketului (5 MB).
+ * Întoarce URL-ul public.
  */
 export async function uploadBusinessMediaImage(
   localUri: string,

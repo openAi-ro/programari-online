@@ -238,15 +238,6 @@ export default function PublicBookScreen() {
   const bookingY = useRef(0);
 
   function scrollToBooking() {
-    // Pe web, scrollTo({y}) pe coordonata onLayout nu derulează vizibil în Chrome:
-    // ancora reală din DOM e calea sigură. Pe telefon rămâne derularea nativă.
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const el = document.getElementById('booking-section');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
-      }
-    }
     scrollRef.current?.scrollTo({ y: Math.max(0, bookingY.current - 12), animated: true });
   }
 
@@ -298,8 +289,6 @@ export default function PublicBookScreen() {
     link.as = 'image';
     link.href = business.cover_url;
     document.head.appendChild(link);
-    const img = document.createElement('img');
-    img.src = business.cover_url;
     return () => {
       link.remove();
     };
@@ -513,6 +502,9 @@ export default function PublicBookScreen() {
   // "de la X lei" doar când toate serviciile au preț (minimul > 0).
   const minPrice =
     services.length > 0 ? Math.min(...services.map((s) => Number(s.price) || 0)) : 0;
+  const showTeam = staffList.some(
+    (m) => !!m.photo_url || normalizeGalleryUrls(m.portfolio_urls).length > 0
+  );
 
   return (
     <Screen
@@ -625,95 +617,94 @@ export default function PublicBookScreen() {
 
       {pageOn ? (
         <>
-                    <View style={isWide ? styles.wideRow : undefined}>
+          <View style={isWide ? styles.wideRow : undefined}>
             <View style={isWide ? styles.wideMain : styles.colGap}>
-<SectionTitle>{tr('page.about')}</SectionTitle>
-          <Text style={[styles.bodyText, { color: t.colors.text }]}>{descriptionText}</Text>
+              <SectionTitle>{tr('page.about')}</SectionTitle>
+              <Text style={[styles.bodyText, { color: t.colors.text }]}>{descriptionText}</Text>
 
-          {callHref || whatsHref || business.instagram_url || business.facebook_url || mapsHref ? (
-            <View style={styles.contactRow}>
-              {callHref ? (
-                <ContactChip
-                  icon="call-outline"
-                  label={tr('page.call')}
-                  onPress={() => void Linking.openURL(callHref)}
-                />
+              {callHref || whatsHref || business.instagram_url || business.facebook_url || mapsHref ? (
+                <View style={styles.contactRow}>
+                  {callHref ? (
+                    <ContactChip
+                      icon="call-outline"
+                      label={tr('page.call')}
+                      onPress={() => void Linking.openURL(callHref)}
+                    />
+                  ) : null}
+                  {whatsHref ? (
+                    <ContactChip
+                      icon="logo-whatsapp"
+                      label={tr('page.whatsapp')}
+                      onPress={() => void Linking.openURL(whatsHref)}
+                    />
+                  ) : null}
+                  {business.instagram_url ? (
+                    <ContactChip
+                      icon="logo-instagram"
+                      label="Instagram"
+                      onPress={() => void Linking.openURL(business.instagram_url as string)}
+                    />
+                  ) : null}
+                  {business.facebook_url ? (
+                    <ContactChip
+                      icon="logo-facebook"
+                      label="Facebook"
+                      onPress={() => void Linking.openURL(business.facebook_url as string)}
+                    />
+                  ) : null}
+                  {mapsHref ? (
+                    <ContactChip
+                      icon="map-outline"
+                      label={tr('page.map')}
+                      onPress={() => void openMaps(mapsHref, buildNativeMapsUrl(location))}
+                    />
+                  ) : null}
+                </View>
               ) : null}
-              {whatsHref ? (
-                <ContactChip
-                  icon="logo-whatsapp"
-                  label={tr('page.whatsapp')}
-                  onPress={() => void Linking.openURL(whatsHref)}
-                />
-              ) : null}
-              {business.instagram_url ? (
-                <ContactChip
-                  icon="logo-instagram"
-                  label="Instagram"
-                  onPress={() => void Linking.openURL(business.instagram_url as string)}
-                />
-              ) : null}
-              {business.facebook_url ? (
-                <ContactChip
-                  icon="logo-facebook"
-                  label="Facebook"
-                  onPress={() => void Linking.openURL(business.facebook_url as string)}
-                />
-              ) : null}
-              {mapsHref ? (
-                <ContactChip
-                  icon="map-outline"
-                  label={tr('page.map')}
-                  onPress={() => void openMaps(mapsHref, buildNativeMapsUrl(location))}
-                />
-              ) : null}
-            </View>
-          ) : null}
-
             </View>
             <View style={isWide ? styles.wideSide : styles.colGap}>
-<SectionTitle>{tr('page.hours')}</SectionTitle>
-          <View
-            style={[
-              styles.hoursCard,
-              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
-            ]}
-          >
-            {weekDays.map((d) => {
-              const h = business.working_hours?.[d.key];
-              const isToday = d.key === todayKey;
-              return (
-                <View key={d.key} style={styles.hoursRow}>
-                  <Text
-                    style={[
-                      styles.hoursDay,
-                      { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
-                    ]}
-                  >
-                    {d.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.hoursVal,
-                      {
-                        color: isToday ? t.colors.text : t.colors.textMuted,
-                        fontWeight: isToday ? '700' : '400',
-                      },
-                    ]}
-                  >
-                    {h && !h.closed
-                      ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
-                      : tr('hours.closed')}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
+              <SectionTitle>{tr('page.hours')}</SectionTitle>
+              <View
+                style={[
+                  styles.hoursCard,
+                  { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+                ]}
+              >
+                {weekDays.map((d) => {
+                  const h = business.working_hours?.[d.key];
+                  const isToday = d.key === todayKey;
+                  return (
+                    <View key={d.key} style={styles.hoursRow}>
+                      <Text
+                        style={[
+                          styles.hoursDay,
+                          { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
+                        ]}
+                      >
+                        {d.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.hoursVal,
+                          {
+                            color: isToday ? t.colors.text : t.colors.textMuted,
+                            fontWeight: isToday ? '700' : '400',
+                          },
+                        ]}
+                      >
+                        {h && !h.closed
+                          ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
+                          : tr('hours.closed')}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
               <LocationCard location={location} />
             </View>
           </View>
 
-{staffList.length > 0 ? (
+          {showTeam ? (
             <>
               <SectionTitle>{tr('page.team')}</SectionTitle>
               <View style={styles.serviceList}>
@@ -829,8 +820,7 @@ export default function PublicBookScreen() {
               </View>
             </>
           ) : null}
-
-                  </>
+        </>
       ) : null}
 
       <Modal
@@ -853,8 +843,8 @@ export default function PublicBookScreen() {
 
       {!pageOn ? <LocationCard location={locationFromBusiness(business)} /> : null}
 
+      {/* Copil direct al conținutului ScrollView: layout.y e chiar offsetul de derulare. */}
       <View
-        nativeID="booking-section"
         onLayout={(e) => {
           bookingY.current = e.nativeEvent.layout.y;
         }}
