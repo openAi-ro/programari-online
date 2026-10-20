@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
 import { grantSignal, timeoutAfterGrant } from '@/lib/locateTiming';
-import { withTimeout } from '@/lib/withTimeout';
 import type { WorkingHours } from '@/lib/types';
 import { localeTag, trKey } from './i18n';
 
@@ -248,7 +247,15 @@ export type DeviceCoordsOptions = {
   /** Locație aproximativă (fără GPS precis): rețea / celule, mai rapidă. */
   approximate?: boolean;
   timeoutMs?: number;
+  /**
+   * Poziție sosită după ce am raportat deja expirarea (ex. utilizatorul a apăsat
+   * „Allow” târziu): ecranul o poate folosi și înlocui starea de eroare.
+   */
+  onLatePosition?: (coords: DeviceCoords) => void;
 };
+
+/** Cât lăsăm dialogul de permisiune deschis până arătăm varianta fără locație. */
+const PROMPT_MAX_MS = 60000;
 
 /**
  * Locația dispozitivului — web: navigator.geolocation; native: expo-location.
@@ -266,9 +273,11 @@ export async function getDeviceCoords(opts: DeviceCoordsOptions = {}): Promise<D
     const signal = grantSignal(
       perms?.query ? () => perms.query({ name: 'geolocation' as PermissionName }) : null
     );
+    const initial = await signal.initial;
+    // Chrome pornește `options.timeout` și cât timp dialogul e deschis, deci în starea
+    // „prompt” nu-l trimitem: timer-ul nostru pornește doar la acordarea observată.
+    const nativeTimeout = initial === 'prompt' ? undefined : timeoutMs;
     try {
-      // Timeout-ul nativ (options.timeout) nu include dialogul de permisiune; timer-ul de
-      // siguranță pentru browserele care nu-l respectă pornește tot doar după acordare.
       return await timeoutAfterGrant(
         new Promise<DeviceCoords>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
@@ -285,13 +294,17 @@ export async function getDeviceCoords(opts: DeviceCoordsOptions = {}): Promise<D
               ),
             {
               enableHighAccuracy: !opts.approximate,
-              timeout: timeoutMs,
+              ...(nativeTimeout != null ? { timeout: nativeTimeout } : {}),
               maximumAge: opts.approximate ? CACHED_POSITION_MAX_AGE_MS : 60000,
             }
           );
         }),
         signal.granted,
-        timeoutMs + 2000
+        nativeTimeout != null ? timeoutMs + 2000 : timeoutMs,
+        {
+          promptMs: initial === 'prompt' ? PROMPT_MAX_MS : undefined,
+          onLate: opts.onLatePosition,
+        }
       );
     } finally {
       signal.dispose();
@@ -310,14 +323,15 @@ export async function getDeviceCoords(opts: DeviceCoordsOptions = {}): Promise<D
     if (last) return { latitude: last.coords.latitude, longitude: last.coords.longitude };
   }
 
-  const pos = await withTimeout(
+  // Permisiunea e acordată: timer-ul pornește acum; o poziție târzie e încă livrată.
+  return timeoutAfterGrant(
     Location.getCurrentPositionAsync({
       accuracy: opts.approximate ? Location.Accuracy.Low : Location.Accuracy.Balanced,
-    }),
+    }).then((pos) => ({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })),
+    Promise.resolve(),
     timeoutMs,
-    'location_timeout'
+    { onLate: opts.onLatePosition }
   );
-  return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
 }
 
 /**

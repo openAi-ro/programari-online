@@ -57,6 +57,33 @@ async function main() {
   const s5 = grantSignal(() => Promise.reject(new Error('x')));
   check('query error never grants', (await outcome(Promise.race([s5.granted.then(() => 'g'), later(30, 'no')]))) === 'ok:no');
 
+  // Poziție târzie după expirare -> onLate (înlocuiește eroarea în UI).
+  let late: string | null = null;
+  const lateRes = await outcome(timeoutAfterGrant(later(120, 'late'), later(10, 1), 30, { onLate: (v) => (late = v) }));
+  check('late: first reports timeout', lateRes === 'err:location_timeout');
+  await sleep(150);
+  check('late: position delivered via onLate', late === 'late');
+  // Dialog lăsat deschis: promptMs -> fallback, dar poziția ulterioară vine tot prin onLate.
+  let late2: string | null = null;
+  const pr = await outcome(timeoutAfterGrant(later(150, 'p2'), never, 30, { promptMs: 60, onLate: (v) => (late2 = v) }));
+  check('prompt left open -> permission_timeout', pr === 'err:permission_timeout');
+  await sleep(150);
+  check('prompt: late grant still accepted', late2 === 'p2');
+  // Acordare înainte de promptMs anulează limita dialogului.
+  check('grant cancels prompt limit', (await outcome(timeoutAfterGrant(later(120, 'ok'), later(40, 1), 100, { promptMs: 60 }))) === 'ok:ok');
+  // Codul de expirare personalizat.
+  check('custom code', (await outcome(timeoutAfterGrant(never, Promise.resolve(), 5, { code: 'x_timeout' }))) === 'err:x_timeout');
+
+  // grantSignal: fără eveniment `change`, verificarea periodică prinde acordarea.
+  let pollState = 'prompt';
+  const s6 = grantSignal(async () => ({ state: pollState }), 20);
+  check('initial state reported', (await s6.initial) === 'prompt');
+  setTimeout(() => (pollState = 'granted'), 50);
+  check('granted by polling', (await outcome(Promise.race([s6.granted.then(() => 'g'), later(200, 'no')]))) === 'ok:g');
+  s6.dispose();
+  check('initial unsupported', (await grantSignal(null).initial) === 'unsupported');
+  check('initial granted', (await grantSignal(async () => ({ state: 'granted' })).initial) === 'granted');
+
   console.log(`${passed} passed, ${failed} failed`);
   if (failed) process.exit(1);
 }

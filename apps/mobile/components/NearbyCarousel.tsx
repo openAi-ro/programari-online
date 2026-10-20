@@ -58,14 +58,23 @@ export function NearbyCarousel() {
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList<Item>>(null);
 
+  const accept = useCallback(async (c: DeviceCoords) => {
+    setCoords(roundCoords(c));
+    setLocState('idle');
+    const prefs = await loadNearbyPrefs();
+    await saveNearbyPrefs({ ...prefs, locationAllowed: true });
+  }, []);
+
   const locate = useCallback(async () => {
     setLocState('locating');
     try {
-      const c = await getDeviceCoords({ approximate: true, timeoutMs: LOCATE_TIMEOUT_MS });
-      setCoords(roundCoords(c));
-      setLocState('idle');
-      const prefs = await loadNearbyPrefs();
-      await saveNearbyPrefs({ ...prefs, locationAllowed: true });
+      const c = await getDeviceCoords({
+        approximate: true,
+        timeoutMs: LOCATE_TIMEOUT_MS,
+        // „Allow” apăsat după ce am arătat eroarea: poziția înlocuiește mesajul.
+        onLatePosition: (late) => void accept(late),
+      });
+      await accept(c);
     } catch (err) {
       const denied = err instanceof Error && err.message === 'permission_denied';
       setLocState(denied ? 'denied' : 'failed');
@@ -74,7 +83,7 @@ export function NearbyCarousel() {
         await saveNearbyPrefs({ ...prefs, locationAllowed: false });
       }
     }
-  }, []);
+  }, [accept]);
 
   useEffect(() => {
     let alive = true;
