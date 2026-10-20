@@ -11,7 +11,9 @@ type LoginPalette = {
   card: string;
   field: string;
   button: string;
+  buttonPressed: string;
   danger: string;
+  dangerPressed: string;
   text: string;
   inputText: string;
   placeholder: string;
@@ -23,7 +25,9 @@ const LOGIN_DARK: LoginPalette = {
   card: '#171717',
   field: '#101010',
   button: '#252525',
+  buttonPressed: '#0f766e',
   danger: '#c1121f',
+  dangerPressed: '#8f0d17',
   text: '#ffffff',
   inputText: '#d3d3d3',
   placeholder: '#8a8a8a',
@@ -34,7 +38,9 @@ const LOGIN_LIGHT: LoginPalette = {
   card: '#ffffff',
   field: '#f0f2f5',
   button: '#252525',
+  buttonPressed: '#0f766e',
   danger: '#c1121f',
+  dangerPressed: '#8f0d17',
   text: '#0c1222',
   inputText: '#121a2b',
   placeholder: '#5a6b84',
@@ -131,8 +137,11 @@ export function LoginButton({ label, onPress, disabled, loading, tone = 'default
       style={({ pressed }) => [
         styles.button,
         {
-          backgroundColor: tone === 'danger' ? p.danger : p.button,
-          opacity: disabled || loading ? 0.55 : pressed ? 0.85 : 1,
+          backgroundColor:
+            tone === 'danger'
+              ? pressed && !disabled && !loading ? p.dangerPressed : p.danger
+              : pressed && !disabled && !loading ? p.buttonPressed : p.button,
+          opacity: disabled || loading ? 0.55 : 1,
           transform: [{ scale: pressed && !disabled && !loading ? 0.98 : 1 }],
         },
       ]}
