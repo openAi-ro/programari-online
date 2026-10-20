@@ -14,13 +14,15 @@ import DateTimePicker, {
 
 import { useTheme } from '@/components/ui';
 import { localeTag, useT } from '@/lib/i18n';
-import { isCompleteYmd } from '@/lib/dateInput';
+import { dateInputIssue, type DateInputIssue } from '@/lib/dateInput';
 import { fontSize, radius, spacing } from '@/constants/theme';
 
 type Props = {
   /** YYYY-MM-DD */
   value: string;
   onChange: (ymd: string) => void;
+  /** Web: the typed text isn't a usable date yet (null when it is again / after blur). */
+  onIssueChange?: (issue: DateInputIssue | null) => void;
   label?: string;
   minimumDate?: Date;
   maximumDate?: Date;
@@ -60,6 +62,7 @@ function formatLocalized(ymd: string): string {
 export function DatePickerField({
   value,
   onChange,
+  onIssueChange,
   label,
   minimumDate,
   maximumDate,
@@ -125,11 +128,19 @@ export function DatePickerField({
               min={minimumDate ? toYmd(minimumDate) : undefined}
               max={maximumDate ? toYmd(maximumDate) : undefined}
               onChange={(e: { target: { value: string } }) => {
-                // Partial years while typing ("0002-…") are not dates yet.
-                if (isCompleteYmd(e.target.value)) onChange(e.target.value);
+                // Partial years while typing ("0002-…") and dates outside min/max are not forwarded.
+                const issue = dateInputIssue(
+                  e.target.value,
+                  minimumDate ? toYmd(minimumDate) : undefined,
+                  maximumDate ? toYmd(maximumDate) : undefined
+                );
+                if (!issue) onChange(e.target.value);
+                onIssueChange?.(issue);
               }}
               onBlur={() => {
-                // Ieșire cu o dată incompletă: revine la ultima dată validă.
+                // Ieșire cu o dată neutilizabilă: dacă ecranul afișează mesajul (onIssueChange),
+                // textul rămâne ca utilizatorul să-l corecteze; altfel revine la ultima dată validă.
+                if (onIssueChange) return;
                 const el = webInput.current;
                 if (el && el.value !== value) el.value = value;
               }}

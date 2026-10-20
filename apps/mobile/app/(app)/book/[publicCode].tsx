@@ -4,6 +4,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
+import type { DateInputIssue } from '@/lib/dateInput';
 import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import { StaffBadge } from '@/components/StaffBadge';
@@ -114,6 +115,8 @@ export default function BookScreen() {
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
+  // Data tastată nu e (încă) utilizabilă: nu arătăm sloturile datei anterioare.
+  const [dateIssue, setDateIssue] = useState<DateInputIssue | null>(null);
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -176,6 +179,11 @@ export default function BookScreen() {
     () => (business ? maxBookingDate(business) : minDate),
     [business, minDate]
   );
+
+  // Câmpul de dată se remontează la revenirea pe pas: pornește fără mesaj de dată invalidă.
+  useEffect(() => {
+    setDateIssue(null);
+  }, [step]);
 
   useEffect(() => {
     void getFavoriteIds().then(() => {
@@ -730,7 +738,7 @@ export default function BookScreen() {
       : step === 'service'
         ? serviceIds.length > 0 || services.length === 0
         : step === 'date'
-          ? Boolean(dateLocal)
+          ? Boolean(dateLocal) && !dateIssue
           : step === 'slot'
             ? Boolean(selected)
             : Boolean(selected);
@@ -1073,9 +1081,18 @@ export default function BookScreen() {
               setDateLocal(ymd);
               setSelected(null);
             }}
+            onIssueChange={(issue) => {
+              setDateIssue(issue);
+              if (issue) setSelected(null);
+            }}
             minimumDate={minDate}
             maximumDate={maxDate}
           />
+          {dateIssue ? (
+            <Callout tone="warning">
+              {tr(dateIssue === 'incomplete' ? 'book.dateInvalid' : 'book.dateOutOfRange')}
+            </Callout>
+          ) : null}
           {selectedStaff ? (
             <Text style={[styles.note, { color: t.colors.textMuted }]}>
               {tr('book.staffLine', {

@@ -632,6 +632,8 @@ export const en: typeof ro = {
   'book.freeCount': '{n} free',
   'book.dayBlocked': 'This day is blocked (holiday).',
   'book.noSlots': 'No free slots on {date}. Pick another date (minimum notice {h}h).',
+  'book.dateInvalid': 'Pick a valid date.',
+  'book.dateOutOfRange': 'This date is outside the period you can book.',
   'book.confirmTitle': 'Confirm booking',
   'book.salon': 'Salon',
   'book.duration': 'Duration',

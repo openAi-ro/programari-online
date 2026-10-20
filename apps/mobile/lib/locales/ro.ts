@@ -630,6 +630,8 @@ export const ro = {
   'book.freeCount': '{n} libere',
   'book.dayBlocked': 'Această zi este blocată (concediu / sărbătoare).',
   'book.noSlots': 'Nu există sloturi libere pe {date}. Alege altă dată (preaviz minim {h}h).',
+  'book.dateInvalid': 'Alege o dată validă.',
+  'book.dateOutOfRange': 'Data este în afara perioadei în care se poate rezerva.',
   'book.confirmTitle': 'Confirmă rezervarea',
   'book.salon': 'Salon',
   'book.duration': 'Durată',

@@ -11,3 +11,16 @@ export function isCompleteYmd(value: string): boolean {
   const dt = new Date(Date.UTC(y, mo - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
 }
+
+/** Why a typed date can't be used yet (null = usable). */
+export type DateInputIssue = 'incomplete' | 'outOfRange';
+
+/**
+ * Classifies what the web date input holds. min/max are "YYYY-MM-DD" (inclusive);
+ * the popup respects min/max, typed dates don't, so they're checked here.
+ */
+export function dateInputIssue(raw: string, minYmd?: string, maxYmd?: string): DateInputIssue | null {
+  if (!isCompleteYmd(raw)) return 'incomplete';
+  if ((minYmd && raw < minYmd) || (maxYmd && raw > maxYmd)) return 'outOfRange';
+  return null;
+}

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 
 import { DatePickerField } from '@/components/DatePickerField';
+import type { DateInputIssue } from '@/lib/dateInput';
 import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import {
@@ -67,6 +68,8 @@ export default function PublicBookScreen() {
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
+  // Data tastată nu e (încă) utilizabilă: nu arătăm sloturile datei anterioare.
+  const [dateIssue, setDateIssue] = useState<DateInputIssue | null>(null);
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -403,7 +406,8 @@ export default function PublicBookScreen() {
   }
 
   const dayBlocked = (business.blocked_dates ?? []).includes(dateLocal);
-  const noSlots = !slotsLoading && slots.length === 0;
+  const shownSlots = dateIssue ? [] : slots;
+  const noSlots = !dateIssue && !slotsLoading && slots.length === 0;
 
   return (
     <Screen
@@ -506,7 +510,7 @@ export default function PublicBookScreen() {
               ))
             : null}
         </View>
-        <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
+        <Badge tone="accent">{tr('book.freeCount', { n: shownSlots.length })}</Badge>
       </View>
 
       <LocationCard location={locationFromBusiness(business)} />
@@ -643,12 +647,20 @@ export default function PublicBookScreen() {
         label={tr('book.dateLabel')}
         value={dateLocal}
         onChange={setDateLocal}
+        onIssueChange={(issue) => {
+          setDateIssue(issue);
+          if (issue) setSelected(null);
+        }}
         minimumDate={minDate}
         maximumDate={maxDate}
       />
 
       <SectionTitle>{tr('pub.stepTime')}</SectionTitle>
-      {slotsLoading ? (
+      {dateIssue ? (
+        <Callout tone="warning">
+          {tr(dateIssue === 'incomplete' ? 'book.dateInvalid' : 'book.dateOutOfRange')}
+        </Callout>
+      ) : slotsLoading ? (
         <View style={styles.slotsLoading}>
           <ActivityIndicator color={t.colors.accent} />
         </View>
