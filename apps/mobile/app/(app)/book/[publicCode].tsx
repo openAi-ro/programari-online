@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -57,6 +57,7 @@ import { locationFromBusiness, formatAddress } from '@/lib/location';
 import { markWaitlistBooked, invokePendingPush } from '@/lib/notify-client';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
+import { createRequestTracker } from '@/lib/latestRequest';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
@@ -391,8 +392,13 @@ export default function BookScreen() {
     })();
   }, [publicCode, rescheduleId, serviceIdParam, staffIdParam, isReschedule]);
 
+  // Doar ultima încărcare de sloturi are voie să scrie starea (tastarea datei cifră cu cifră
+  // pornește câte o cerere pe dată intermediară; un răspuns vechi nu suprascrie unul nou).
+  const slotsRequests = useRef(createRequestTracker()).current;
+
   const loadSlots = useCallback(async () => {
     if (!business) return;
+    const req = slotsRequests.start();
     setSlotsLoading(true);
     setSelected(null);
     setError(null);
@@ -406,6 +412,7 @@ export default function BookScreen() {
       toIso: endUtc.toISOString(),
       staffId,
     });
+    if (!slotsRequests.isCurrent(req)) return;
 
     if (err) {
       setError(err);
@@ -421,6 +428,7 @@ export default function BookScreen() {
         .select('start_at, end_at')
         .eq('id', String(rescheduleId))
         .maybeSingle();
+      if (!slotsRequests.isCurrent(req)) return;
       if (current?.start_at) {
         busy = rawBusy.filter(
           (b) => !(b.startUtc === current.start_at && b.endUtc === current.end_at)
@@ -442,7 +450,7 @@ export default function BookScreen() {
     });
     setSlots(free);
     setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, selectedStaff]);
+  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, selectedStaff, slotsRequests]);
 
   useEffect(() => {
     // Nu reincarca pe 'confirm': loadSlots() reseteaza ora aleasa si blocheaza trimiterea.

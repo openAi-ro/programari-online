@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
@@ -39,6 +39,7 @@ import { normalizeWalkinContact } from '@/lib/walkinRules';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { parseTipInput, tipOptions } from '@/lib/tip';
 import { generateFreeSlots } from '@/lib/slots';
+import { createRequestTracker } from '@/lib/latestRequest';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
@@ -195,8 +196,13 @@ export default function PublicBookScreen() {
     })();
   }, [code]);
 
+  // Doar ultima încărcare de sloturi are voie să scrie starea (tastarea datei cifră cu cifră
+  // pornește câte o cerere pe dată intermediară; un răspuns vechi nu suprascrie unul nou).
+  const slotsRequests = useRef(createRequestTracker()).current;
+
   const loadSlots = useCallback(async () => {
     if (!business) return;
+    const req = slotsRequests.start();
     setSlotsLoading(true);
     setSelected(null);
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
@@ -206,6 +212,7 @@ export default function PublicBookScreen() {
       toIso: endUtc.toISOString(),
       staffId,
     });
+    if (!slotsRequests.isCurrent(req)) return;
     if (err) {
       setError(err);
       setSlots([]);
@@ -227,7 +234,7 @@ export default function PublicBookScreen() {
       })
     );
     setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, staffId, selectedStaff]);
+  }, [business, dateLocal, durationMinutes, staffId, selectedStaff, slotsRequests]);
 
   useEffect(() => {
     void loadSlots();
