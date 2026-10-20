@@ -290,6 +290,21 @@ export default function PublicBookScreen() {
     void loadSlots();
   }, [loadSlots]);
 
+  // Coperta se preîncarcă imediat pe web (fără așteptare la derulare).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !business?.cover_url || typeof document === 'undefined') return;
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = business.cover_url;
+    document.head.appendChild(link);
+    const img = document.createElement('img');
+    img.src = business.cover_url;
+    return () => {
+      link.remove();
+    };
+  }, [business?.cover_url]);
+
   // Titlul filei din browser = numele firmei (doar web).
   useEffect(() => {
     if (Platform.OS === 'web' && business?.name && typeof document !== 'undefined') {
@@ -559,7 +574,7 @@ export default function PublicBookScreen() {
       {pageOn && coverSource ? (
         <Image
           source={coverSource}
-          style={[styles.cover, isWide ? styles.coverWide : null]}
+          style={[styles.cover, { backgroundColor: t.colors.surfaceMuted }, isWide ? styles.coverWide : null]}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
         />
@@ -736,7 +751,7 @@ export default function PublicBookScreen() {
                           {portfolio.map((url) => (
                             <Pressable
                               key={url}
-                              style={[styles.thumbWrap, isWide ? styles.thumbWrapWide : null]}
+                              style={[styles.thumbWrap, { backgroundColor: t.colors.surfaceMuted }, isWide ? styles.thumbWrapWide : null]}
                               accessibilityRole="imagebutton"
                               onPress={() => setLightbox(url)}
                             >
@@ -764,7 +779,7 @@ export default function PublicBookScreen() {
                 {gallery.map((url) => (
                   <Pressable
                     key={url}
-                    style={[styles.thumbWrap, isWide ? styles.thumbWrapWide : null]}
+                    style={[styles.thumbWrap, { backgroundColor: t.colors.surfaceMuted }, isWide ? styles.thumbWrapWide : null]}
                     accessibilityRole="imagebutton"
                     onPress={() => setLightbox(url)}
                   >
