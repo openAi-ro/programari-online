@@ -25,6 +25,7 @@ import { useBack } from '@/lib/nav';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { applySessionUse, sessionsLeft } from '@/lib/packages';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type {
   BusinessClientRow,
   ClientPackage,
@@ -58,9 +59,7 @@ export default function BusinessPackagesScreen() {
 
   const load = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       return;

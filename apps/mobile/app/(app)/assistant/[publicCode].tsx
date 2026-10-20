@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
 import {
@@ -71,6 +71,16 @@ export default function AssistantScreen() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
+  const listRef = useRef<ScrollView>(null);
+  const scrollToEnd = useCallback(() => {
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+  }, []);
+
+  // Tastatura micșorează zona listei: ultimul mesaj rămâne vizibil deasupra casetei de scris.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', scrollToEnd);
+    return () => sub.remove();
+  }, [scrollToEnd]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -191,10 +201,60 @@ export default function AssistantScreen() {
 
   const suggestions = [tr('as.suggestPrice'), tr('as.suggestHours'), tr('as.suggestBook')];
 
+  // Caseta de scris (sugestii + input) e footer-ul fix al ecranului, nu face parte din conținutul derulant.
+  // Lista de mesaje are flex 1 și derulează singură; Screen ridică footer-ul peste tastatură
+  // (iOS: KeyboardAvoidingView; Android edge-to-edge: padding = înălțimea tastaturii). Același model ca ChatThread.
+  const composer = (
+    <View style={styles.composer}>
+      {messages.length <= 1 ? (
+        <View style={styles.chips}>
+          {suggestions.map((s) => (
+            <Button key={s} size="sm" variant="secondary" label={s} onPress={() => send(s)} />
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.inputRow}>
+        <TextInput
+          style={[styles.input, { color: t.colors.text, borderColor: t.colors.border, backgroundColor: t.colors.surface }]}
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={tr('as.placeholder')}
+          placeholderTextColor={t.colors.textFaint}
+          onSubmitEditing={() => send(draft)}
+          returnKeyType="send"
+          submitBehavior="submit"
+        />
+        {/* Button e implicit fullWidth (width 100%) și strivea inputul din rând. */}
+        <Button
+          label={tr('as.send')}
+          icon="send"
+          fullWidth={false}
+          onPress={() => send(draft)}
+          disabled={!draft.trim()}
+        />
+      </View>
+    </View>
+  );
+
   return (
-    <Screen title={tr('as.title')} subtitle={businessName || tr('as.subtitle')} onBack={back}>
+    <Screen
+      title={tr('as.title')}
+      subtitle={businessName || tr('as.subtitle')}
+      onBack={back}
+      scroll={false}
+      bottomInset={0}
+      keyboardAvoid
+      footer={composer}
+    >
       {error ? <Callout tone="danger">{error}</Callout> : null}
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView
+        ref={listRef}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        onContentSizeChange={scrollToEnd}
+      >
         {messages.map((m, i) => (
           <View
             key={i}
@@ -225,34 +285,6 @@ export default function AssistantScreen() {
           </View>
         ))}
       </ScrollView>
-      {messages.length <= 1 ? (
-        <View style={styles.chips}>
-          {suggestions.map((s) => (
-            <Button key={s} size="sm" variant="secondary" label={s} onPress={() => send(s)} />
-          ))}
-        </View>
-      ) : null}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.inputRow}>
-          <TextInput
-            style={[styles.input, { color: t.colors.text, borderColor: t.colors.border, backgroundColor: t.colors.surface }]}
-            value={draft}
-            onChangeText={setDraft}
-            placeholder={tr('as.placeholder')}
-            placeholderTextColor={t.colors.textFaint}
-            onSubmitEditing={() => send(draft)}
-            returnKeyType="send"
-          />
-          {/* Button e implicit fullWidth (width 100%) și strivea inputul din rând. */}
-          <Button
-            label={tr('as.send')}
-            icon="send"
-            fullWidth={false}
-            onPress={() => send(draft)}
-            disabled={!draft.trim()}
-          />
-        </View>
-      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -265,6 +297,7 @@ const styles = StyleSheet.create({
   bot: { alignSelf: 'flex-start', maxWidth: '95%' },
   text: { fontSize: fontSize.md },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  composer: { width: '100%', gap: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: {

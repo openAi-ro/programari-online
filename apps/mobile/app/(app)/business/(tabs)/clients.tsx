@@ -13,6 +13,7 @@ import {
   Screen,
   useTheme,
 } from '@/components/ui';
+import { getCurrentUser } from '@/lib/currentUser';
 import { useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
@@ -77,9 +78,7 @@ export default function BusinessClientsScreen() {
       } else {
         setRows((data ?? []) as BusinessClientRow[]);
       }
-      const {
-        data: { user: me },
-      } = await supabase.auth.getUser();
+      const me = await getCurrentUser();
       const { data: biz } = me
         ? await fetchMyBusinessResult(me.id)
         : { data: null };

@@ -16,6 +16,7 @@ import { useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { fetchMyBusinessId } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { Review } from '@/lib/types';
 
 export default function BusinessReviewsScreen() {
@@ -30,9 +31,7 @@ export default function BusinessReviewsScreen() {
 
   const load = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       return;

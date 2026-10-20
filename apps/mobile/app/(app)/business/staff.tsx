@@ -31,6 +31,7 @@ import {
   removePortfolioUrl,
 } from '@/lib/staffPortfolio';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
 
 type Draft = {
@@ -68,9 +69,7 @@ export default function BusinessStaffScreen() {
 
   const load = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       setError(trKey('req.notAuthed'));

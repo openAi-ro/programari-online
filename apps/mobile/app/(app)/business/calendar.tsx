@@ -27,6 +27,7 @@ import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { generateFreeSlots } from '@/lib/slots';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import { createWalkinAppointment } from '@/lib/walkin';
 import { normalizeWalkinContact, validateWalkinInput } from '@/lib/walkinRules';
 import type { Appointment, BusinessProfile, FreeSlot, Service } from '@/lib/types';
@@ -80,9 +81,7 @@ export default function BusinessCalendarScreen() {
 
   const load = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       setError(trKey('req.notAuthed'));

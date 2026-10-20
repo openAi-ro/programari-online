@@ -25,7 +25,7 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { resolveAppMode, type AppMode } from '@/lib/appMode';
+import { appModeFrom, setAppMode, type AppMode } from '@/lib/appMode';
 import { canConfirmAttendance, mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { extractPublicCode } from '@/lib/bookingLink';
 import {
@@ -43,9 +43,11 @@ import {
   syncFavoritesFromCloud,
   toggleFavorite,
 } from '@/lib/favorites';
-import { fetchUnreadTotal } from '@/lib/chatRpc';
+import { getUnreadTotal } from '@/lib/chatRpc';
+import { useForegroundInterval } from '@/lib/useForegroundInterval';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { AppointmentStatus } from '@/lib/types';
 
 type Biz = { id: string; name: string; public_code: string; logo_url?: string | null };
@@ -150,9 +152,7 @@ export default function HomeScreen() {
         // Soft refresh: keep Home visible after first successful load
         const hasExistingData = hasLoadedOnceRef.current;
         if (measureBeforeEnabled() || !hasExistingData) setLoading(true);
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user || cancelled) {
           if (!cancelled) setLoading(false);
           return;
@@ -167,44 +167,14 @@ export default function HomeScreen() {
           display_name: string | null;
           avatar_url: string | null;
         };
-        let profileRow: ProfRow | null = null;
-        {
-          const { data: existingProf } = await supabase
+        // Profilul (cu account_kind) și business-ul propriu depind doar de user.id:
+        // o singură rundă de cereri, fără citirea dublă a profilului din resolveAppMode.
+        const [{ data: existingProf }, bizResult] = await Promise.all([
+          supabase
             .from('profiles')
-            .select('id, email, phone, display_name, avatar_url')
+            .select('id, email, phone, display_name, avatar_url, account_kind')
             .eq('id', user.id)
-            .maybeSingle();
-          if (!existingProf) {
-            await supabase.from('profiles').insert({
-              id: user.id,
-              email: user.email ?? null,
-              phone: user.phone ?? null,
-            });
-            profileRow = {
-              email: user.email ?? null,
-              phone: user.phone ?? null,
-              display_name: null,
-              avatar_url: null,
-            };
-          } else {
-            const patch: { email?: string | null; phone?: string | null } = {};
-            if (!existingProf.email && user.email) patch.email = user.email;
-            if (!existingProf.phone && user.phone) patch.phone = user.phone;
-            if (Object.keys(patch).length > 0) {
-              await supabase.from('profiles').update(patch).eq('id', user.id);
-            }
-            profileRow = {
-              email: patch.email ?? existingProf.email ?? null,
-              phone: patch.phone ?? existingProf.phone ?? null,
-              display_name: existingProf.display_name ?? null,
-              avatar_url: existingProf.avatar_url ?? null,
-            };
-          }
-        }
-
-        // Push register runs on session start in app/_layout — not on every Home focus.
-        const [appMode, bizResult] = await Promise.all([
-          resolveAppMode(user.id),
+            .maybeSingle(),
           supabase
             .from('business_profiles')
             .select('id, name, public_code, logo_url')
@@ -212,33 +182,55 @@ export default function HomeScreen() {
             .maybeSingle(),
         ]);
         const data = bizResult.data;
+        const appMode = appModeFrom(existingProf?.account_kind, Boolean(data));
+        void setAppMode(appMode);
 
-        let pending = 0;
-        if (data?.id) {
-          const [countRes, pendingRowsRes] = await Promise.all([
-            supabase
-              .from('appointments')
-              .select('id', { count: 'exact', head: true })
-              .eq('business_id', data.id)
-              .eq('status', 'pending'),
-            supabase
-              .from('appointments')
-              .select('id')
-              .eq('business_id', data.id)
-              .eq('status', 'pending')
-              .order('created_at', { ascending: false })
-              .limit(50),
-          ]);
-          if (countRes.error) {
-            console.warn('pending count failed', countRes.error.message);
-          } else {
-            pending = countRes.count ?? 0;
+        let profileRow: ProfRow | null = null;
+        if (!existingProf) {
+          await supabase.from('profiles').insert({
+            id: user.id,
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+          });
+          profileRow = {
+            email: user.email ?? null,
+            phone: user.phone ?? null,
+            display_name: null,
+            avatar_url: null,
+          };
+        } else {
+          const patch: { email?: string | null; phone?: string | null } = {};
+          if (!existingProf.email && user.email) patch.email = user.email;
+          if (!existingProf.phone && user.phone) patch.phone = user.phone;
+          if (Object.keys(patch).length > 0) {
+            await supabase.from('profiles').update(patch).eq('id', user.id);
           }
-          // Marchează cererile existente ca „văzute" — popup doar pentru cele noi.
-          for (const r of (pendingRowsRes.data ?? []) as { id: string }[]) {
-            seenPendingRef.current.add(r.id);
-          }
+          profileRow = {
+            email: patch.email ?? existingProf.email ?? null,
+            phone: patch.phone ?? existingProf.phone ?? null,
+            display_name: existingProf.display_name ?? null,
+            avatar_url: existingProf.avatar_url ?? null,
+          };
         }
+
+        // Cererile în așteptare (business) pleacă acum și rulează în paralel cu
+        // programările clientului; le citim abia înainte de a seta starea.
+        const pendingWave = data?.id
+          ? Promise.all([
+              supabase
+                .from('appointments')
+                .select('id', { count: 'exact', head: true })
+                .eq('business_id', data.id)
+                .eq('status', 'pending'),
+              supabase
+                .from('appointments')
+                .select('id')
+                .eq('business_id', data.id)
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false })
+                .limit(50),
+            ])
+          : null;
 
         if (appMode === 'client') {
           const orParts: string[] = [];
@@ -309,13 +301,25 @@ export default function HomeScreen() {
               maps_url: string | null;
             }
           > = {};
-          if (bizIds.length) {
-            const { data: bizRows, error: bizErr } = await supabase
-              .from('business_profiles')
-              .select(
-                'id, name, timezone, loyalty_every, public_code, latitude, longitude, county, city, address, maps_url'
-              )
-              .in('id', bizIds);
+          const now = Date.now();
+          // Datele business-urilor și vizitele încheiate nu depind unele de altele.
+          const [bizRowsRes, visitRes] = await Promise.all([
+            bizIds.length
+              ? supabase
+                  .from('business_profiles')
+                  .select(
+                    'id, name, timezone, loyalty_every, public_code, latitude, longitude, county, city, address, maps_url'
+                  )
+                  .in('id', bizIds)
+              : null,
+            // Vizite = doar programări aprobate deja încheiate, numărate separat
+            // de fereastra recentă (limitată), ca loialitatea să nu fie plafonată.
+            scopedApts()
+              .eq('status', 'approved')
+              .lte('end_at', new Date(now).toISOString()),
+          ]);
+          if (bizRowsRes) {
+            const { data: bizRows, error: bizErr } = bizRowsRes;
             if (bizErr && !cancelled) setLoadError(trKey('home.loadFail'));
             for (const b of bizRows ?? []) {
               bizById[b.id] = {
@@ -333,7 +337,6 @@ export default function HomeScreen() {
             }
           }
 
-          const now = Date.now();
           const recentMap = new Map<
             string,
             {
@@ -411,11 +414,7 @@ export default function HomeScreen() {
             };
           }
 
-          // Vizite = doar programări aprobate deja încheiate, numărate separat
-          // de fereastra recentă (limitată), ca loialitatea să nu fie plafonată.
-          const { data: visitRows, error: visitErr } = await scopedApts()
-            .eq('status', 'approved')
-            .lte('end_at', new Date(now).toISOString());
+          const { data: visitRows, error: visitErr } = visitRes;
           if (visitErr && !cancelled) setLoadError(trKey('home.loadFail'));
           const completedVisits = ((visitRows ?? []) as AptRow[]).filter((r) => !r.no_show);
 
@@ -447,6 +446,20 @@ export default function HomeScreen() {
             setPendingClientCount(
               upcoming.filter((r) => r.status === 'pending').length
             );
+          }
+        }
+
+        let pending = 0;
+        if (pendingWave) {
+          const [countRes, pendingRowsRes] = await pendingWave;
+          if (countRes.error) {
+            console.warn('pending count failed', countRes.error.message);
+          } else {
+            pending = countRes.count ?? 0;
+          }
+          // Marchează cererile existente ca „văzute" — popup doar pentru cele noi.
+          for (const r of (pendingRowsRes.data ?? []) as { id: string }[]) {
+            seenPendingRef.current.add(r.id);
           }
         }
 
@@ -881,23 +894,23 @@ function BusinessHome({
 }) {
   const t = useTheme();
   const tr = useT();
-  // Necitite din chat (aceleasi date ca badge-ul clientului): la focus + la 60s.
+  // Necitite din chat (același cache partajat ca badge-ul clientului): la focus
+  // și la 60 s cât ecranul e în focus și aplicația în prim-plan.
   const [chatUnread, setChatUnread] = useState(0);
+  const [homeFocused, setHomeFocused] = useState(false);
+  const refreshUnread = useCallback(() => {
+    getUnreadTotal()
+      .then((n) => setChatUnread(n))
+      .catch(() => {});
+  }, []);
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      const refresh = async () => {
-        const n = await fetchUnreadTotal();
-        if (!cancelled) setChatUnread(n);
-      };
-      void refresh();
-      const iv = setInterval(() => void refresh(), 60_000);
-      return () => {
-        cancelled = true;
-        clearInterval(iv);
-      };
-    }, [])
+      setHomeFocused(true);
+      refreshUnread();
+      return () => setHomeFocused(false);
+    }, [refreshUnread])
   );
+  useForegroundInterval(refreshUnread, 60_000, homeFocused);
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
     <Screen bottomInset={bottomInset}>

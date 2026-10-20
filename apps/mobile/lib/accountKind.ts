@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentUser } from './currentUser';
 import { setAppMode, type AppMode } from './appMode';
 import { trKey } from './i18n';
 
@@ -9,9 +10,7 @@ export function parseAccountKind(value: string | null | undefined): AppMode {
 /** Persist the chosen account type on the profile (used at registration). */
 export async function persistAccountKind(kind: AppMode): Promise<void> {
   await setAppMode(kind);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return;
 
   const { data: existing } = await supabase

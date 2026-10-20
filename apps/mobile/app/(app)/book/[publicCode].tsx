@@ -56,6 +56,8 @@ import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import { useBack } from '@/lib/nav';
 import { locationFromBusiness, formatAddress } from '@/lib/location';
 import { markWaitlistBooked, invokePendingPush } from '@/lib/notify-client';
+import { fireAndForget } from '@/lib/fireAndForget';
+import { getCurrentUser } from '@/lib/currentUser';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
 import { createRequestTracker } from '@/lib/latestRequest';
@@ -227,9 +229,57 @@ export default function BookScreen() {
       setExistingAptId(null);
       setFavorited(isFavoriteSync(biz.id));
 
-      const { data: rate } = await supabase.rpc('business_rating', {
-        p_business_id: biz.id,
-      });
+      // Utilizatorul vine din sesiunea locală (fără rețea); restul cererilor
+      // depind doar de business, deci pleacă toate odată, nu una după alta.
+      const viewer = await getCurrentUser();
+      const isOwnBusiness = Boolean(viewer && biz.owner_user_id === viewer.id);
+      const [
+        { data: rate },
+        { data: revRows },
+        { data: svcRows, error: svcErr },
+        { data: staffRows, error: staffErr },
+        ownedBizRes,
+        upcomingRes,
+        rescheduleAptRes,
+      ] = await Promise.all([
+        supabase.rpc('business_rating', { p_business_id: biz.id }),
+        supabase.rpc('list_public_reviews', { p_business_id: biz.id, p_limit: 3 }),
+        supabase
+          .from('services')
+          .select('*')
+          .eq('business_id', biz.id)
+          .eq('active', true)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('staff')
+          .select('*')
+          .eq('business_id', biz.id)
+          .eq('active', true)
+          .order('sort_order', { ascending: true }),
+        viewer && !isOwnBusiness
+          ? supabase.from('business_profiles').select('id').eq('owner_user_id', viewer.id).maybeSingle()
+          : null,
+        viewer && !isOwnBusiness && !rescheduleId
+          ? supabase
+              .from('appointments')
+              .select('id')
+              .eq('business_id', biz.id)
+              .eq('client_user_id', viewer.id)
+              .in('status', ['pending', 'approved'])
+              .gte('start_at', new Date().toISOString())
+              .order('start_at', { ascending: true })
+              .limit(1)
+              .maybeSingle()
+          : null,
+        rescheduleId && !isOwnBusiness
+          ? supabase
+              .from('appointments')
+              .select('service_id, service_ids, staff_id, status, start_at, client_user_id')
+              .eq('id', String(rescheduleId))
+              .maybeSingle()
+          : null,
+      ]);
+
       if (rate) {
         const row = Array.isArray(rate) ? rate[0] : rate;
         if (row) {
@@ -240,10 +290,6 @@ export default function BookScreen() {
         }
       }
 
-      const { data: revRows } = await supabase.rpc('list_public_reviews', {
-        p_business_id: biz.id,
-        p_limit: 3,
-      });
       if (Array.isArray(revRows)) {
         setReviews(
           revRows
@@ -270,43 +316,14 @@ export default function BookScreen() {
         }
       }
 
-      const {
-        data: { user: viewer },
-      } = await supabase.auth.getUser();
-      if (viewer) {
-        if (biz.owner_user_id === viewer.id) {
-          setOwnBusinessBlock(true);
-          setLoading(false);
-          return;
-        }
-        const { data: ownedBiz } = await supabase
-          .from('business_profiles')
-          .select('id')
-          .eq('owner_user_id', viewer.id)
-          .maybeSingle();
-        if (ownedBiz) setBookAsClientHint(true);
-
-        if (!rescheduleId) {
-          const { data: upcoming } = await supabase
-            .from('appointments')
-            .select('id')
-            .eq('business_id', biz.id)
-            .eq('client_user_id', viewer.id)
-            .in('status', ['pending', 'approved'])
-            .gte('start_at', new Date().toISOString())
-            .order('start_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          if (upcoming?.id) setExistingAptId(upcoming.id as string);
-        }
+      if (isOwnBusiness) {
+        setOwnBusinessBlock(true);
+        setLoading(false);
+        return;
       }
+      if (ownedBizRes?.data) setBookAsClientHint(true);
+      if (upcomingRes?.data?.id) setExistingAptId(upcomingRes.data.id as string);
 
-      const { data: svcRows, error: svcErr } = await supabase
-        .from('services')
-        .select('*')
-        .eq('business_id', biz.id)
-        .eq('active', true)
-        .order('sort_order', { ascending: true });
       const list = (svcRows ?? []) as Service[];
       setServices(list);
       const fromQsSvc =
@@ -319,12 +336,6 @@ export default function BookScreen() {
         setServiceIds([fromQsSvc && list.some((s) => s.id === fromQsSvc) ? fromQsSvc : list[0].id]);
       }
 
-      const { data: staffRows, error: staffErr } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('business_id', biz.id)
-        .eq('active', true)
-        .order('sort_order', { ascending: true });
       const team = (staffRows ?? []) as Staff[];
       setStaffList(team);
       const fromQsStaff =
@@ -359,11 +370,7 @@ export default function BookScreen() {
       );
 
       if (rescheduleId) {
-        const { data: apt } = await supabase
-          .from('appointments')
-          .select('service_id, service_ids, staff_id, status, start_at, client_user_id')
-          .eq('id', String(rescheduleId))
-          .maybeSingle();
+        const apt = rescheduleAptRes?.data;
         if (
           !apt ||
           apt.client_user_id !== viewer?.id ||
@@ -414,12 +421,21 @@ export default function BookScreen() {
     setOnWaitlist(false);
 
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
-    const { busy: rawBusy, error: err } = await listBusyRanges({
-      businessId: business.id,
-      fromIso: startUtc.toISOString(),
-      toIso: endUtc.toISOString(),
-      staffId,
-    });
+    const [{ busy: rawBusy, error: err }, currentRes] = await Promise.all([
+      listBusyRanges({
+        businessId: business.id,
+        fromIso: startUtc.toISOString(),
+        toIso: endUtc.toISOString(),
+        staffId,
+      }),
+      rescheduleId
+        ? supabase
+            .from('appointments')
+            .select('start_at, end_at')
+            .eq('id', String(rescheduleId))
+            .maybeSingle()
+        : null,
+    ]);
     if (!slotsRequests.isCurrent(req)) return;
 
     if (err) {
@@ -430,18 +446,11 @@ export default function BookScreen() {
     }
 
     let busy = rawBusy;
-    if (rescheduleId) {
-      const { data: current } = await supabase
-        .from('appointments')
-        .select('start_at, end_at')
-        .eq('id', String(rescheduleId))
-        .maybeSingle();
-      if (!slotsRequests.isCurrent(req)) return;
-      if (current?.start_at) {
-        busy = rawBusy.filter(
-          (b) => !(b.startUtc === current.start_at && b.endUtc === current.end_at)
-        );
-      }
+    const current = currentRes?.data;
+    if (current?.start_at) {
+      busy = rawBusy.filter(
+        (b) => !(b.startUtc === current.start_at && b.endUtc === current.end_at)
+      );
     }
 
     const hours = staffSchedule(selectedStaff, business);
@@ -492,27 +501,30 @@ export default function BookScreen() {
         await loadSlots();
         return;
       }
-      const { data: moved } = await supabase
-        .from('appointments')
-        .select('id, business_id, status, client_email, client_phone, start_at')
-        .eq('id', String(rescheduleId))
-        .maybeSingle();
-      if (moved?.id && moved?.business_id) {
-        const notify = await invokePendingPush(
-          {
-            id: moved.id,
-            business_id: moved.business_id,
-            status: moved.status ?? 'approved',
-            client_email: moved.client_email,
-            client_phone: moved.client_phone,
-            start_at: moved.start_at,
-          },
-          { reason: 'rescheduled' }
-        );
-        if (!notify.ok) {
-          console.warn('notify after reschedule failed', notify.error);
+      // Push-ul către business pleacă în fundal; UI-ul nu-l așteaptă.
+      void (async () => {
+        const { data: moved } = await supabase
+          .from('appointments')
+          .select('id, business_id, status, client_email, client_phone, start_at')
+          .eq('id', String(rescheduleId))
+          .maybeSingle();
+        if (moved?.id && moved?.business_id) {
+          fireAndForget(
+            invokePendingPush(
+              {
+                id: moved.id,
+                business_id: moved.business_id,
+                status: moved.status ?? 'approved',
+                client_email: moved.client_email,
+                client_phone: moved.client_phone,
+                start_at: moved.start_at,
+              },
+              { reason: 'rescheduled' }
+            ),
+            'notify after reschedule failed'
+          );
         }
-      }
+      })().catch((e) => console.warn('notify after reschedule failed', e));
       setSelected(null);
       setMessage(trKey('book.moved'));
       setTimeout(() => router.replace('/(app)/my-appointments'), 800);
@@ -545,10 +557,7 @@ export default function BookScreen() {
         return;
       }
       if (series[0]) {
-        const notify = await notifyAfterBooking(series[0]);
-        if (!notify.ok) {
-          console.warn('notify after recurring failed', notify.error);
-        }
+        fireAndForget(notifyAfterBooking(series[0]), 'notify after recurring failed');
       }
       setSelected(null);
       await loadSlots();
@@ -589,19 +598,14 @@ export default function BookScreen() {
     const appointment = created;
     let payError: string | null = null;
     if (appointment?.id) {
-      const notify = await notifyAfterBooking(appointment);
-      if (!notify.ok) {
-        console.warn('notify after book failed', notify.error);
-      }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      fireAndForget(notifyAfterBooking(appointment), 'notify after book failed');
+      const user = await getCurrentUser();
       if (user) {
-        await markWaitlistBooked({
+        void markWaitlistBooked({
           businessId: business.id,
           clientUserId: user.id,
           desiredDate: dateLocal,
-        });
+        }).catch((e) => console.warn('markWaitlistBooked failed', e));
       }
       if (appointment.payment_status === 'unpaid') {
         const pay = await startDepositCheckout(appointment.id, tipRon);

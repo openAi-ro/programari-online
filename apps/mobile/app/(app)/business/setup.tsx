@@ -52,6 +52,7 @@ import { getSelectedBusinessId, setSelectedBusinessId } from '@/lib/myBusiness';
 import { validateSchedule } from '@/lib/workingHoursRules';
 import { isValidTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import { withTimeout } from '@/lib/withTimeout';
 import {
   BROWSE_CATEGORIES,
@@ -206,9 +207,7 @@ export default function BusinessSetupScreen() {
       }
     })();
     async function loadBusiness() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (cancelled) return;
       if (!user) {
         return;
@@ -520,9 +519,7 @@ export default function BusinessSetupScreen() {
     };
 
     setSaving(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setSaving(false);
       setError(trKey('req.notAuthed'));

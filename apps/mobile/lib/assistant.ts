@@ -160,6 +160,9 @@ export function answerAssistantMessage(
       'maine',
       'azi',
       'saptamana',
+      // EN (chip „I want to book” + întrebări libere)
+      'book',
+      'appointment',
     ])
   ) {
     return {
@@ -229,6 +232,9 @@ export function answerAssistantMessage(
       'cand incepeti',
       'duminica',
       'sambata',
+      // EN (chip „What are your hours?”)
+      'hours',
+      'opening',
     ])
   ) {
     return {
@@ -245,7 +251,7 @@ export function answerAssistantMessage(
     return name.length >= 3 && text.includes(name);
   });
   if (mentioned) {
-    if (includesAny(text, ['pret', 'costa', 'cat e', 'cat costa', 'tarif', 'lei'])) {
+    if (includesAny(text, ['pret', 'costa', 'cat e', 'cat costa', 'tarif', 'lei', 'how much', 'price', 'cost'])) {
       return {
         intent: 'service_price',
         confidence: 1,
@@ -285,6 +291,10 @@ export function answerAssistantMessage(
       'oferiti',
       'lista',
       'meniu',
+      // EN (chip „How much?”)
+      'how much',
+      'price',
+      'cost',
     ])
   ) {
     return {

@@ -6,7 +6,7 @@ import { Button, Callout, Screen, SkeletonScreen } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { resolveAppMode, type AppMode } from '@/lib/appMode';
-import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 
 /**
  * Ecranele de business sunt doar pentru conturile de business.
@@ -27,9 +27,7 @@ export default function BusinessLayout() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (cancelled) return;
       if (!user) {
         router.replace('/(auth)/login');

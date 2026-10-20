@@ -41,6 +41,7 @@ import { makeReferralCode } from '@/lib/referral';
 import { getPublicWebOrigin } from '@/lib/webBase';
 import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
 import { trKey, useT } from '@/lib/i18n';
 
@@ -99,9 +100,7 @@ export default function MyAppointmentsScreen() {
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       setError(trKey('auth.notSignedIn'));

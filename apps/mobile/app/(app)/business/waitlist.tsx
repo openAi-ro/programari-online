@@ -18,6 +18,7 @@ import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { filterWaitlistByDate, waitlistDates } from '@/lib/waitlistFilter';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { WaitlistEntry } from '@/lib/types';
 
 type Row = WaitlistEntry & {
@@ -39,9 +40,7 @@ export default function BusinessWaitlistScreen() {
 
   const load = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       return;

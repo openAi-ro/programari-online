@@ -16,6 +16,7 @@ import { normalizeIntakeText } from '@/lib/intake';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { ClientPhoto } from '@/lib/types';
 import { withSignedUrls } from '@/lib/clientPhotos';
 
@@ -39,9 +40,7 @@ export default function IntakeScreen() {
 
   const loadBusinesses = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       return;

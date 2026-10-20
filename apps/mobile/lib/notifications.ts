@@ -1,4 +1,4 @@
-﻿import { Linking, Platform, Vibration } from 'react-native';
+import { Linking, Platform, Vibration } from 'react-native';
 import Constants from 'expo-constants';
 import { isRunningInExpoGo } from 'expo';
 import { router } from 'expo-router';
@@ -7,6 +7,7 @@ import { ensureMyProfile } from './bookingRpc';
 import { trKey } from './i18n';
 import { setAppMode } from './appMode';
 import { supabase } from './supabase';
+import { getCurrentUser } from './currentUser';
 
 /**
  * Canal Android pentru cereri — importance MAX = „Pop on screen”.
@@ -430,9 +431,7 @@ export async function unregisterCurrentPushToken(): Promise<void> {
       return;
     }
     if (!token) return;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
     await supabase
       .from('device_push_tokens')

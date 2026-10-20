@@ -2,7 +2,9 @@
  * Run: npx tsx lib/assistant.test.ts
  * from apps/mobile
  */
-import { answerAssistantMessage, buildAssistantKnowledge } from './assistant';
+import { answerAssistantMessage, buildAssistantKnowledge, type AssistantIntent } from './assistant';
+import { en } from './locales/en';
+import { ro } from './locales/ro';
 
 let passed = 0;
 let failed = 0;
@@ -81,6 +83,21 @@ for (const [q, intent] of [
 ] as const) {
   const a = answerAssistantMessage(knowledge, q);
   assert(a.intent === intent, `${q} -> ${intent}`, a.intent);
+}
+
+// Fiecare sugestie (chip) din ecranul asistentului, în ambele limbi, trebuie să ajungă la intenția ei.
+const CHIP_INTENTS: Record<'as.suggestPrice' | 'as.suggestHours' | 'as.suggestBook', AssistantIntent> = {
+  'as.suggestPrice': 'services_list',
+  'as.suggestHours': 'hours',
+  'as.suggestBook': 'book',
+};
+for (const [lang, dict] of [['ro', ro], ['en', en]] as const) {
+  for (const [key, intent] of Object.entries(CHIP_INTENTS) as [keyof typeof CHIP_INTENTS, AssistantIntent][]) {
+    const label = dict[key];
+    const a = answerAssistantMessage(knowledge, label);
+    assert(a.intent === intent, `chip ${lang} ${key} "${label}" -> ${intent}`, a.intent);
+    assert(a.confidence > 0, `chip ${lang} ${key} are încredere > 0`, String(a.confidence));
+  }
 }
 
 console.log(`assistant: ${passed} passed, ${failed} failed`);

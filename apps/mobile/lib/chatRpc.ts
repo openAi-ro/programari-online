@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { createThrottledLoader } from './throttledLoader';
 import type { ChatConversation, ChatMessage } from './types';
 import { CHAT_PAGE_SIZE, olderThanFilter, pageFromNewestFirst, type ChatCursor } from './chatPaging';
 
@@ -88,12 +89,25 @@ export async function fetchUnreadTotal(): Promise<number> {
   return Object.values(counts).reduce((sum, n) => sum + n, 0);
 }
 
+/**
+ * Badge-ul de necitite e cerut de fiecare tab bar / ecran montat: o singură
+ * cerere pe minut, partajată. Se golește la „citit” și la schimbarea contului.
+ */
+const unreadTotal = createThrottledLoader(fetchUnreadTotal, 60_000);
+export function getUnreadTotal(force = false): Promise<number> {
+  return unreadTotal.get(force);
+}
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') unreadTotal.reset();
+});
+
 /** Mark a conversation as read by the current participant (v38). */
 export async function markConversationRead(conversationId: string): Promise<void> {
   if (!conversationId) return;
   const { error } = await supabase.rpc('mark_chat_conversation_read', {
     p_conversation: conversationId,
   });
+  unreadTotal.reset();
   if (error) console.warn('mark_chat_conversation_read failed', error.message);
 }
 

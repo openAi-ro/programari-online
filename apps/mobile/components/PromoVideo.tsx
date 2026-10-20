@@ -43,13 +43,47 @@ function ResumeOnMount({ player, resume }: { player: VideoPlayer; resume: Mutabl
   return null;
 }
 
+/**
+ * Până la tap nu creăm playerul: fără player nu se descarcă nimic (video-urile au
+ * 2–28 MB). Afișăm un „poster” cu buton Play; la tap montăm playerul și pornim.
+ */
 export function PromoVideo({ videoUrl, title }: { videoUrl: string; title?: string }) {
+  const t = useTheme();
+  const tr = useT();
+  const [active, setActive] = useState(false);
+  if (active || !videoUrl) {
+    return <PromoVideoPlayer videoUrl={videoUrl} title={title} />;
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title ?? tr('video.play')}
+      onPress={() => setActive(true)}
+      style={[styles.wrap, { backgroundColor: palette.ink950, borderColor: t.colors.border }]}
+    >
+      <View style={[styles.video, styles.overlay, styles.poster]}>
+        <View style={styles.playCircle}>
+          <Ionicons name="play" size={30} color="#FFFFFF" />
+        </View>
+        {title ? (
+          <Text style={styles.posterTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function PromoVideoPlayer({ videoUrl, title }: { videoUrl: string; title?: string }) {
   const t = useTheme();
   const tr = useT();
   const [failed, setFailed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  // Montat doar după tap pe poster → pornește direct.
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = false;
+    p.play();
   });
   const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.playing });
   const { muted } = useEvent(player, 'mutedChange', { muted: player.muted });
@@ -318,4 +352,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   fallbackText: { fontSize: fontSize.sm, fontWeight: '700', flexShrink: 1 },
+  poster: { gap: spacing.sm, paddingHorizontal: spacing.md },
+  posterTitle: { color: '#FFFFFF', fontSize: fontSize.sm, fontWeight: '700' },
 });

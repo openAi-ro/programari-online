@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from './currentUser';
 
 const KEY = 'programari.favoriteBusinessIds';
 
@@ -94,9 +95,7 @@ export async function syncFavoritesFromCloud(): Promise<string[]> {
   if (syncing) return memory;
   syncing = true;
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       return memory;
     }
@@ -149,9 +148,7 @@ export async function setFavoriteIds(ids: string[]): Promise<void> {
   await persistLocal(unique);
 
   try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     const next = new Set(unique);

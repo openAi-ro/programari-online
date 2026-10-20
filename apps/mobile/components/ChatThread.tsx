@@ -19,6 +19,7 @@ import { listMessages, markConversationRead, sendMessage } from '@/lib/chatRpc';
 import { mergeMessages } from '@/lib/chatPaging';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import { useFocusEffect } from 'expo-router';
 import type { ChatMessage } from '@/lib/types';
 
@@ -65,7 +66,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const newestFirst = useMemo(() => messages.slice().reverse(), [messages]);
   const load = useCallback(async () => {
     setError(null);
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) { setLoading(false); setError(trKey('auth.notSignedIn')); return; }
     userIdRef.current = user.id;
     const { data: conv, error: convErr } = await supabase.from('chat_conversations').select('*').eq('id', conversationId).maybeSingle();

@@ -1,4 +1,5 @@
 import { invokeDecisionNotify } from './notify-client';
+import { getCurrentUser } from './currentUser';
 import { supabase } from './supabase';
 import type { Appointment } from './types';
 
@@ -19,11 +20,8 @@ export function unwrapRpcRow<T>(data: unknown): T | null {
 export async function ensureMyProfile(): Promise<
   { ok: true; userId: string } | { ok: false; error: string }
 > {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return { ok: false, error: 'not_authenticated' };
   }
 

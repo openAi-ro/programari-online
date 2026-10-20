@@ -43,27 +43,19 @@ export async function setAppMode(mode: AppMode): Promise<void> {
   }
 }
 
+/** account_kind din profil are prioritate; altfel cine deține un business e „business”. */
+export function appModeFrom(accountKind: string | null | undefined, ownsBusiness: boolean): AppMode {
+  return parseMode(accountKind) ?? (ownsBusiness ? 'business' : 'client');
+}
+
 /** Stored choice, or the dedicated account_kind on the profile. */
 export async function resolveAppMode(userId: string): Promise<AppMode> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('account_kind')
-    .eq('id', userId)
-    .maybeSingle();
-
-  const fromProfile = parseMode(data?.account_kind);
-  if (fromProfile) {
-    await setAppMode(fromProfile);
-    return fromProfile;
-  }
-
-  const { data: owned } = await supabase
-    .from('business_profiles')
-    .select('id')
-    .eq('owner_user_id', userId)
-    .maybeSingle();
-
-  const mode: AppMode = owned ? 'business' : 'client';
+  // Ambele citiri depind doar de userId → pleacă odată (un singur drum, nu două).
+  const [{ data }, { data: owned }] = await Promise.all([
+    supabase.from('profiles').select('account_kind').eq('id', userId).maybeSingle(),
+    supabase.from('business_profiles').select('id').eq('owner_user_id', userId).maybeSingle(),
+  ]);
+  const mode = appModeFrom(data?.account_kind, Boolean(owned));
   await setAppMode(mode);
   return mode;
 }

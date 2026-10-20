@@ -1,8 +1,10 @@
 import { Tabs } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { BusinessTabBar } from '@/components/BusinessTabBar';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
+import { useForegroundInterval } from '@/lib/useForegroundInterval';
 
 /**
  * Real Tabs for the 5 business primary menus.
@@ -11,21 +13,27 @@ import { supabase } from '@/lib/supabase';
  */
 export default function BusinessTabsLayout() {
   const [requestBadge, setRequestBadge] = useState(0);
+  // Business-urile proprii nu se schimbă în timpul sesiunii: le citim o dată
+  // (per utilizator), apoi badge-ul costă o singură cerere (count).
+  const bizIdsRef = useRef<{ userId: string; ids: string[] } | null>(null);
 
   const refreshBadge = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
+        bizIdsRef.current = null;
         setRequestBadge(0);
         return;
       }
-      const { data: businesses } = await supabase
-        .from('business_profiles')
-        .select('id')
-        .eq('owner_user_id', user.id);
-      const ids = (businesses ?? []).map((b) => b.id as string);
+      if (bizIdsRef.current?.userId !== user.id) {
+        const { data: businesses, error } = await supabase
+          .from('business_profiles')
+          .select('id')
+          .eq('owner_user_id', user.id);
+        if (error) return;
+        bizIdsRef.current = { userId: user.id, ids: (businesses ?? []).map((b) => b.id as string) };
+      }
+      const ids = bizIdsRef.current.ids;
       if (ids.length === 0) {
         setRequestBadge(0);
         return;
@@ -43,7 +51,8 @@ export default function BusinessTabsLayout() {
 
   useEffect(() => {
     void refreshBadge();
-    const interval = setInterval(() => void refreshBadge(), 60_000);
+    // Schimbările vin prin realtime; sondajul e doar plasă de siguranță
+    // (5 min, oprit în fundal, reîmprospătare la revenirea în aplicație).
     const channel = supabase
       .channel('business-requests-badge')
       .on(
@@ -53,10 +62,10 @@ export default function BusinessTabsLayout() {
       )
       .subscribe();
     return () => {
-      clearInterval(interval);
       void supabase.removeChannel(channel);
     };
   }, [refreshBadge]);
+  useForegroundInterval(() => void refreshBadge(), 5 * 60_000);
 
   return (
     <Tabs

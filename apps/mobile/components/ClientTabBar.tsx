@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/components/ui';
-import { fetchUnreadTotal } from '@/lib/chatRpc';
+import { getUnreadTotal } from '@/lib/chatRpc';
+import { useForegroundInterval } from '@/lib/useForegroundInterval';
 import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import { TabCountBadge } from '@/components/CountBadge';
@@ -72,13 +73,17 @@ export function ClientTabBar({
   const insets = useSafeAreaInsets();
   const pathname = usePathname() || '';
   const [chatUnread, setChatUnread] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = async () => { const n = await fetchUnreadTotal(); if (!cancelled) setChatUnread(n); };
-    void refresh();
-    const iv = setInterval(() => void refresh(), 60_000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, [pathname]);
+  // Necitite: cache partajat (max. o cerere/minut pentru toate tab bar-urile montate),
+  // reîmprospătat la schimbarea ecranului și la 60 s doar cât aplicația e în prim-plan.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const refresh = useCallback(() => {
+    getUnreadTotal()
+      .then((n) => { if (mounted.current) setChatUnread(n); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { refresh(); }, [pathname, refresh]);
+  useForegroundInterval(refresh, 60_000);
 
   return (
     <View

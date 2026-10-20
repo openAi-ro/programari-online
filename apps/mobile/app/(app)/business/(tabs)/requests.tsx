@@ -24,6 +24,7 @@ import { listBusyRanges, moveAppointmentToSlot } from '@/lib/bookingRpc';
 import { generateFreeSlots } from '@/lib/slots';
 import { validateMoveInput } from '@/lib/moveRules';
 import { invokeDecisionNotify, invokeMoved, invokePostpone, invokeWaitlistNotify } from '@/lib/notify-client';
+import { fireAndForget } from '@/lib/fireAndForget';
 import { presentLocalBookingNotification } from '@/lib/notifications';
 import { invokeRefundDeposit, invokeWaiveDeposit } from '@/lib/payments';
 import { ensureChatConversationForClient, sendMessage } from '@/lib/chatRpc';
@@ -31,6 +32,7 @@ import { resolveBusinessChatTarget } from '@/lib/chatTarget';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/currentUser';
 import type { Appointment, BusinessProfile, FreeSlot } from '@/lib/types';
 
 type Row = Appointment & { business?: BusinessProfile | null };
@@ -73,9 +75,7 @@ export default function BusinessRequestsScreen() {
 
   const load = useCallback(async () => {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
       setError(trKey('req.notAuthed'));
@@ -241,10 +241,7 @@ export default function BusinessRequestsScreen() {
     // Cardul se actualizeaza imediat; notificarea si reincarcarea vin dupa.
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
 
-    const notify = await invokeDecisionNotify(id);
-    if (!notify.ok) {
-      console.warn('WhatsApp/email notify:', notify.error);
-    }
+    fireAndForget(invokeDecisionNotify(id), 'WhatsApp/email notify:');
 
     if (status === 'rejected') {
       notifyWaitlistForRow(rows.find((r) => r.id === id));
@@ -412,9 +409,7 @@ export default function BusinessRequestsScreen() {
 
   async function sendQuickMessage(appointment: Appointment, text: string) {
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) { setError(trKey('req.notAuthed')); return; }
     // Conversația e (business, clientul programării) — nu (business, owner).
     const target = resolveBusinessChatTarget(appointment, user.id);
