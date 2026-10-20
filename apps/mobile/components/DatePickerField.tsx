@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -69,6 +69,14 @@ export function DatePickerField({
   const [open, setOpen] = useState(false);
   const shownLabel = label ?? tr('pick.dateLabel');
   const dateValue = useMemo(() => parseYmd(value), [value]);
+  // Web: inputul e necontrolat. Chrome ține cifrele tastate pe segmente (zi/lună/an);
+  // dacă React rescrie value după fiecare tastă (an parțial „0002” respins), segmentul se
+  // resetează și data iese greșită. Scriem în input doar când valoarea vine din afară.
+  const webInput = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    const el = webInput.current;
+    if (el && el.value !== value && document.activeElement !== el) el.value = value;
+  }, [value]);
 
   function apply(next: Date) {
     onChange(toYmd(next));
@@ -111,13 +119,19 @@ export function DatePickerField({
           <>
             <Ionicons name="calendar-outline" size={17} color={t.colors.accent} />
             <input
+              ref={webInput}
               type="date"
-              value={value}
+              defaultValue={value}
               min={minimumDate ? toYmd(minimumDate) : undefined}
               max={maximumDate ? toYmd(maximumDate) : undefined}
               onChange={(e: { target: { value: string } }) => {
                 // Partial years while typing ("0002-…") are not dates yet.
                 if (isCompleteYmd(e.target.value)) onChange(e.target.value);
+              }}
+              onBlur={() => {
+                // Ieșire cu o dată incompletă: revine la ultima dată validă.
+                const el = webInput.current;
+                if (el && el.value !== value) el.value = value;
               }}
               style={{
                 flex: 1,
