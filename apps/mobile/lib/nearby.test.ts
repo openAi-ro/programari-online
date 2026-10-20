@@ -2,7 +2,7 @@
  * Run: npx tsx lib/nearby.test.ts
  * from apps/mobile
  */
-import { isUsableArea, roundCoords, selectNearby } from './nearby';
+import { carouselLayout, isUsableArea, nearestOffsetIndex, roundCoords, selectNearby } from './nearby';
 
 let passed = 0;
 let failed = 0;
@@ -49,6 +49,32 @@ assert(selectNearby(many, null, { radiusKm: 2 }).rows.length === 5, 'raza config
 const rc = roundCoords({ latitude: 45.04567, longitude: 23.27449 });
 assert(rc.latitude === 45.05 && rc.longitude === 23.27, 'coordonate rotunjite la 2 zecimale');
 assert(!isUsableArea({ county: ' ', city: null }) && isUsableArea({ county: 'Gorj', city: null }), 'zonă utilizabilă');
+
+// Carousel sizing from the container width.
+const fits = (w: number, n: number) => {
+  const l = carouselLayout(w, n);
+  const last = l.offsets[l.offsets.length - 1];
+  // last snap shows the last card fully: its right edge == viewport right edge (or all fit)
+  const lastLeft = (n - 1) * (l.cardWidth + 12);
+  return { l, lastVisible: lastLeft - last >= 0 && lastLeft - last + l.cardWidth <= w };
+};
+const c352 = fits(352, 2);
+assert(!c352.l.fitsAll && c352.l.cardWidth <= 352 - 12 - 48 && c352.lastVisible, '352px, 2 carduri: un card + peek, ultimul complet vizibil la final');
+assert(c352.l.offsets.length === 2 && c352.l.offsets[1] === c352.l.contentWidth - 352, '352px: ultimul snap = sfârșitul conținutului');
+for (const w of [320, 360, 400, 1366]) {
+  for (const n of [1, 2, 3, 6, 11]) {
+    const f = fits(w, n);
+    assert(f.l.cardWidth > 0 && f.l.cardWidth <= w && f.lastVisible, `${w}px × ${n}: card în container, ultimul vizibil complet`);
+    assert(f.l.offsets.every((o, i, a) => o >= 0 && o <= Math.max(0, f.l.contentWidth - w) && (i === 0 || o > a[i - 1])), `${w}px × ${n}: offseturi crescătoare în limite`);
+  }
+}
+const wide = carouselLayout(1366, 2);
+assert(wide.fitsAll && wide.offsets.length === 1 && wide.cardWidth === 300, 'ecran lat: 1 business + Vezi toate încap, fără săgeți');
+const two = carouselLayout(700, 6);
+assert(!two.fitsAll && two.cardWidth * 2 + 24 + 48 <= 700, '700px: două carduri întregi + peek');
+assert(carouselLayout(1366, 1).fitsAll, 'un singur card încape');
+assert(carouselLayout(0, 3).cardWidth > 0, 'lățime necunoscută: fallback sigur');
+assert(nearestOffsetIndex([0, 300, 412], 405) === 2 && nearestOffsetIndex([0, 300], 100) === 0, 'index după scroll');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

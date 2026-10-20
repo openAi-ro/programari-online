@@ -30,7 +30,14 @@ import {
   type PublicBusinessWithDistance,
 } from '@/lib/discover';
 import { useT } from '@/lib/i18n';
-import { NEARBY_RADIUS_KM, roundCoords, selectNearby, type NearbyArea } from '@/lib/nearby';
+import {
+  carouselLayout,
+  NEARBY_RADIUS_KM,
+  nearestOffsetIndex,
+  roundCoords,
+  selectNearby,
+  type NearbyArea,
+} from '@/lib/nearby';
 import { loadNearbyPrefs, saveNearbyPrefs } from '@/lib/nearbyPrefs';
 import { JUDETE, localitatiPentruJudet } from '@/lib/roGeo';
 
@@ -134,18 +141,21 @@ export function NearbyCarousel() {
           : tr('nearby.titleCounty', { county: selection.label })
         : tr('nearby.titleAll');
 
-  const cardW = width > 0 ? Math.min(300, Math.round(width * 0.78)) : 260;
-  const interval = cardW + GAP;
   const data: Item[] = selection.rows.length > 0 ? [...selection.rows, SEE_ALL] : [];
+  // Lățimea cardurilor vine din lățimea reală a containerului (onLayout).
+  const layout = carouselLayout(width, data.length, { gap: GAP });
+  const cardW = layout.cardWidth;
+  const offsets = layout.offsets;
+  const showArrows = Platform.OS === 'web' && !layout.fitsAll;
 
   function scrollTo(i: number) {
-    const clamped = Math.max(0, Math.min(data.length - 1, i));
-    listRef.current?.scrollToOffset({ offset: clamped * interval, animated: true });
+    const clamped = Math.max(0, Math.min(offsets.length - 1, i));
+    listRef.current?.scrollToOffset({ offset: offsets[clamped], animated: true });
     setIndex(clamped);
   }
 
   function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    setIndex(Math.round(e.nativeEvent.contentOffset.x / interval));
+    setIndex(nearestOffsetIndex(offsets, e.nativeEvent.contentOffset.x));
   }
 
   const showPrompt = coords == null && locState !== 'locating';
@@ -154,13 +164,13 @@ export function NearbyCarousel() {
     <View style={styles.wrap} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
       <SectionTitle
         action={
-          Platform.OS === 'web' && data.length > 1 ? (
+          showArrows ? (
             <View style={styles.arrows}>
               <ArrowButton icon="chevron-back" label={tr('nearby.prev')} disabled={index <= 0} onPress={() => scrollTo(index - 1)} />
               <ArrowButton
                 icon="chevron-forward"
                 label={tr('nearby.next')}
-                disabled={index >= data.length - 1}
+                disabled={index >= offsets.length - 1}
                 onPress={() => scrollTo(index + 1)}
               />
             </View>
@@ -240,23 +250,29 @@ export function NearbyCarousel() {
       ) : (
         <FlatList
           ref={listRef}
+          testID="nearby-list"
           data={data}
           horizontal
           keyExtractor={(item) => (item === SEE_ALL ? SEE_ALL : item.id)}
           showsHorizontalScrollIndicator={false}
-          snapToInterval={interval}
-          snapToAlignment="start"
+          scrollEnabled={!layout.fitsAll}
+          snapToOffsets={offsets}
+          snapToEnd
           decelerationRate="fast"
           disableIntervalMomentum
+          style={Platform.OS === 'web' ? (webSnapList as object) : undefined}
           initialNumToRender={3}
           windowSize={5}
           onScroll={onScroll}
           scrollEventThrottle={64}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
-          renderItem={({ item }) =>
-            item === SEE_ALL ? <SeeAllCard width={cardW} /> : <BusinessCard biz={item} width={cardW} />
-          }
+          renderItem={({ item, index: i }) => (
+            // Pe web snap-ul e CSS: ultimul card se aliniază la dreapta, deci e mereu întreg.
+            <View style={Platform.OS === 'web' ? ((i === data.length - 1 ? webSnapEnd : webSnapStart) as object) : undefined}>
+              {item === SEE_ALL ? <SeeAllCard width={cardW} /> : <BusinessCard biz={item} width={cardW} />}
+            </View>
+          )}
         />
       )}
     </View>
@@ -299,7 +315,7 @@ function BusinessCard({ biz, width }: { biz: PublicBusinessWithDistance; width: 
   const distance = formatDistanceKm(biz.distanceKm);
   const meta = [categoryLabelForKey(biz.category), distance, biz.city].filter(Boolean).join(' · ');
   return (
-    <View style={[styles.card, { width, backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
+    <View testID="nearby-card" style={[styles.card, { width, backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
       <View style={[styles.media, { backgroundColor: t.colors.surfaceMuted }]}>
         {biz.logo_url ? (
           <Image source={{ uri: biz.logo_url }} style={styles.logo} resizeMode="contain" accessibilityIgnoresInvertColors />
@@ -310,10 +326,10 @@ function BusinessCard({ biz, width }: { biz: PublicBusinessWithDistance; width: 
         )}
       </View>
       <View style={styles.cardBody}>
-        <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>
+        <Text style={[styles.name, styles.fill, { color: t.colors.text }]} numberOfLines={2}>
           {biz.name}
         </Text>
-        <Text style={[styles.muted, { color: t.colors.textMuted }]} numberOfLines={1}>
+        <Text style={[styles.muted, styles.fill, { color: t.colors.textMuted }]} numberOfLines={2}>
           {meta || ' '}
         </Text>
         <Button
@@ -331,16 +347,27 @@ function SeeAllCard({ width }: { width: number }) {
   const t = useTheme();
   const tr = useT();
   return (
-    <View style={[styles.card, styles.seeAll, { width, backgroundColor: t.colors.accentSoft, borderColor: t.colors.border }]}>
+    <View testID="nearby-card" style={[styles.card, styles.seeAll, { width, backgroundColor: t.colors.accentSoft, borderColor: t.colors.border }]}>
       <Ionicons name="map-outline" size={36} color={t.colors.accentSoftText} />
-      <Text style={[styles.name, { color: t.colors.accentSoftText, textAlign: 'center' }]}>{tr('nearby.seeAll')}</Text>
-      <Text style={[styles.muted, { color: t.colors.accentSoftText, textAlign: 'center' }]}>{tr('nearby.seeAllDesc')}</Text>
-      <Button size="sm" variant="secondary" label={tr('nearby.seeAll')} onPress={() => router.push('/(app)/map' as never)} />
+      <Text style={[styles.name, styles.fill, { color: t.colors.accentSoftText, textAlign: 'center' }]}>
+        {tr('nearby.seeAll')}
+      </Text>
+      <Text style={[styles.muted, styles.fill, { color: t.colors.accentSoftText, textAlign: 'center' }]}>
+        {tr('nearby.seeAllDesc')}
+      </Text>
+      <View style={styles.fill}>
+        <Button size="sm" variant="secondary" label={tr('nearby.seeAll')} onPress={() => router.push('/(app)/map' as never)} />
+      </View>
     </View>
   );
 }
 
+const webSnapList = { scrollSnapType: 'x mandatory' };
+const webSnapStart = { scrollSnapAlign: 'start' };
+const webSnapEnd = { scrollSnapAlign: 'end' };
+
 const styles = StyleSheet.create({
+  fill: { alignSelf: 'stretch', minWidth: 0, flexShrink: 1 },
   wrap: { gap: spacing.sm },
   arrows: { flexDirection: 'row', gap: spacing.xs },
   arrow: {

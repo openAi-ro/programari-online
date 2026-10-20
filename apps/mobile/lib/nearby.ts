@@ -75,3 +75,64 @@ export function selectNearby<T extends NearbyCandidate>(
 
   return { mode: 'all', rows: rows.slice(0, max) };
 }
+
+export type CarouselLayout = {
+  /** Width of every card, derived from the real container width. */
+  cardWidth: number;
+  /** All cards are fully visible: no scrolling, no arrows. */
+  fitsAll: boolean;
+  /** Scroll offsets of the snap points; the last one shows the last card fully (right-aligned). */
+  offsets: number[];
+  contentWidth: number;
+};
+
+/**
+ * Card sizing for the horizontal carousel, from the container width (onLayout).
+ * - everything fits (cards between minCard and maxCard) -> show all, no scrolling;
+ * - otherwise one card (or two when they fit) plus a clear `peek` of the next one;
+ * - snap offsets stop at the end of the content so the last card is never clipped.
+ */
+export function carouselLayout(
+  containerWidth: number,
+  count: number,
+  opts: { gap?: number; minCard?: number; maxCard?: number; peek?: number } = {}
+): CarouselLayout {
+  const gap = opts.gap ?? 12;
+  const minCard = opts.minCard ?? 200;
+  const maxCard = opts.maxCard ?? 300;
+  const peek = opts.peek ?? 48;
+  const w = Math.max(0, Math.floor(containerWidth));
+  const n = Math.max(0, Math.floor(count));
+  if (w === 0 || n === 0) return { cardWidth: Math.min(maxCard, 260), fitsAll: n <= 1, offsets: [0], contentWidth: 0 };
+
+  const share = Math.floor((w - gap * (n - 1)) / n);
+  if (share >= minCard) {
+    const cardWidth = Math.min(maxCard, share);
+    return { cardWidth, fitsAll: true, offsets: [0], contentWidth: n * cardWidth + gap * (n - 1) };
+  }
+
+  const twoWithPeek = Math.floor((w - 2 * gap - peek) / 2);
+  const cardWidth = Math.max(
+    1,
+    Math.min(maxCard, twoWithPeek >= minCard ? twoWithPeek : w - gap - peek)
+  );
+  const contentWidth = n * cardWidth + gap * (n - 1);
+  const maxOffset = Math.max(0, contentWidth - w);
+  const offsets: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const o = i * (cardWidth + gap);
+    if (o >= maxOffset) break;
+    offsets.push(o);
+  }
+  offsets.push(maxOffset);
+  return { cardWidth, fitsAll: maxOffset === 0, offsets, contentWidth };
+}
+
+/** Index of the snap offset closest to the current scroll position. */
+export function nearestOffsetIndex(offsets: readonly number[], x: number): number {
+  let best = 0;
+  for (let i = 1; i < offsets.length; i++) {
+    if (Math.abs(offsets[i] - x) < Math.abs(offsets[best] - x)) best = i;
+  }
+  return best;
+}
