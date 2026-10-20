@@ -5,6 +5,9 @@
 import {
   AI_RATE_LIMITS,
   buildAgentKnowledge,
+  buildLlmMessages,
+  classifyWithLlmDetailed,
+  redactPersonalData,
   buildCallerKey,
   clientIpFrom,
   parseRateVerdict,
@@ -186,6 +189,59 @@ async function main() {
   assert(clientIpFrom(h({})) === null, 'fără IP');
   assert(/peste 37 secunde/.test(rateLimitMessage('caller_minute', 37)), 'mesaj 429 pe minut');
   assert(/astăzi/.test(rateLimitMessage('caller_day', 3600)) && /business/.test(rateLimitMessage('business_day', 10)), 'mesaje 429 pe zi');
+
+  // Redaction: nothing personal goes to the model.
+  const r = (t: string, n: string[] = []) => redactPersonalData(t, n);
+  assert(r('Scrieți-mi la ana.pop@gmail.com') === 'Scrieți-mi la [email]', 'redact email', r('Scrieți-mi la ana.pop@gmail.com'));
+  assert(!/\d{3}/.test(r('Sunați-mă la 0712 345 678 sau +40 722-111-222')), 'redact telefoane', r('Sunați-mă la 0712 345 678 sau +40 722-111-222'));
+  assert(r('CNP 1900101123456') === 'CNP [număr]', 'redact CNP');
+  assert(r('Programarea 82edafb9-1234-4abc-8def-0123456789ab') === 'Programarea [id]', 'redact uuid');
+  assert(r('codul meu e cfv695xzeo') === 'codul meu e [cod]', 'redact cod', r('codul meu e cfv695xzeo'));
+  assert(/\[adresă\]/.test(r('Locuiesc pe Strada Florilor 10, Cluj')) && !/Florilor/.test(r('Locuiesc pe Strada Florilor 10, Cluj')), 'redact adresă', r('Locuiesc pe Strada Florilor 10, Cluj'));
+  assert(r('Bună, mă numesc Ana Popescu, pot veni mâine?') === 'Bună, mă numesc [nume], pot veni mâine?', 'redact „mă numesc”', r('Bună, mă numesc Ana Popescu, pot veni mâine?'));
+  assert(!/Ioana/.test(r('Vreau la Ioana mâine', ['Ioana Marin'])), 'redact nume angajat');
+  assert(!/Marin/.test(r('Merge la doamna Marin?', ['Ioana Marin'])), 'redact nume de familie');
+  assert(r('Cât costă tunsul? 50 lei la 10:30 pe 21.10.2026') === 'Cât costă tunsul? 50 lei la 10:30 pe 21.10.2026', 'păstrează preț, oră, dată', r('Cât costă tunsul? 50 lei la 10:30 pe 21.10.2026'));
+  assert(r('Pot veni cu copilul?') === 'Pot veni cu copilul?', 'întrebare fără date personale neschimbată');
+  assert(r('Sunt interesată de tuns') === 'Sunt interesată de tuns', '„sunt” + cuvânt obișnuit rămâne');
+  assert(r('Bună ziua, sunt Ana Pop') === 'Bună ziua, sunt [nume]', 'redact „sunt Ana Pop”', r('Bună ziua, sunt Ana Pop'));
+  assert(r('IBAN RO49AAAA1B31007593840000') === 'IBAN [iban]', 'redact IBAN', r('IBAN RO49AAAA1B31007593840000'));
+  assert(r('vezi https://exemplu.ro/x?id=5') === 'vezi [link]', 'redact link');
+
+  const kPriv = buildAgentKnowledge({
+    businessName: 'Salon Frumos', address: 'Str. Florilor 10, Cluj', phone: '0712345678',
+    cancelNoticeMinutes: 60, depositRon: 0,
+    services: [{ name: 'Tuns', durationMinutes: 30, priceRon: 50 }],
+    staffNames: ['Ioana Marin'], workingHours: { mon: [['09:00', '17:00']] },
+    customFaq: 'Acceptăm copii. Pentru urgențe sunați Ioana la 0733 444 555.',
+  });
+  const msgs = buildLlmMessages(kPriv, 'Sunt Mihai, 0711222333, mihai@x.ro: pot veni cu copilul?');
+  const sent = JSON.stringify(msgs);
+  assert(!/0712345678|Florilor|Ioana|Marin|0733|444 555|Mihai|0711222333|mihai@x\.ro/.test(sent), 'prompt fără date personale', sent);
+  assert(/Tuns/.test(sent) && /Acceptăm copii/.test(sent) && /09:00/.test(sent), 'prompt cu info publice (servicii, FAQ, program)');
+  assert(/pot veni cu copilul\?/.test(msgs[1].content), 'întrebarea rămâne');
+
+  // Model lipsă / erori HTTP -> reguli, fără excepție.
+  let seenAuth = '';
+  let seenBody = '';
+  const status404: LlmFetch = async (_u, init) => { seenAuth = init.headers.Authorization; seenBody = init.body; return { ok: false, status: 404, json: async () => ({ error: 'model not found' }) }; };
+  const d404 = await classifyWithLlmDetailed({ apiKey: 'k1', model: 'missing', baseUrl: 'https://x/v1/' }, kPriv, 'pot veni cu copilul?', status404);
+  assert(d404.verdict === null && d404.status === 'error' && d404.httpStatus === 404, '404 -> error, fără excepție');
+  assert(seenAuth === 'Bearer k1', 'header Authorization corect', seenAuth.replace(/k1/, '<key>'));
+  assert(!/Ioana|0712345678/.test(seenBody), 'corpul cererii fără date personale');
+  const c404 = await runAgentCore({ knowledge: kPriv, message: 'Pot veni cu copilul?', llm: { apiKey: 'k1', model: 'missing', baseUrl: 'https://x/v1' }, fetchImpl: status404 });
+  assert(c404.source !== 'llm' && c404.llmStatus === 'error', 'nucleu: 404 -> reguli', JSON.stringify({ s: c404.source, l: c404.llmStatus }));
+  const status400: LlmFetch = async () => ({ ok: false, status: 400, json: async () => ({}) });
+  assert((await classifyWithLlmDetailed({ apiKey: 'k', model: 'm', baseUrl: 'https://x' }, kPriv, 'x', status400)).status === 'error', '400 -> error');
+  const throwing: LlmFetch = async () => { throw new Error('network'); };
+  assert((await runAgentCore({ knowledge: kPriv, message: 'Pot veni cu copilul?', llm: { apiKey: 'k', model: 'm', baseUrl: 'https://x' }, fetchImpl: throwing })).llmStatus === 'error', 'rețea căzută -> reguli');
+  // Timeout: fetch care respectă AbortSignal.
+  const hanging: LlmFetch = (_u, init) => new Promise((_res, rej) => init.signal?.addEventListener('abort', () => rej(new Error('aborted'))));
+  const t0 = Date.now();
+  const hung = await classifyWithLlmDetailed({ apiKey: 'k', model: 'm', baseUrl: 'https://x', timeoutMs: 50 }, kPriv, 'x', hanging);
+  assert(hung.status === 'error' && Date.now() - t0 < 1000, 'timeout -> error');
+  const sure = await runAgentCore({ knowledge: kPriv, message: 'Cât costă tunsul?', llm: { apiKey: 'k', model: 'm', baseUrl: 'https://x' }, fetchImpl: throwing });
+  assert(sure.llmStatus === 'not_needed' && sure.source === 'rules', 'reguli sigure -> fără LLM');
 
   console.log(`aiCore: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

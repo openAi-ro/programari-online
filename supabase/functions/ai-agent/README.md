@@ -49,6 +49,8 @@ supabase secrets set AI_MODEL=...          # modelul ales
 supabase secrets set AI_API_BASE_URL=...   # implicit https://api.openai.com/v1 (ex. Groq, OpenRouter)
 ```
 
+Confidențialitate: către model pleacă doar întrebarea, cu datele personale înlocuite (`redactPersonalData`: e-mail, telefon/CNP/numere lungi, IBAN, linkuri, id-uri/coduri, adrese, „mă numesc …”, numele angajaților), plus informațiile publice ale firmei (nume, servicii, program, FAQ — și acesta redactat). Nu pleacă: telefonul/adresa firmei, numele angajaților, nume/id-uri de clienți sau programări. Mesajul exact e construit de `buildLlmMessages`. Model lipsă sau eroare HTTP (404/400/401/429/5xx), timeout 8 s sau JSON invalid: rămâne răspunsul pe reguli (`llmStatus: "error"`).
+
 Modelul e consultat doar când regulile sunt nesigure. Poate alege doar o intenție și servicii reale; prețurile și duratele nu vin niciodată de la model.
 
 ## Bază de date

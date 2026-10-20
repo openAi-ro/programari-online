@@ -96,7 +96,15 @@ export type AgentResult = {
   proposedTools: AgentToolProposal[];
   /** True when a human should take over (unknown, low confidence, human asked). */
   handoff: boolean;
+  /**
+   * What happened with the optional LLM: not_needed (rules were sure), off (not
+   * configured), used, unsure (model said fallback/low confidence), error
+   * (HTTP error such as 404/400 for a missing model, timeout, bad JSON).
+   */
+  llmStatus?: LlmStatus;
 };
+
+export type LlmStatus = 'not_needed' | 'off' | 'used' | 'unsure' | 'error';
 
 export const HANDOFF_THRESHOLD = 0.6;
 
@@ -366,6 +374,92 @@ export function classifyWithRules(
 }
 
 // ---------------------------------------------------------------------------
+// Personal-data redaction: applied to EVERYTHING sent to an external model.
+// Only the question text (redacted) and the business's public info leave.
+// ---------------------------------------------------------------------------
+
+const EMAIL_RE = /[\p{L}0-9._%+-]+@[\p{L}0-9.-]+\.[\p{L}]{2,}/giu;
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+/** 9+ digits with optional separators: phones, CNP, card/IBAN fragments. */
+const LONG_NUMBER_RE = /\+?\d(?:[\s.\-/()]*\d){8,}/g;
+/** Codes/ids mixing letters and digits (booking codes, public codes, references). */
+const CODE_RE = /\b(?=[\p{L}0-9]*\d)(?=[\p{L}0-9]*\p{L})[\p{L}0-9]{6,}\b/gu;
+const IBAN_RE = /\bRO\d{2}[A-Z]{4}[0-9A-Z]{16}\b/gi;
+const URL_RE = /\bhttps?:\/\/\S+/gi;
+const ADDRESS_RE =
+  /\b(?:str(?:ada)?|bd|b-dul|bulevardul|calea|aleea|sos(?:eaua)?|șos(?:eaua)?|piața|piata|nr|bl|bloc|sc|ap|apartament)\.?\s+[^,;!?\n]{1,40}/giu;
+/** „mă numesc Ana”, „numele meu este Ana”, „my name is Ana” (any case). */
+const NAME_INTRO_RE =
+  /(m[ăa]\s+numesc|numele\s+meu\s+(?:e|este)|my\s+name\s+is)\s+\p{L}[\p{L}'-]*(?:\s+\p{Lu}[\p{L}'-]*)?/giu;
+/** „sunt Ana Pop”, „I'm Ana”: only when followed by a Capitalised word (case-sensitive). */
+const NAME_SELF_RE = /(?<![\p{L}])([Ss]unt|I am|I'm)\s+\p{Lu}[\p{L}'-]*(?:\s+\p{Lu}[\p{L}'-]*)?/gu;
+
+function escapeRe(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Removes personal data from free text: emails, URLs, IBANs, phone-like numbers,
+ * ids/codes, street addresses, self-introductions ("mă numesc Ana") and any of
+ * the given names (staff, client). Prices ("50 lei") and dates stay.
+ */
+export function redactPersonalData(text: string, names: readonly string[] = []): string {
+  let out = (text ?? '').slice(0, 2000);
+  out = out.replace(EMAIL_RE, '[email]');
+  out = out.replace(URL_RE, '[link]');
+  out = out.replace(IBAN_RE, '[iban]');
+  out = out.replace(UUID_RE, '[id]');
+  out = out.replace(LONG_NUMBER_RE, '[număr]');
+  out = out.replace(CODE_RE, '[cod]');
+  out = out.replace(ADDRESS_RE, '[adresă]');
+  out = out.replace(NAME_INTRO_RE, (_m, intro: string) => `${intro} [nume]`);
+  out = out.replace(NAME_SELF_RE, (_m, intro: string) => `${intro} [nume]`);
+  for (const raw of names) {
+    const n = (raw ?? '').trim();
+    if (n.length < 2) continue;
+    for (const part of [n, ...n.split(/\s+/).filter((p) => p.length >= 3)]) {
+      out = out.replace(new RegExp(`(?<![\\p{L}])${escapeRe(part)}(?![\\p{L}])`, 'giu'), '[nume]');
+    }
+  }
+  return out.replace(/(\[nume\]\s*){2,}/g, '[nume] ');
+}
+
+function compactHours(workingHours: unknown): string {
+  if (!workingHours || typeof workingHours !== 'object') return 'unknown';
+  try {
+    return JSON.stringify(workingHours).slice(0, 400);
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * The exact messages sent to the model: business PUBLIC info (name, services,
+ * hours, FAQ — the FAQ also redacted) and the redacted customer question.
+ * Never: staff names, phone, address, client names/ids, booking ids.
+ */
+export function buildLlmMessages(
+  knowledge: AgentKnowledge,
+  message: string
+): { role: 'system' | 'user'; content: string }[] {
+  const serviceNames = knowledge.services.map((s) => s.name).join(', ');
+  const faq = redactPersonalData(knowledge.customFaq, knowledge.staffNames).slice(0, 1500);
+  const system = [
+    'You classify a customer message for a booking business.',
+    `Business: ${knowledge.businessName}. Services (exact names): ${serviceNames || 'none'}.`,
+    `Working hours (JSON): ${compactHours(knowledge.workingHours)}.`,
+    faq ? `Business FAQ: ${faq}` : 'Business FAQ: none.',
+    `Reply with ONLY a JSON object: {"intent": one of ${AGENT_INTENTS.join('|')}, "confidence": 0..1, "serviceName": exact service name or null, "dateHint": "today"|"tomorrow"|"day_after_tomorrow"|null}.`,
+    'Never invent prices, durations, times or services. If unsure, intent=fallback, confidence=0.',
+    'Placeholders like [nume], [număr], [email] replace removed personal data.',
+  ].join('\n');
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: redactPersonalData(message, knowledge.staffNames) },
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Optional LLM classifier (OpenAI-compatible: Groq, OpenRouter, OpenAI, ...).
 // The model may only pick an intent and reference real entities. It never
 // supplies prices, durations or times: facts always come from knowledge.
@@ -417,21 +511,14 @@ function parseLlmVerdict(knowledge: AgentKnowledge, raw: unknown): LlmVerdict | 
   return { intent: intent as AgentIntent, confidence, entities: { serviceName, dateHint } };
 }
 
-export async function classifyWithLlm(
+export async function classifyWithLlmDetailed(
   config: LlmConfig,
   knowledge: AgentKnowledge,
   message: string,
   fetchImpl: LlmFetch = fetch as unknown as LlmFetch
-): Promise<LlmVerdict | null> {
-  if (!config.apiKey || !config.model) return null;
+): Promise<{ verdict: LlmVerdict | null; status: LlmStatus; httpStatus?: number }> {
+  if (!config.apiKey || !config.model) return { verdict: null, status: 'off' };
   const base = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
-  const serviceNames = knowledge.services.map((s) => s.name).join(', ');
-  const system = [
-    'You classify a customer message for a booking business.',
-    `Business: ${knowledge.businessName}. Services (exact names): ${serviceNames || 'none'}.`,
-    `Reply with ONLY a JSON object: {"intent": one of ${AGENT_INTENTS.join('|')}, "confidence": 0..1, "serviceName": exact service name or null, "dateHint": "today"|"tomorrow"|"day_after_tomorrow"|null}.`,
-    'Never invent prices, durations, times or services. If unsure, intent=fallback, confidence=0.',
-  ].join('\n');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs ?? 8000);
@@ -439,33 +526,41 @@ export async function classifyWithLlm(
     const res = await fetchImpl(`${base}/chat/completions`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer [REDACTED]${config.apiKey}`,
+        Authorization: 'Bearer ' + config.apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: config.model,
         temperature: 0,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: message.slice(0, 2000) },
-        ],
+        messages: buildLlmMessages(knowledge, message),
       }),
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    // 404/400 (e.g. model missing), 401, 429, 5xx: keep the rules result.
+    if (!res.ok) return { verdict: null, status: 'error', httpStatus: res.status };
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
     const content = data.choices?.[0]?.message?.content ?? '';
     const jsonStart = content.indexOf('{');
     const jsonEnd = content.lastIndexOf('}');
-    if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
-    return parseLlmVerdict(knowledge, JSON.parse(content.slice(jsonStart, jsonEnd + 1)));
+    if (jsonStart < 0 || jsonEnd <= jsonStart) return { verdict: null, status: 'error', httpStatus: res.status };
+    const verdict = parseLlmVerdict(knowledge, JSON.parse(content.slice(jsonStart, jsonEnd + 1)));
+    return { verdict, status: verdict ? 'used' : 'error', httpStatus: res.status };
   } catch {
-    return null;
+    return { verdict: null, status: 'error' };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function classifyWithLlm(
+  config: LlmConfig,
+  knowledge: AgentKnowledge,
+  message: string,
+  fetchImpl?: LlmFetch
+): Promise<LlmVerdict | null> {
+  return (await classifyWithLlmDetailed(config, knowledge, message, fetchImpl)).verdict;
 }
 
 /**
@@ -517,18 +612,23 @@ export async function runAgentCore(input: {
 }): Promise<AgentResult> {
   const ruled = classifyWithRules(input.knowledge, input.message);
   // 1 = sure, 0.6 = partial, 0 = unknown. The LLM may improve partial/unknown.
-  if (ruled.confidence > HANDOFF_THRESHOLD || !input.llm) return ruled;
+  if (ruled.confidence > HANDOFF_THRESHOLD) return { ...ruled, llmStatus: 'not_needed' };
+  if (!input.llm) return { ...ruled, llmStatus: 'off' };
 
-  const verdict = await classifyWithLlm(
+  const { verdict, status } = await classifyWithLlmDetailed(
     input.llm,
     input.knowledge,
     input.message,
     input.fetchImpl
   );
-  if (!verdict || verdict.intent === 'fallback' || verdict.confidence < HANDOFF_THRESHOLD) {
-    return ruled;
+  if (!verdict) return { ...ruled, llmStatus: status };
+  if (verdict.intent === 'fallback' || verdict.confidence < HANDOFF_THRESHOLD) {
+    return { ...ruled, llmStatus: 'unsure' };
   }
-  return makeResult(input.knowledge, verdict.intent, verdict.confidence, 'llm', verdict.entities);
+  return {
+    ...makeResult(input.knowledge, verdict.intent, verdict.confidence, 'llm', verdict.entities),
+    llmStatus: 'used',
+  };
 }
 
 
