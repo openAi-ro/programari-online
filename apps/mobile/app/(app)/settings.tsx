@@ -117,11 +117,13 @@ export default function SettingsScreen() {
     connected_at: string | null;
     last_synced_at: string | null;
     status?: string | null;
+    staff_id?: string | null;
   } | null>(null);
   const [gcalBusy, setGcalBusy] = useState(false);
   // Sincronizarea rulează separat: nu blochează conectarea/deconectarea sau restul ecranului.
   const [gcalSyncing, setGcalSyncing] = useState(false);
-  const [hasStaff, setHasStaff] = useState(false);
+  const [activeStaff, setActiveStaff] = useState<{ id: string; name: string }[]>([]);
+  const hasStaff = activeStaff.length > 0;
   const [pushDiagOpen, setPushDiagOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -224,6 +226,25 @@ export default function SettingsScreen() {
         pushed: payload.pushed ?? 0,
       })
     );
+  }
+
+  // Al cui e calendarul: '' = proprietarul (toate programările, nu blochează specialiștii),
+  // altfel un specialist (doar programările lui; evenimentele Google îi blochează doar lui orele).
+  async function handleGoogleStaff(staffId: string) {
+    if (!businessId || gcalBusy || gcalSyncing || staffId === (gcalStatus?.staff_id ?? '')) return;
+    setGcalBusy(true);
+    setError(null);
+    const { error: err } = await supabase.rpc('set_google_calendar_staff', {
+      p_business_id: businessId,
+      p_staff_id: staffId || null,
+    });
+    setGcalBusy(false);
+    if (err) {
+      setError(trKey('gcal.syncFail'));
+      return;
+    }
+    // Sincronizare completă: aduce în Google exact programările noului titular.
+    await handleGoogleSync();
   }
 
   async function handleGoogleDisconnect() {
@@ -340,7 +361,7 @@ export default function SettingsScreen() {
         setVideoUrl(biz.promo_video_url ?? null);
         setBizHasAddress(Boolean(biz.county || biz.city || biz.address));
         setBizHasCoords(biz.latitude != null && biz.longitude != null);
-        const [{ data: svcRows }, { count: staffCount }] = await Promise.all([
+        const [{ data: svcRows }, { data: staffRows }] = await Promise.all([
           supabase
             .from('services')
             .select('name, active')
@@ -348,16 +369,17 @@ export default function SettingsScreen() {
             .order('sort_order', { ascending: true }),
           supabase
             .from('staff')
-            .select('id', { count: 'exact', head: true })
+            .select('id, name')
             .eq('business_id', biz.id)
-            .eq('active', true),
+            .eq('active', true)
+            .order('sort_order', { ascending: true }),
         ]);
         const svcState = serviceChecklistState(
           (svcRows ?? []) as { name: string; active: boolean }[],
         );
         setServiceState(svcState);
         setHasServices(svcState.kind === 'ok');
-        setHasStaff((staffCount ?? 0) > 0);
+        setActiveStaff((staffRows ?? []) as { id: string; name: string }[]);
       } else {
         setBusinessId(null);
         setBizName('');
@@ -368,7 +390,7 @@ export default function SettingsScreen() {
         setBizHasCoords(false);
         setHasServices(false);
         setServiceState({ kind: 'none' });
-        setHasStaff(false);
+        setActiveStaff([]);
       }
 
       setLoading(false);
@@ -1745,6 +1767,25 @@ export default function SettingsScreen() {
                         ? ` · ${tr('gcal.lastSync', { when: new Date(gcalStatus.last_synced_at).toLocaleString() })}`
                         : ''}
                     </Badge>
+                    {hasStaff ? (
+                      <>
+                        <Segmented
+                          value={gcalStatus?.staff_id ?? ''}
+                          onChange={(id) => void handleGoogleStaff(id)}
+                          options={[
+                            { value: '', label: tr('gcal.scopeOwner') },
+                            ...activeStaff.map((s) => ({ value: s.id, label: s.name })),
+                          ]}
+                        />
+                        <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
+                          {gcalStatus?.staff_id
+                            ? tr('gcal.scopeStaffHint', {
+                                name: activeStaff.find((s) => s.id === gcalStatus.staff_id)?.name ?? '',
+                              })
+                            : tr('gcal.scopeOwnerHint')}
+                        </Text>
+                      </>
+                    ) : null}
                     {gcalStatus?.status === 'needs_reconnect' ? (
                       <>
                         <Text style={[styles.panelText, { color: t.colors.danger }]}>{tr('gcal.ret_auth')}</Text>

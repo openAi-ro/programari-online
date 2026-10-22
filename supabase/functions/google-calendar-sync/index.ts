@@ -45,6 +45,8 @@ type Env = { clientId: string; clientSecret: string; redirectUri: string };
 
 type Conn = {
   business_id: string;
+  /** Specialistul al cărui calendar e; null = firmă fără specialiști (tot calendarul firmei). */
+  staff_id: string | null;
   google_calendar_id: string | null;
   refresh_token: string;
   status: string;
@@ -60,6 +62,7 @@ type Apt = {
   id: string;
   business_id: string;
   status: string;
+  staff_id: string | null;
   start_at: string;
   end_at: string;
   service_name: string | null;
@@ -68,9 +71,9 @@ type Apt = {
   google_event_id: string | null;
 };
 
-const APT_COLS = 'id, business_id, status, start_at, end_at, service_name, client_email, client_phone, google_event_id';
+const APT_COLS = 'id, business_id, status, staff_id, start_at, end_at, service_name, client_email, client_phone, google_event_id';
 const CONN_COLS =
-  'business_id, google_calendar_id, refresh_token, status, sync_token, full_synced_at, access_token, access_token_expires_at';
+  'business_id, staff_id, google_calendar_id, refresh_token, status, sync_token, full_synced_at, access_token, access_token_expires_at';
 
 class NeedsReconnectError extends Error {
   constructor() {
@@ -188,7 +191,9 @@ async function syncAppointment(
     const apt = aptRes.data as Apt | null;
     if (!apt || apt.business_id !== businessId) return jsonResponse({ ok: true, skipped: 'not_found' });
 
-    if (apt.status === 'approved') {
+    // Calendarul unui specialist primește doar programările lui; ale altora se scot.
+    const mine = !ctx.conn.staff_id || apt.staff_id === ctx.conn.staff_id;
+    if (apt.status === 'approved' && mine) {
       const body = appointmentEventBody(apt, ctx.biz.name, tz);
       const eventId = await session.call((t) =>
         upsertAppointmentEvent(t, session.calendarId, apt.id, apt.google_event_id, body)
@@ -200,7 +205,7 @@ async function syncAppointment(
       console.log('gcal appointment', JSON.stringify({ action: 'upserted', ms: Date.now() - started }));
       return jsonResponse({ ok: true, action: 'upserted' });
     }
-    if (apt.status === 'cancelled' || apt.status === 'rejected') {
+    if (apt.status === 'cancelled' || apt.status === 'rejected' || (apt.status === 'approved' && apt.google_event_id)) {
       const id = apt.google_event_id || appointmentEventId(apt.id);
       await session.call((t) => deleteEvent(t, session.calendarId, id));
       if (apt.google_event_id) {
@@ -210,7 +215,7 @@ async function syncAppointment(
       console.log('gcal appointment', JSON.stringify({ action: 'removed', ms: Date.now() - started }));
       return jsonResponse({ ok: true, action: 'removed' });
     }
-    return jsonResponse({ ok: true, skipped: 'status' });
+    return jsonResponse({ ok: true, skipped: apt.status === 'approved' ? 'other_staff' : 'status' });
   } catch (e) {
     if (e instanceof NeedsReconnectError) return jsonResponse({ error: 'needs_reconnect' }, 409);
     console.error('gcal appointment failed', errMsg(e));
@@ -259,6 +264,12 @@ async function syncBusiness(
     started - Date.parse(conn.full_synced_at) > FULL_RESYNC_MS;
   let full = forceFull || fullDue;
 
+  // Calendarul unui specialist: doar programările lui merg în Google; restul legate se scot.
+  const staffMatch = conn.staff_id ? { staff_id: conn.staff_id } : {};
+  const removeFilter = conn.staff_id
+    ? `status.in.(cancelled,rejected),staff_id.is.null,staff_id.neq.${conn.staff_id}`
+    : 'status.in.(cancelled,rejected)';
+
   // Citirile din DB (independente de Google) pornesc în paralel cu listarea.
   const ownP = admin
     .from('appointments')
@@ -271,6 +282,7 @@ async function syncBusiness(
     .select(APT_COLS)
     .eq('business_id', biz.id)
     .eq('status', 'approved')
+    .match(staffMatch)
     .is('google_event_id', null)
     .gte('start_at', nowIso)
     .lte('start_at', timeMax)
@@ -281,6 +293,7 @@ async function syncBusiness(
     .select(APT_COLS)
     .eq('business_id', biz.id)
     .eq('status', 'approved')
+    .match(staffMatch)
     .not('google_event_id', 'is', null)
     .gte('start_at', nowIso)
     .lte('start_at', timeMax)
@@ -289,7 +302,7 @@ async function syncBusiness(
     .from('appointments')
     .select('id, google_event_id')
     .eq('business_id', biz.id)
-    .in('status', ['cancelled', 'rejected'])
+    .or(removeFilter)
     .not('google_event_id', 'is', null)
     .limit(100);
 
