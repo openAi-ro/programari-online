@@ -2,6 +2,8 @@
 import { assert, assertEquals, assertStringIncludes } from 'jsr:@std/assert@1';
 import {
   logNotification,
+  messageNewPendingRequest,
+  sendEmail,
   maskRecipient,
   messageApproved,
   messageWaitlistSpot,
@@ -15,7 +17,7 @@ import { extractStatuses, shouldApplyStatus, verifyMetaSignature } from './whats
 
 const ENV = [
   'WHATSAPP_PROVIDER', 'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_TPL_CONFIRMED',
-  'WHATSAPP_TPL_WAITLIST', 'WHATSAPP_TPL_LANG', 'TWILIO_ACCOUNT_SID', 'RESEND_API_KEY',
+  'WHATSAPP_TPL_WAITLIST', 'WHATSAPP_TPL_LANG', 'TWILIO_ACCOUNT_SID', 'BREVO_API_KEY', 'EMAIL_FROM',
 ];
 function resetEnv() { for (const k of ENV) Deno.env.delete(k); }
 function metaEnv() {
@@ -193,4 +195,37 @@ Deno.test('webhook statuses: failed 131047 extracted, order rules', () => {
   assert(shouldApplyStatus('read', 'failed'));
   assert(!shouldApplyStatus('failed', 'read'));
   assertEquals(extractStatuses({ entry: [{ changes: [{ value: { messages: [{ id: 'x' }] } }] }] }).length, 0);
+});
+
+Deno.test('email: no BREVO_API_KEY -> stub email_not_configured', async () => {
+  resetEnv();
+  const r = await sendEmail('a@b.ro', 's', 't');
+  assertEquals(r.ok, false);
+  assertEquals(r.error, 'email_not_configured');
+});
+
+Deno.test('email: Brevo API payload + messageId parsed', async () => {
+  resetEnv();
+  Deno.env.set('BREVO_API_KEY', 'test-key-not-real');
+  const m = mockFetch(201, { messageId: '<abc@smtp-relay.mailin.fr>' });
+  try {
+    const r = await sendEmail('a@b.ro', 'Subj', 'Body');
+    assertEquals(r.ok, true);
+    assertEquals(r.messageId, '<abc@smtp-relay.mailin.fr>');
+    assertEquals(m.calls[0].url, 'https://api.brevo.com/v3/smtp/email');
+    assertEquals(m.calls[0].body.to, [{ email: 'a@b.ro' }]);
+    assertEquals((m.calls[0].body.sender as { email: string }).email, 'programari@promixt.ro');
+  } finally { m.restore(); resetEnv(); }
+});
+
+Deno.test('owner pending: template when WHATSAPP_TPL_OWNER_PENDING set, 3 vars', async () => {
+  resetEnv(); metaEnv();
+  Deno.env.set('WHATSAPP_TPL_OWNER_PENDING', 'programare_noua_in_asteptare');
+  const m = mockFetch(200, { messages: [{ id: 'wamid.OP' }] });
+  try {
+    const copy = messageNewPendingRequest('Salon X', 'ana@x.ro', '21 oct. 2026, 10:00', 'ro');
+    assertEquals(copy.wa.vars.length, WA_TEMPLATE_VARS.OWNER_PENDING.length);
+    await notifyClientChannels({ email: null, phone: '0712345900', subject: copy.subject, text: copy.text, wa: copy.wa });
+    assertEquals(m.calls[0].body.type, 'template');
+  } finally { m.restore(); Deno.env.delete('WHATSAPP_TPL_OWNER_PENDING'); resetEnv(); }
 });

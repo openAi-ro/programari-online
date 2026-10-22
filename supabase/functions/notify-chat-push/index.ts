@@ -1,9 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { parseNotifyLang } from '../_shared/notify.ts';
+import { checkWebhookSecret, isServiceRole } from '../_shared/secret-auth.ts';
 const EXPO='https://exp.host/--/api/v2/push/send';
 Deno.serve(async (req)=>{
   const c=handleCors(req); if(c) return c;
+  // Only caller: DB trigger chat_messages_notify_push (x-webhook-secret from Vault). The app never invokes it.
+  const webhook = checkWebhookSecret(req);
+  if (webhook === 'missing') return jsonResponse({ error: 'server_misconfigured' }, 500);
+  if (webhook !== 'ok' && !isServiceRole(req)) return jsonResponse({ error: 'unauthorized' }, 401);
   const body = await req.json().catch(()=>({}));
   const record = body.record ?? body;
   if(!record?.conversation_id || !record?.sender_user_id) return jsonResponse({skipped:'missing'}, 200);

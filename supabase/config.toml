@@ -457,3 +457,49 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 # Meta calls this unauthenticated; auth = verify token (GET) + X-Hub-Signature-256 (POST).
 verify_jwt = false
+
+# verify_jwt aliniat cu valorile publicate (22.10.2026); nu schimba fara sa schimbi si functia publicata
+[functions.notify-decision]
+verify_jwt = false
+
+[functions.notify-postpone]
+verify_jwt = false
+
+[functions.notify-pending-push]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.ai-agent]
+verify_jwt = true
+
+[functions.create-deposit-checkout]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.google-calendar-connect]
+verify_jwt = true
+
+[functions.google-calendar-sync]
+verify_jwt = true
+
+[functions.notify-moved]
+verify_jwt = true
+
+[functions.notify-waitlist]
+verify_jwt = true
+
+[functions.process-referrals]
+verify_jwt = true
+
+[functions.refund-deposit]
+verify_jwt = true
+
+[functions.send-rebook-reminders]
+verify_jwt = true
+
+[functions.test-whatsapp]
+verify_jwt = true

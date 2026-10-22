@@ -5,23 +5,21 @@
  * - authenticated user who owns the business for this appointment.
  */
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { bearerToken, checkWebhookSecret, isServiceRole } from './secret-auth.ts';
 
 export async function authorizeNotifyRequest(
   req: Request,
   admin: SupabaseClient,
   appointmentId: string | undefined
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
-  if (webhookSecret) {
-    const header = req.headers.get('x-webhook-secret');
-    if (header === webhookSecret) return { ok: true };
-  }
+  const webhook = checkWebhookSecret(req);
+  if (webhook === 'missing') return { ok: false, status: 500, error: 'server_misconfigured' };
+  if (webhook === 'ok') return { ok: true };
 
   const auth = req.headers.get('authorization') ?? '';
-  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const bearer = bearerToken(req);
 
-  if (serviceKey && bearer === serviceKey) return { ok: true };
+  if (isServiceRole(req)) return { ok: true };
 
   if (!appointmentId || !bearer) {
     return { ok: false, status: 401, error: 'unauthorized' };

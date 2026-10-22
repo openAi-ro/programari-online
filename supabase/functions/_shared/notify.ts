@@ -1,5 +1,5 @@
 /**
- * Shared client notification channels: email (Resend) + WhatsApp (Twilio / Meta Cloud).
+ * Shared client notification channels: email (Brevo) + WhatsApp (Twilio / Meta Cloud).
  * When env keys are missing, stubs log to console and return ok:false + stub:true
  * (nothing was delivered — callers must not treat a stub as sent).
  *
@@ -9,6 +9,9 @@
  * Meta inside the 24h customer-service window).
  */
 import { normalizePhoneE164, phoneForMetaApi } from './phone.ts';
+
+/** Max wait for Brevo / Meta / Twilio before the send is recorded as failed. */
+const PROVIDER_TIMEOUT_MS = 15_000;
 
 /** Recipient language for notification copy. Functions accept `lang` in the body (default 'ro'). */
 export type NotifyLang = 'ro' | 'en';
@@ -49,7 +52,9 @@ export type WaTemplateKey =
   | 'REMINDER_24H'
   | 'REMINDER_SOON'
   | 'REBOOK'
-  | 'WAITLIST';
+  | 'WAITLIST'
+  | 'OWNER_PENDING'
+  | 'TEST';
 
 /**
  * Fixed body-variable order per template ({{1}}, {{2}}, ...). Must match
@@ -63,6 +68,8 @@ export const WA_TEMPLATE_VARS: Record<WaTemplateKey, string[]> = {
   REMINDER_SOON: ['business_name', 'time'],
   REBOOK: ['business_name', 'service_name'],
   WAITLIST: ['business_name', 'date', 'booking_link'],
+  OWNER_PENDING: ['business_name', 'client_contact', 'date_time'],
+  TEST: ['app_name'],
 };
 
 export type WaTemplateRef = { key: WaTemplateKey; vars: string[] };
@@ -115,33 +122,35 @@ export async function sendEmail(
   subject: string,
   text: string
 ): Promise<SendResult> {
-  const key = Deno.env.get('RESEND_API_KEY');
+  const key = Deno.env.get('BREVO_API_KEY');
   if (!key) {
     console.log('EMAIL_STUB', { to: maskRecipient(to), subject });
     return { ok: false, stub: true, channel: 'email', provider: 'stub', outcome: 'stub', error: 'email_not_configured' };
   }
 
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       headers: {
-        Authorization: `Bearer ${key}`,
+        'api-key': key,
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
       body: JSON.stringify({
-        from: Deno.env.get('EMAIL_FROM') ?? 'Programari <onboarding@resend.dev>',
-        to: [to],
+        sender: { name: 'Programari', email: Deno.env.get('EMAIL_FROM') ?? 'programari@promixt.ro' },
+        to: [{ email: to }],
         subject,
-        text,
+        textContent: text,
       }),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error('Resend error', res.status, body);
+      console.error('Brevo error', res.status, body);
       return { ok: false, status: res.status, channel: 'email', error: body, outcome: 'failed', errorCode: String(res.status), errorMessage: body.slice(0, 500) };
     }
-    const j = (await res.json().catch(() => null)) as { id?: string } | null;
-    return { ok: true, status: res.status, channel: 'email', outcome: 'accepted', messageId: j?.id };
+    const j = (await res.json().catch(() => null)) as { messageId?: string } | null;
+    return { ok: true, status: res.status, channel: 'email', outcome: 'accepted', messageId: j?.messageId };
   } catch (e) {
     console.error('sendEmail exception', e);
     const msg = e instanceof Error ? e.message : String(e);
@@ -247,6 +256,7 @@ async function postMetaMessage(
     `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
     {
       method: 'POST',
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -427,6 +437,7 @@ async function sendWhatsAppTwilio(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
       {
         method: 'POST',
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
         headers: {
           Authorization: 'Basic ' + btoa(`${authUser}:${authPass}`),
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -598,17 +609,18 @@ export function messageNewPendingRequest(
   contact: string,
   whenLabel?: string,
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'OWNER_PENDING', vars: [businessName, contact, whenLabel || '-'] };
   if (lang === 'en') {
     const text = whenLabel
       ? `New request at ${businessName} from ${contact} (${whenLabel}). Open Requests to reply.`
       : `New request at ${businessName} from ${contact}. Open Requests to reply.`;
-    return { subject: 'New booking request', text };
+    return { subject: 'New booking request', text, wa };
   }
   const text = whenLabel
     ? `Cerere nouă la ${businessName} de la ${contact} (${whenLabel}). Deschide Cereri pentru a răspunde.`
     : `Cerere nouă la ${businessName} de la ${contact}. Deschide Cereri pentru a răspunde.`;
-  return { subject: 'Cerere nouă de programare', text };
+  return { subject: 'Cerere nouă de programare', text, wa };
 }
 
 /** Notify business owner that a client moved their appointment. */

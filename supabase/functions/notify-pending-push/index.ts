@@ -11,14 +11,17 @@
  *   Table: appointments
  *   Events: INSERT
  *   URL: https://<project-ref>.supabase.co/functions/v1/notify-pending-push
- *   Headers: Authorization: Bearer <SERVICE_ROLE_OR_ANON>, optional x-webhook-secret
+ *   Implemented as SQL trigger public.appointment_insert_push_webhook() (pg_net),
+ *   header x-webhook-secret read from Vault secret `webhook_secret` (= WEBHOOK_SECRET).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
+import { bearerToken, checkWebhookSecret, isServiceRole } from '../_shared/secret-auth.ts';
 import {
   messageNewPendingRequest,
   messageRescheduledRequest,
   notifyClientChannels,
+  type WaTemplateRef,
 } from '../_shared/notify.ts';
 import { notifyLocale, parseNotifyLang } from '../_shared/notify.ts';
 
@@ -61,49 +64,34 @@ function formatWhen(iso: string | undefined, timezone: string, lang: 'ro' | 'en'
   }
 }
 
-/** webhook secret, service role, or any authenticated JWT (booking client invoke). */
-async function authorizePendingPush(req: Request): Promise<
-  { ok: true } | { ok: false; status: number; error: string }
-> {
-  const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
-  if (webhookSecret) {
-    const header = req.headers.get('x-webhook-secret');
-    if (header === webhookSecret) return { ok: true };
-  }
+/**
+ * Who may call this function:
+ * - DB webhook (trigger `appointment-insert-push`): x-webhook-secret header from Vault;
+ * - server code: service-role bearer;
+ * - the app (reschedule flow, lib/notify-client.ts invokePendingPush): a signed-in user
+ *   who is the client of that appointment or the owner of its business. For users the
+ *   record is always re-read from the DB, client-supplied fields are ignored.
+ * Fail-closed: WEBHOOK_SECRET missing -> 500.
+ */
+type PendingAuth =
+  | { ok: true; userId: string | null }
+  | { ok: false; status: number; error: string };
 
-  const auth = req.headers.get('authorization') ?? '';
-  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+async function authorizePendingPush(req: Request): Promise<PendingAuth> {
+  const webhook = checkWebhookSecret(req);
+  if (webhook === 'missing') return { ok: false, status: 500, error: 'server_misconfigured' };
+  if (webhook === 'ok' || isServiceRole(req)) return { ok: true, userId: null };
 
-  if (serviceKey && bearer === serviceKey) return { ok: true };
-  if (anonKey && bearer === anonKey) return { ok: true };
-
-  // Legacy/service JWT: role claim (getUser() does not accept service_role)
-  if (bearer.split('.').length === 3) {
-    try {
-      const payload = JSON.parse(atob(bearer.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')));
-      if (payload?.role === 'service_role') return { ok: true };
-    } catch {
-      // ignore decode errors
-    }
-  }
-
-  // No auth material at all
-  if (!webhookSecret && !bearer) return { ok: true };
-
-  if (!bearer) {
-    return { ok: false, status: 401, error: 'unauthorized' };
-  }
+  const bearer = bearerToken(req);
+  if (!bearer) return { ok: false, status: 401, error: 'unauthorized' };
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   if (!supabaseUrl || !anonKey) {
     return { ok: false, status: 500, error: 'server_misconfigured' };
   }
 
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: auth } },
-  });
+  const userClient = createClient(supabaseUrl, anonKey);
   const {
     data: { user },
     error: userErr,
@@ -113,7 +101,7 @@ async function authorizePendingPush(req: Request): Promise<
     return { ok: false, status: 401, error: 'unauthorized' };
   }
 
-  return { ok: true };
+  return { ok: true, userId: user.id };
 }
 
 Deno.serve(async (req) => {
@@ -161,6 +149,28 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(supabaseUrl, serviceKey);
+
+  // Signed-in app user: only for an appointment they booked or whose business they own;
+  // use the DB row, not the request body.
+  if (authResult.userId) {
+    const { data: live } = await admin
+      .from('appointments')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at')
+      .eq('id', record.id)
+      .maybeSingle();
+    if (!live) return jsonResponse({ error: 'appointment_not_found' }, 404);
+    let allowed = live.client_user_id === authResult.userId;
+    if (!allowed) {
+      const { data: owner } = await admin
+        .from('business_profiles')
+        .select('owner_user_id')
+        .eq('id', live.business_id)
+        .maybeSingle();
+      allowed = owner?.owner_user_id === authResult.userId;
+    }
+    if (!allowed) return jsonResponse({ error: 'forbidden' }, 403);
+    record = live;
+  }
 
   // Enrich from DB when client fields missing (e.g. SQL insert / id-only invoke)
   if (
@@ -325,7 +335,7 @@ Deno.serve(async (req) => {
 
   // --- Owner WhatsApp / email (profile loaded above; even when no push tokens) ---
 
-  const msg = rescheduled
+  const msg: { subject: string; text: string; wa?: WaTemplateRef } = rescheduled
     ? messageRescheduledRequest(business.name, contact, startLocal, lang)
     : messageNewPendingRequest(business.name, contact, startLocal, lang);
   let sentWhatsapp = false;
@@ -340,6 +350,8 @@ Deno.serve(async (req) => {
       phone: ownerProfile.phone ?? null,
       subject: msg.subject,
       text: msg.text,
+      // Template only for a real pending request (Meta drops free text outside the 24h window).
+      wa: autoApproved ? undefined : msg.wa,
       log: {
         admin,
         type: rescheduled ? 'OWNER_RESCHEDULED' : 'OWNER_PENDING',

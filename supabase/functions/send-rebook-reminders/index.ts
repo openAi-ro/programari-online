@@ -7,6 +7,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
+import { authorizeCron } from '../_shared/secret-auth.ts';
 import { messageRebook, notifyClientChannels } from '../_shared/notify.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
@@ -19,17 +20,9 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'method_not_allowed' }, 405);
   }
 
-  const cronSecret = Deno.env.get('CRON_SECRET');
-  if (cronSecret) {
-    const auth = req.headers.get('authorization') ?? '';
-    const headerSecret = req.headers.get('x-cron-secret');
-    const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (headerSecret !== cronSecret && bearer !== cronSecret) {
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      if (!serviceKey || bearer !== serviceKey) {
-        return jsonResponse({ error: 'unauthorized' }, 401);
-      }
-    }
+  const cronAuth = authorizeCron(req);
+  if (!cronAuth.ok) {
+    return jsonResponse({ error: cronAuth.error }, cronAuth.status);
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
