@@ -30,12 +30,21 @@ import {
   normalizePortfolioUrls,
   removePortfolioUrl,
 } from '@/lib/staffPortfolio';
+import {
+  MAX_SPECIALTY_LENGTH,
+  MAX_STAFF_PHONE_LENGTH,
+  cleanOptionalText,
+  staffPrivateRow,
+} from '@/lib/staffDetails';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
 
 type Draft = {
   name: string;
+  specialty: string;
+  phone: string;
+  phonePublic: boolean;
   photoUrl: string;
   portfolioUrls: string[];
   customHours: boolean;
@@ -45,6 +54,9 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = {
   name: '',
+  specialty: '',
+  phone: '',
+  phonePublic: false,
   photoUrl: '',
   portfolioUrls: [],
   customHours: false,
@@ -115,17 +127,34 @@ export default function BusinessStaffScreen() {
     setDraft(EMPTY_DRAFT);
   }
 
-  function startEdit(s: Staff) {
+  async function startEdit(s: Staff) {
     setMessage(null);
+    setError(null);
     setEditingId(s.id);
     setDraft({
       name: s.name,
+      specialty: s.specialty ?? '',
+      phone: '',
+      phonePublic: false,
       photoUrl: s.photo_url ?? '',
       portfolioUrls: normalizePortfolioUrls(s.portfolio_urls),
       customHours: Boolean(s.working_hours),
       workingHours: s.working_hours ?? DEFAULT_WORKING_HOURS,
       breakHours: s.break_hours ?? DEFAULT_BREAK_HOURS,
     });
+    // Telefonul sta in staff_private (doar proprietarul il poate citi).
+    const { data: priv, error: pErr } = await supabase
+      .from('staff_private')
+      .select('phone, phone_public')
+      .eq('staff_id', s.id)
+      .maybeSingle();
+    if (pErr) {
+      setError(pErr.message);
+      return;
+    }
+    if (priv) {
+      setDraft((d) => ({ ...d, phone: priv.phone ?? '', phonePublic: Boolean(priv.phone_public) }));
+    }
   }
 
   async function uploadStaffPhoto(localUri: string): Promise<string> {
@@ -219,20 +248,36 @@ export default function BusinessStaffScreen() {
     setError(null);
     setMessage(null);
     const photoUrl = draft.photoUrl.trim() || null;
+    const specialty = cleanOptionalText(draft.specialty, MAX_SPECIALTY_LENGTH);
     if (editingId === 'new') {
-      const { error: err } = await supabase.from('staff').insert({
-        business_id: businessId,
-        portfolio_urls: normalizePortfolioUrls(draft.portfolioUrls),
-        name,
-        photo_url: photoUrl,
-        color: STAFF_COLORS[rows.length % STAFF_COLORS.length],
-        sort_order: rows.length,
-        active: true,
-        ...hours,
-      });
+      const { data: created, error: err } = await supabase
+        .from('staff')
+        .insert({
+          business_id: businessId,
+          portfolio_urls: normalizePortfolioUrls(draft.portfolioUrls),
+          name,
+          specialty,
+          photo_url: photoUrl,
+          color: STAFF_COLORS[rows.length % STAFF_COLORS.length],
+          sort_order: rows.length,
+          active: true,
+          ...hours,
+        })
+        .select('id')
+        .single();
+      if (err || !created) {
+        setSaving(false);
+        setError(err?.message ?? trKey('team.saveFail'));
+        return;
+      }
+      const { error: pErr } = await supabase
+        .from('staff_private')
+        .upsert(staffPrivateRow({ staffId: created.id, phone: draft.phone, phonePublic: draft.phonePublic }));
       setSaving(false);
-      if (err) {
-        setError(err.message);
+      if (pErr) {
+        setEditingId(created.id);
+        setError(pErr.message);
+        await load();
         return;
       }
       setEditingId(null);
@@ -240,20 +285,32 @@ export default function BusinessStaffScreen() {
       await load();
       return;
     }
+    if (!editingId) {
+      setSaving(false);
+      return;
+    }
     const { error: err } = await supabase
       .from('staff')
       .update({
         name,
+        specialty,
         photo_url: photoUrl,
         portfolio_urls: normalizePortfolioUrls(draft.portfolioUrls),
         ...hours,
         updated_at: new Date().toISOString(),
       })
       .eq('id', editingId);
-
-    setSaving(false);
     if (err) {
+      setSaving(false);
       setError(err.message);
+      return;
+    }
+    const { error: pErr } = await supabase
+      .from('staff_private')
+      .upsert(staffPrivateRow({ staffId: editingId, phone: draft.phone, phonePublic: draft.phonePublic }));
+    setSaving(false);
+    if (pErr) {
+      setError(pErr.message);
       return;
     }
     setEditingId(null);
@@ -361,6 +418,44 @@ export default function BusinessStaffScreen() {
             icon="person-outline"
             autoCapitalize="words"
           />
+          <Field
+            label={tr('staff.specialty')}
+            value={draft.specialty}
+            onChangeText={(specialty) => setDraft((d) => ({ ...d, specialty }))}
+            placeholder={tr('staff.specialtyPh')}
+            icon="ribbon-outline"
+            autoCapitalize="sentences"
+            maxLength={MAX_SPECIALTY_LENGTH}
+          />
+          <Field
+            label={tr('staff.phone')}
+            value={draft.phone}
+            onChangeText={(phone) => setDraft((d) => ({ ...d, phone }))}
+            placeholder="07…"
+            icon="call-outline"
+            keyboardType="phone-pad"
+            maxLength={MAX_STAFF_PHONE_LENGTH}
+          />
+          <View
+            style={[
+              styles.toggleRow,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
+            <View style={styles.flex}>
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>
+                {tr('staff.phonePublic')}
+              </Text>
+              <Text style={[styles.toggleSub, { color: t.colors.textMuted }]}>
+                {tr('staff.phonePublicHint')}
+              </Text>
+            </View>
+            <Toggle
+              value={draft.phonePublic}
+              onValueChange={(phonePublic) => setDraft((d) => ({ ...d, phonePublic }))}
+              accessibilityLabel={tr('staff.phonePublic')}
+            />
+          </View>
           <View
             style={[
               styles.photoRow,
@@ -494,7 +589,7 @@ export default function BusinessStaffScreen() {
             ]}
           >
             <StaffBadge name={s.name} photoUrl={s.photo_url} color={s.color} size={52} />
-            <Pressable onPress={() => startEdit(s)} style={styles.rowText}>
+            <Pressable onPress={() => void startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]} numberOfLines={2} ellipsizeMode="tail">
                 {s.name}
               </Text>
@@ -518,7 +613,7 @@ export default function BusinessStaffScreen() {
               onValueChange={() => void toggleActive(s)}
               accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
             />
-            <Pressable onPress={() => startEdit(s)} hitSlop={8}>
+            <Pressable onPress={() => void startEdit(s)} hitSlop={8}>
               <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
             </Pressable>
             </View>

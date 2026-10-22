@@ -129,6 +129,8 @@ export type Staff = {
   id: string;
   business_id: string;
   name: string;
+  /** Specialitate publică (v65), max 60 caractere. */
+  specialty?: string | null;
   photo_url?: string | null;
   portfolio_urls?: string[] | null;
   color: string;
