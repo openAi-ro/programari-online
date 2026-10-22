@@ -32,8 +32,10 @@ import {
 } from '@/lib/staffPortfolio';
 import {
   MAX_SPECIALTY_LENGTH,
+  MAX_STAFF_EMAIL_LENGTH,
   MAX_STAFF_PHONE_LENGTH,
   cleanOptionalText,
+  isValidStaffEmail,
   staffPrivateRow,
 } from '@/lib/staffDetails';
 import { initialServiceSelection, staffServicesPlan } from '@/lib/staffServices';
@@ -46,6 +48,8 @@ type Draft = {
   specialty: string;
   phone: string;
   phonePublic: boolean;
+  /** Email privat (doar proprietarul il vede). */
+  email: string;
   /** Serviciile bifate („Servicii oferite”). */
   serviceIds: string[];
   photoUrl: string;
@@ -60,6 +64,7 @@ const EMPTY_DRAFT: Draft = {
   specialty: '',
   phone: '',
   phonePublic: false,
+  email: '',
   serviceIds: [],
   photoUrl: '',
   portfolioUrls: [],
@@ -153,6 +158,7 @@ export default function BusinessStaffScreen() {
       specialty: s.specialty ?? '',
       phone: '',
       phonePublic: false,
+      email: '',
       serviceIds: services.map((x) => x.id),
       photoUrl: s.photo_url ?? '',
       portfolioUrls: normalizePortfolioUrls(s.portfolio_urls),
@@ -161,11 +167,11 @@ export default function BusinessStaffScreen() {
       breakHours: s.break_hours ?? DEFAULT_BREAK_HOURS,
     });
     setSavedServiceIds([]);
-    // Telefonul sta in staff_private (doar proprietarul il poate citi).
+    // Telefonul si emailul stau in staff_private (doar proprietarul le poate citi).
     const [{ data: priv, error: pErr }, { data: offered, error: oErr }] = await Promise.all([
       supabase
         .from('staff_private')
-        .select('phone, phone_public')
+        .select('phone, phone_public, email')
         .eq('staff_id', s.id)
         .maybeSingle(),
       supabase.from('staff_services').select('service_id').eq('staff_id', s.id),
@@ -181,7 +187,12 @@ export default function BusinessStaffScreen() {
       serviceIds: initialServiceSelection(saved, services.map((x) => x.id)),
     }));
     if (priv) {
-      setDraft((d) => ({ ...d, phone: priv.phone ?? '', phonePublic: Boolean(priv.phone_public) }));
+      setDraft((d) => ({
+        ...d,
+        phone: priv.phone ?? '',
+        phonePublic: Boolean(priv.phone_public),
+        email: priv.email ?? '',
+      }));
     }
   }
 
@@ -300,6 +311,10 @@ export default function BusinessStaffScreen() {
       setError(trKey('staff.servicesNone'));
       return;
     }
+    if (!isValidStaffEmail(draft.email)) {
+      setError(trKey('staff.emailInvalid'));
+      return;
+    }
     const hours = draft.customHours
       ? { working_hours: draft.workingHours, break_hours: draft.breakHours }
       : { working_hours: null, break_hours: null };
@@ -331,7 +346,14 @@ export default function BusinessStaffScreen() {
       }
       const { error: pErr } = await supabase
         .from('staff_private')
-        .upsert(staffPrivateRow({ staffId: created.id, phone: draft.phone, phonePublic: draft.phonePublic }));
+        .upsert(
+          staffPrivateRow({
+            staffId: created.id,
+            phone: draft.phone,
+            phonePublic: draft.phonePublic,
+            email: draft.email,
+          })
+        );
       const sErr = pErr ? null : await saveStaffServices(created.id, servicePlan);
       setSaving(false);
       if (pErr || sErr) {
@@ -367,7 +389,14 @@ export default function BusinessStaffScreen() {
     }
     const { error: pErr } = await supabase
       .from('staff_private')
-      .upsert(staffPrivateRow({ staffId: editingId, phone: draft.phone, phonePublic: draft.phonePublic }));
+      .upsert(
+        staffPrivateRow({
+          staffId: editingId,
+          phone: draft.phone,
+          phonePublic: draft.phonePublic,
+          email: draft.email,
+        })
+      );
     const sErr = pErr ? null : await saveStaffServices(editingId, servicePlan);
     setSaving(false);
     if (pErr || sErr) {
@@ -517,6 +546,22 @@ export default function BusinessStaffScreen() {
               accessibilityLabel={tr('staff.phonePublic')}
             />
           </View>
+          <Field
+            label={tr('staff.email')}
+            value={draft.email}
+            onChangeText={(email) => setDraft((d) => ({ ...d, email }))}
+            placeholder={tr('staff.emailPh')}
+            hint={tr('staff.emailHint')}
+            error={isValidStaffEmail(draft.email) ? null : tr('staff.emailInvalid')}
+            icon="mail-outline"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            inputMode="email"
+            maxLength={MAX_STAFF_EMAIL_LENGTH}
+          />
           {services.length > 0 ? (
             <View
               style={[
