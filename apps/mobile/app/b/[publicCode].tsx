@@ -42,6 +42,11 @@ import {
   staffSchedule,
   toYmd,
 } from '@/lib/bookingRules';
+import {
+  bookWithFirstFreeStaff,
+  bookingStaffCandidates,
+  unionStaffSlots,
+} from '@/lib/anyStaff';
 import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import {
@@ -73,6 +78,15 @@ import { fireAndForget } from '@/lib/fireAndForget';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, DayKey, FreeSlot, Service, Staff } from '@/lib/types';
 
+const TEAM_SELECTED = '#2dd4bf';
+const TEAM_SELECTED_BG = 'rgba(45, 212, 191, 0.14)';
+
+/** Inițialele (max. 2) pentru avatarul fără poză. */
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
+}
+
 /** Public HTTPS booking page: /b/{publicCode} — works in browser without installing the app. */
 export default function PublicBookScreen() {
   const t = useTheme();
@@ -86,7 +100,12 @@ export default function PublicBookScreen() {
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  // null = „Oricine disponibil” (implicit). Altfel id-ul specialistului ales.
   const [staffId, setStaffId] = useState<string | null>(null);
+  // Telefoanele marcate publice de firmă (RPC get_public_staff_phones): staff_id -> telefon.
+  const [staffPhones, setStaffPhones] = useState<Record<string, string>>({});
+  // Oricine: pentru fiecare oră liberă, specialiștii liberi atunci (în ordinea echipei).
+  const [freeStaffByStart, setFreeStaffByStart] = useState<Record<string, string[]>>({});
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [rating, setRating] = useState<{ avg_rating: number | null; review_count: number } | null>(
     null
@@ -170,7 +189,13 @@ export default function PublicBookScreen() {
       setBusiness(biz);
 
       // Restul depinde doar de business → toate cererile pleacă odată.
-      const [{ data: svcRows }, { data: staffRows }, { data: rate }, { data: revRows }] =
+      const [
+        { data: svcRows },
+        { data: staffRows },
+        { data: rate },
+        { data: revRows },
+        { data: phoneRows },
+      ] =
         await Promise.all([
           supabase
             .from('services')
@@ -186,6 +211,7 @@ export default function PublicBookScreen() {
             .order('sort_order', { ascending: true }),
           supabase.rpc('business_rating', { p_business_id: biz.id }),
           supabase.rpc('list_public_reviews', { p_business_id: biz.id, p_limit: 5 }),
+          supabase.rpc('get_public_staff_phones', { p_business_id: biz.id }),
         ]);
       const list = (svcRows ?? []) as Service[];
       setServices(list);
@@ -193,11 +219,16 @@ export default function PublicBookScreen() {
 
       const team = (staffRows ?? []) as Staff[];
       setStaffList(team);
-      if (team.length > 0) setStaffId(team[0].id);
+      const phones: Record<string, string> = {};
+      for (const p of (Array.isArray(phoneRows) ? phoneRows : []) as { staff_id: string; phone: string }[]) {
+        if (p?.staff_id && p.phone) phones[p.staff_id] = p.phone;
+      }
+      setStaffPhones(phones);
 
-      const hours = staffSchedule(team[0] ?? null, biz);
-      setDateLocal(
-        firstBookableDateYmd({
+      // Implicit „Oricine disponibil”: prima zi în care lucrează măcar un specialist.
+      const firstDays = (team.length > 0 ? team : [null]).map((member) => {
+        const hours = staffSchedule(member, biz);
+        return firstBookableDateYmd({
           timezone: biz.timezone,
           workingHours: hours.workingHours,
           breakHours: hours.breakHours,
@@ -207,8 +238,9 @@ export default function PublicBookScreen() {
           sessionDurationMinutes:
             list[0]?.duration_minutes ?? biz.session_duration_minutes ?? 60,
           bufferMinutes: biz.buffer_minutes ?? 0,
-        })
-      );
+        });
+      });
+      setDateLocal(firstDays.reduce((a, b) => (b < a ? b : a)));
 
       const row = Array.isArray(rate) ? rate[0] : rate;
       setRating(
@@ -247,6 +279,56 @@ export default function PublicBookScreen() {
     setSlotsLoading(true);
     setSelected(null);
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
+    const slotInput = {
+      dateLocal,
+      timezone: business.timezone,
+      sessionDurationMinutes: durationMinutes,
+      bufferMinutes: business.buffer_minutes ?? 0,
+      blockedDates: business.blocked_dates ?? [],
+      notBeforeUtc: notBeforeUtc(business),
+    };
+
+    // Oricine disponibil: reuniunea sloturilor libere ale fiecărui specialist activ.
+    if (!staffId && staffList.length > 0) {
+      const results = await Promise.all(
+        staffList.map((member) =>
+          listBusyRanges({
+            businessId: business.id,
+            fromIso: startUtc.toISOString(),
+            toIso: endUtc.toISOString(),
+            staffId: member.id,
+          })
+        )
+      );
+      if (!slotsRequests.isCurrent(req)) return;
+      const failed = results.find((r) => r.error);
+      if (failed?.error) {
+        setError(failed.error);
+        setSlots([]);
+        setFreeStaffByStart({});
+        setSlotsLoading(false);
+        return;
+      }
+      const union = unionStaffSlots(
+        staffList.map((member, i) => {
+          const hours = staffSchedule(member, business);
+          return {
+            staffId: member.id,
+            slots: generateFreeSlots({
+              ...slotInput,
+              workingHours: hours.workingHours,
+              breakHours: hours.breakHours,
+              busy: results[i].busy,
+            }),
+          };
+        })
+      );
+      setSlots(union.slots);
+      setFreeStaffByStart(union.staffByStart);
+      setSlotsLoading(false);
+      return;
+    }
+
     const { busy, error: err } = await listBusyRanges({
       businessId: business.id,
       fromIso: startUtc.toISOString(),
@@ -263,19 +345,15 @@ export default function PublicBookScreen() {
     const hours = staffSchedule(selectedStaff, business);
     setSlots(
       generateFreeSlots({
-        dateLocal,
-        timezone: business.timezone,
-        sessionDurationMinutes: durationMinutes,
+        ...slotInput,
         workingHours: hours.workingHours,
         breakHours: hours.breakHours,
         busy,
-        bufferMinutes: business.buffer_minutes ?? 0,
-        blockedDates: business.blocked_dates ?? [],
-        notBeforeUtc: notBeforeUtc(business),
       })
     );
+    setFreeStaffByStart({});
     setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, staffId, selectedStaff, slotsRequests]);
+  }, [business, dateLocal, durationMinutes, staffId, staffList, selectedStaff, slotsRequests]);
 
   useEffect(() => {
     void loadSlots();
@@ -319,13 +397,20 @@ export default function PublicBookScreen() {
     setBooking(true);
     setError(null);
     setMessage(null);
-    const { appointment: created, error: err } = await createAppointmentIfFree({
-      businessId: business.id,
-      startAt: selected.startUtc,
-      endAt: selected.endUtc,
-      serviceId,
-      staffId,
-    });
+    // Oricine: încercăm pe rând specialiștii liberi la ora aleasă (niciodată null când există echipă).
+    const { value: created, error: err } = await bookWithFirstFreeStaff(
+      bookingStaffCandidates(staffId, freeStaffByStart[selected.startUtc], staffList.length),
+      async (candidate) => {
+        const r = await createAppointmentIfFree({
+          businessId: business.id,
+          startAt: selected.startUtc,
+          endAt: selected.endUtc,
+          serviceId,
+          staffId: candidate,
+        });
+        return { value: r.appointment, error: r.error };
+      }
+    );
     setBooking(false);
     if (err) {
       setError(mapBookingRpcError(err));
@@ -391,16 +476,22 @@ export default function PublicBookScreen() {
     setBooking(true);
     setError(null);
     setMessage(null);
-    const { appointment: created, error: err } = await createGuestAppointment({
-      businessId: business.id,
-      startAt: selected.startUtc,
-      endAt: selected.endUtc,
-      serviceId,
-      staffId,
-      name,
-      phone: contact.phone,
-      email: contact.email,
-    });
+    const { value: created, error: err } = await bookWithFirstFreeStaff(
+      bookingStaffCandidates(staffId, freeStaffByStart[selected.startUtc], staffList.length),
+      async (candidate) => {
+        const r = await createGuestAppointment({
+          businessId: business.id,
+          startAt: selected.startUtc,
+          endAt: selected.endUtc,
+          serviceId,
+          staffId: candidate,
+          name,
+          phone: contact.phone,
+          email: contact.email,
+        });
+        return { value: r.appointment, error: r.error };
+      }
+    );
     setBooking(false);
     if (err) {
       setError(mapBookingRpcError(err));
@@ -502,9 +593,112 @@ export default function PublicBookScreen() {
   // "de la X lei" doar când toate serviciile au preț (minimul > 0).
   const minPrice =
     services.length > 0 ? Math.min(...services.map((s) => Number(s.price) || 0)) : 0;
-  const showTeam = staffList.some(
-    (m) => !!m.photo_url || normalizeGalleryUrls(m.portfolio_urls).length > 0
-  );
+  // Echipa = selectorul de specialist: 2 carduri pe rând (1 sub 360px), primul „Oricine disponibil”.
+  const teamCellStyle = windowWidth < 360 ? styles.teamCellFull : styles.teamCellHalf;
+  const teamCards: { id: string | null; member: Staff | null }[] = [
+    { id: null, member: null },
+    ...staffList.map((m) => ({ id: m.id, member: m })),
+  ];
+  const teamSection =
+    staffList.length > 0 ? (
+      <>
+        <SectionTitle>{tr('page.team')}</SectionTitle>
+        <View style={styles.teamGrid}>
+          {teamCards.map(({ id, member }) => {
+            const on = staffId === id;
+            const phone = id ? staffPhones[id] : undefined;
+            const phoneHref = phone ? telUrl(phone) : null;
+            const portfolio = member ? normalizeGalleryUrls(member.portfolio_urls).slice(0, 3) : [];
+            const name = member ? member.name : tr('pub.anyStaff');
+            return (
+              <Pressable
+                key={id ?? 'any'}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={name}
+                onPress={() => {
+                  setStaffId(id);
+                  setSelected(null);
+                }}
+                style={[
+                  styles.teamCard,
+                  teamCellStyle,
+                  {
+                    backgroundColor: on ? TEAM_SELECTED_BG : t.colors.surface,
+                    borderColor: on ? TEAM_SELECTED : t.colors.border,
+                  },
+                ]}
+              >
+                {member?.photo_url ? (
+                  <Image
+                    source={{ uri: member.photo_url }}
+                    style={styles.teamPhoto}
+                    accessibilityIgnoresInvertColors
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.teamPhoto,
+                      styles.teamPhotoFallback,
+                      { backgroundColor: member?.color || t.colors.accentSoft },
+                    ]}
+                  >
+                    {member ? (
+                      <Text style={styles.teamInitials}>{initialsOf(member.name)}</Text>
+                    ) : (
+                      <Ionicons name="people" size={22} color={t.colors.accent} />
+                    )}
+                  </View>
+                )}
+                <Text style={[styles.teamName, { color: t.colors.text }]} numberOfLines={2}>
+                  {name}
+                </Text>
+                {member?.specialty?.trim() ? (
+                  <Text style={[styles.teamSpecialty, { color: t.colors.textMuted }]} numberOfLines={2}>
+                    {member.specialty.trim()}
+                  </Text>
+                ) : !member ? (
+                  <Text style={[styles.teamSpecialty, { color: t.colors.textMuted }]} numberOfLines={2}>
+                    {tr('pub.anyStaffHint')}
+                  </Text>
+                ) : null}
+                {portfolio.length > 0 ? (
+                  <View style={styles.teamPortfolio}>
+                    {portfolio.map((url) => (
+                      <Pressable
+                        key={url}
+                        accessibilityRole="imagebutton"
+                        onPress={() => setLightbox(url)}
+                      >
+                        <Image
+                          source={{ uri: url }}
+                          style={styles.teamThumb}
+                          resizeMode="cover"
+                          accessibilityIgnoresInvertColors
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                {phoneHref ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={tr('pub.callStaff', { name })}
+                    onPress={() => void Linking.openURL(phoneHref)}
+                    style={[styles.teamCall, { borderColor: t.colors.borderStrong }]}
+                  >
+                    <Ionicons name="call-outline" size={15} color={t.colors.accent} />
+                    <Text style={[styles.teamCallText, { color: t.colors.text }]} numberOfLines={1}>
+                      {phone}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </>
+    ) : null;
 
   return (
     <Screen
@@ -704,67 +898,7 @@ export default function PublicBookScreen() {
             </View>
           </View>
 
-          {showTeam ? (
-            <>
-              <SectionTitle>{tr('page.team')}</SectionTitle>
-              <View style={styles.serviceList}>
-                {staffList.map((member) => {
-                  const portfolio = normalizeGalleryUrls(member.portfolio_urls);
-                  return (
-                    <View
-                      key={member.id}
-                      style={[
-                        styles.teamCard,
-                        { backgroundColor: t.colors.surface, borderColor: t.colors.border },
-                      ]}
-                    >
-                      <View style={styles.teamHead}>
-                        {member.photo_url ? (
-                          <Image
-                            source={{ uri: member.photo_url }}
-                            style={styles.teamPhoto}
-                            accessibilityIgnoresInvertColors
-                          />
-                        ) : (
-                          <View
-                            style={[
-                              styles.teamPhoto,
-                              styles.teamPhotoFallback,
-                              { backgroundColor: t.colors.accentSoft },
-                            ]}
-                          >
-                            <Ionicons name="person" size={20} color={t.colors.accent} />
-                          </View>
-                        )}
-                        <Text style={[styles.serviceName, { color: t.colors.text }]}>
-                          {member.name}
-                        </Text>
-                      </View>
-                      {portfolio.length > 0 ? (
-                        <View style={styles.grid}>
-                          {portfolio.map((url) => (
-                            <Pressable
-                              key={url}
-                              style={[styles.thumbWrap, { backgroundColor: t.colors.surfaceMuted }, isWide ? styles.thumbWrapWide : null]}
-                              accessibilityRole="imagebutton"
-                              onPress={() => setLightbox(url)}
-                            >
-                              <Image
-                                source={{ uri: url }}
-                                style={styles.thumb}
-                                resizeMode="cover"
-                                accessibilityIgnoresInvertColors
-                              />
-                            </Pressable>
-                          ))}
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
+          {teamSection}
 
           {gallery.length > 0 ? (
             <>
@@ -904,36 +1038,8 @@ export default function PublicBookScreen() {
         </Callout>
       ) : null}
 
-      {staffList.length > 1 ? (
-        <>
-          <SectionTitle>{tr('pub.stepStaff')}</SectionTitle>
-          <View style={styles.serviceList}>
-            {staffList.map((s) => {
-              const on = s.id === staffId;
-              return (
-                <Pressable
-                  key={s.id}
-                  onPress={() => {
-                    setStaffId(s.id);
-                    setSelected(null);
-                  }}
-                  style={[
-                    styles.serviceChip,
-                    {
-                      backgroundColor: on ? t.colors.accent : t.colors.surface,
-                      borderColor: on ? t.colors.accent : t.colors.borderStrong,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.serviceName, { color: on ? t.colors.onAccent : t.colors.text }]}>
-                    {s.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      ) : null}
+      {/* Fără pagina de prezentare, Echipa (selectorul) apare chiar înaintea pașilor. */}
+      {!pageOn ? teamSection : null}
 
       {services.length > 0 ? (
         <>
@@ -1103,15 +1209,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  teamCard: {
-    gap: spacing.md,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.lg,
+  teamGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
   },
-  teamHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  teamPhoto: { width: 48, height: 48, borderRadius: 24 },
+  teamCellHalf: { width: '48.5%' },
+  teamCellFull: { width: '100%' },
+  teamCard: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 2,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  teamPhoto: { width: 56, height: 56, borderRadius: 28 },
   teamPhotoFallback: { alignItems: 'center', justifyContent: 'center' },
+  teamInitials: { color: '#ffffff', fontSize: fontSize.md, fontWeight: '800' },
+  teamName: { fontSize: fontSize.md, fontWeight: '700', textAlign: 'center' },
+  teamSpecialty: { fontSize: fontSize.sm, textAlign: 'center' },
+  teamPortfolio: { flexDirection: 'row', gap: spacing.xs },
+  teamThumb: { width: 36, height: 36, borderRadius: radius.sm },
+  teamCall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 36,
+    maxWidth: '100%',
+  },
+  teamCallText: { fontSize: fontSize.sm, fontWeight: '700', flexShrink: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   thumbWrap: { width: '31%', aspectRatio: 1 },
   thumb: { width: '100%', height: '100%', borderRadius: radius.md },
