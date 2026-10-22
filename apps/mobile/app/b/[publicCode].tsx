@@ -48,6 +48,12 @@ import {
 import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { bookingDateRange } from '@/lib/bookingCalendar';
 import { bookingStepNumbers } from '@/lib/bookingSteps';
+import {
+  staffForService,
+  staffOffersService,
+  staffServicesMap,
+  type StaffServiceRow,
+} from '@/lib/staffServices';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import {
   buildMapsUrl,
@@ -100,6 +106,8 @@ export default function PublicBookScreen() {
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  // „Servicii oferite” (v67): staff_id -> servicii; fără rânduri = face tot.
+  const [staffServices, setStaffServices] = useState<Record<string, string[]>>({});
   // null = „Oricine disponibil” (implicit). Altfel id-ul specialistului ales.
   const [staffId, setStaffId] = useState<string | null>(null);
   // Telefoanele marcate publice de firmă (RPC get_public_staff_phones): staff_id -> telefon.
@@ -143,6 +151,18 @@ export default function PublicBookScreen() {
     () => staffList.find((s) => s.id === staffId) ?? null,
     [staffList, staffId]
   );
+  // Specialiștii care fac serviciul ales (Echipa, Oricine, calendar).
+  const eligibleStaff = useMemo(
+    () => staffForService(staffList, staffServices, serviceId),
+    [staffList, staffServices, serviceId]
+  );
+  // Specialistul ales nu face noul serviciu -> înapoi la „Oricine disponibil”.
+  useEffect(() => {
+    if (staffId && !staffOffersService(staffServices, staffId, serviceId)) {
+      setStaffId(null);
+      setSelected(null);
+    }
+  }, [staffId, staffServices, serviceId]);
   const durationMinutes =
     selectedService?.duration_minutes ?? business?.session_duration_minutes ?? 60;
 
@@ -212,6 +232,16 @@ export default function PublicBookScreen() {
 
       const team = (staffRows ?? []) as Staff[];
       setStaffList(team);
+      let offered: Record<string, string[]> = {};
+      if (team.length > 0) {
+        // Eroare de citire -> hartă goală = toți fac tot (comportamentul vechi).
+        const { data: offeredRows } = await supabase
+          .from('staff_services')
+          .select('staff_id, service_id')
+          .in('staff_id', team.map((m) => m.id));
+        offered = staffServicesMap(offeredRows as StaffServiceRow[] | null);
+      }
+      setStaffServices(offered);
       const phones: Record<string, string> = {};
       for (const p of (Array.isArray(phoneRows) ? phoneRows : []) as { staff_id: string; phone: string }[]) {
         if (p?.staff_id && p.phone) phones[p.staff_id] = p.phone;
@@ -219,7 +249,8 @@ export default function PublicBookScreen() {
       setStaffPhones(phones);
 
       // Implicit „Oricine disponibil”: prima zi în care lucrează măcar un specialist.
-      const firstDays = (team.length > 0 ? team : [null]).map((member) => {
+      const pool = team.length > 0 ? staffForService(team, offered, list[0]?.id) : [];
+      const firstDays = (pool.length > 0 ? pool : [null]).map((member) => {
         const hours = staffSchedule(member, biz);
         return firstBookableDateYmd({
           timezone: biz.timezone,
@@ -284,7 +315,7 @@ export default function PublicBookScreen() {
     // Oricine disponibil: reuniunea sloturilor libere ale fiecărui specialist activ.
     if (!staffId && staffList.length > 0) {
       const results = await Promise.all(
-        staffList.map((member) =>
+        eligibleStaff.map((member) =>
           listBusyRanges({
             businessId: business.id,
             fromIso: startUtc.toISOString(),
@@ -303,7 +334,7 @@ export default function PublicBookScreen() {
         return;
       }
       const union = unionStaffSlots(
-        staffList.map((member, i) => {
+        eligibleStaff.map((member, i) => {
           const hours = staffSchedule(member, business);
           return {
             staffId: member.id,
@@ -346,7 +377,7 @@ export default function PublicBookScreen() {
     );
     setFreeStaffByStart({});
     setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, staffId, staffList, selectedStaff, slotsRequests]);
+  }, [business, dateLocal, durationMinutes, staffId, staffList, eligibleStaff, selectedStaff, slotsRequests]);
 
   useEffect(() => {
     void loadSlots();
@@ -589,7 +620,7 @@ export default function PublicBookScreen() {
   const { minYmd, maxYmd } = bookingDateRange(business);
   const calendarSchedules = selectedStaff
     ? [staffSchedule(selectedStaff, business).workingHours]
-    : (staffList.length > 0 ? staffList : [null]).map(
+    : (staffList.length > 0 ? eligibleStaff : [null]).map(
         (m) => staffSchedule(m, business).workingHours
       );
   // "de la X lei" doar când toate serviciile au preț (minimul > 0).
@@ -599,7 +630,7 @@ export default function PublicBookScreen() {
   const teamCellStyle = windowWidth < 360 ? styles.teamCellFull : styles.teamCellHalf;
   const teamCards: { id: string | null; member: Staff | null }[] = [
     { id: null, member: null },
-    ...staffList.map((m) => ({ id: m.id, member: m })),
+    ...eligibleStaff.map((m) => ({ id: m.id, member: m })),
   ];
   const teamSection =
     staffList.length > 0 ? (

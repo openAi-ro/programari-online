@@ -36,6 +36,7 @@ import {
   cleanOptionalText,
   staffPrivateRow,
 } from '@/lib/staffDetails';
+import { initialServiceSelection, staffServicesPlan } from '@/lib/staffServices';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
@@ -45,6 +46,8 @@ type Draft = {
   specialty: string;
   phone: string;
   phonePublic: boolean;
+  /** Serviciile bifate („Servicii oferite”). */
+  serviceIds: string[];
   photoUrl: string;
   portfolioUrls: string[];
   customHours: boolean;
@@ -57,6 +60,7 @@ const EMPTY_DRAFT: Draft = {
   specialty: '',
   phone: '',
   phonePublic: false,
+  serviceIds: [],
   photoUrl: '',
   portfolioUrls: [],
   customHours: false,
@@ -78,6 +82,9 @@ export default function BusinessStaffScreen() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [services, setServices] = useState<{ id: string; name: string }[]>([]);
+  // Rândurile staff_services salvate pentru specialistul editat (pentru diferență la salvare).
+  const [savedServiceIds, setSavedServiceIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -100,16 +107,25 @@ export default function BusinessStaffScreen() {
       return;
     }
     setBusinessId(biz.id);
-    const { data, error: sErr } = await supabase
-      .from('staff')
-      .select('*')
-      .eq('business_id', biz.id)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true });
-    if (sErr) {
-      setError(sErr.message);
+    const [{ data, error: sErr }, { data: svcRows, error: svcErr }] = await Promise.all([
+      supabase
+        .from('staff')
+        .select('*')
+        .eq('business_id', biz.id)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('services')
+        .select('id, name')
+        .eq('business_id', biz.id)
+        .eq('active', true)
+        .order('sort_order', { ascending: true }),
+    ]);
+    if (sErr || svcErr) {
+      setError((sErr ?? svcErr)?.message ?? trKey('team.saveFail'));
     } else {
       setRows((data ?? []) as Staff[]);
+      setServices((svcRows ?? []) as { id: string; name: string }[]);
     }
     setLoading(false);
   }, []);
@@ -124,7 +140,8 @@ export default function BusinessStaffScreen() {
   function startNew() {
     setMessage(null);
     setEditingId('new');
-    setDraft(EMPTY_DRAFT);
+    setSavedServiceIds([]);
+    setDraft({ ...EMPTY_DRAFT, serviceIds: services.map((s) => s.id) });
   }
 
   async function startEdit(s: Staff) {
@@ -136,22 +153,33 @@ export default function BusinessStaffScreen() {
       specialty: s.specialty ?? '',
       phone: '',
       phonePublic: false,
+      serviceIds: services.map((x) => x.id),
       photoUrl: s.photo_url ?? '',
       portfolioUrls: normalizePortfolioUrls(s.portfolio_urls),
       customHours: Boolean(s.working_hours),
       workingHours: s.working_hours ?? DEFAULT_WORKING_HOURS,
       breakHours: s.break_hours ?? DEFAULT_BREAK_HOURS,
     });
+    setSavedServiceIds([]);
     // Telefonul sta in staff_private (doar proprietarul il poate citi).
-    const { data: priv, error: pErr } = await supabase
-      .from('staff_private')
-      .select('phone, phone_public')
-      .eq('staff_id', s.id)
-      .maybeSingle();
-    if (pErr) {
-      setError(pErr.message);
+    const [{ data: priv, error: pErr }, { data: offered, error: oErr }] = await Promise.all([
+      supabase
+        .from('staff_private')
+        .select('phone, phone_public')
+        .eq('staff_id', s.id)
+        .maybeSingle(),
+      supabase.from('staff_services').select('service_id').eq('staff_id', s.id),
+    ]);
+    if (pErr || oErr) {
+      setError((pErr ?? oErr)?.message ?? trKey('team.saveFail'));
       return;
     }
+    const saved = ((offered ?? []) as { service_id: string }[]).map((r) => r.service_id);
+    setSavedServiceIds(saved);
+    setDraft((d) => ({
+      ...d,
+      serviceIds: initialServiceSelection(saved, services.map((x) => x.id)),
+    }));
     if (priv) {
       setDraft((d) => ({ ...d, phone: priv.phone ?? '', phonePublic: Boolean(priv.phone_public) }));
     }
@@ -234,11 +262,42 @@ export default function BusinessStaffScreen() {
     await handlePhotoResult(result);
   }
 
+  /** Scrie diferența „Servicii oferite” (toate bifate = niciun rând = face tot). */
+  async function saveStaffServices(
+    staffId: string,
+    plan: { insertIds: string[]; deleteIds: string[] }
+  ): Promise<string | null> {
+    if (plan.deleteIds.length > 0) {
+      const { error: dErr } = await supabase
+        .from('staff_services')
+        .delete()
+        .eq('staff_id', staffId)
+        .in('service_id', plan.deleteIds);
+      if (dErr) return dErr.message;
+    }
+    if (plan.insertIds.length > 0) {
+      const { error: iErr } = await supabase
+        .from('staff_services')
+        .insert(plan.insertIds.map((serviceId) => ({ staff_id: staffId, service_id: serviceId })));
+      if (iErr) return iErr.message;
+    }
+    return null;
+  }
+
   async function saveDraft() {
     if (!businessId) return;
     const name = draft.name.trim();
     if (!name) {
       setError(trKey('team.nameRequired'));
+      return;
+    }
+    const servicePlan = staffServicesPlan(
+      draft.serviceIds,
+      services.map((s) => s.id),
+      editingId === 'new' ? [] : savedServiceIds
+    );
+    if (servicePlan.error) {
+      setError(trKey('staff.servicesNone'));
       return;
     }
     const hours = draft.customHours
@@ -273,10 +332,11 @@ export default function BusinessStaffScreen() {
       const { error: pErr } = await supabase
         .from('staff_private')
         .upsert(staffPrivateRow({ staffId: created.id, phone: draft.phone, phonePublic: draft.phonePublic }));
+      const sErr = pErr ? null : await saveStaffServices(created.id, servicePlan);
       setSaving(false);
-      if (pErr) {
+      if (pErr || sErr) {
         setEditingId(created.id);
-        setError(pErr.message);
+        setError(pErr?.message ?? sErr);
         await load();
         return;
       }
@@ -308,9 +368,10 @@ export default function BusinessStaffScreen() {
     const { error: pErr } = await supabase
       .from('staff_private')
       .upsert(staffPrivateRow({ staffId: editingId, phone: draft.phone, phonePublic: draft.phonePublic }));
+    const sErr = pErr ? null : await saveStaffServices(editingId, servicePlan);
     setSaving(false);
-    if (pErr) {
-      setError(pErr.message);
+    if (pErr || sErr) {
+      setError(pErr?.message ?? sErr);
       return;
     }
     setEditingId(null);
@@ -456,6 +517,48 @@ export default function BusinessStaffScreen() {
               accessibilityLabel={tr('staff.phonePublic')}
             />
           </View>
+          {services.length > 0 ? (
+            <View
+              style={[
+                styles.servicesBox,
+                { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+              ]}
+            >
+              <Text style={[styles.toggleTitle, { color: t.colors.text }]}>
+                {tr('staff.services')}
+              </Text>
+              <Text style={[styles.toggleSub, { color: t.colors.textMuted }]}>
+                {tr('staff.servicesHint')}
+              </Text>
+              {services.map((svc) => {
+                const on = draft.serviceIds.includes(svc.id);
+                return (
+                  <Pressable
+                    key={svc.id}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={svc.name}
+                    onPress={() =>
+                      setDraft((d) => ({
+                        ...d,
+                        serviceIds: on
+                          ? d.serviceIds.filter((id) => id !== svc.id)
+                          : [...d.serviceIds, svc.id],
+                      }))
+                    }
+                    style={styles.serviceCheck}
+                  >
+                    <Ionicons
+                      name={on ? 'checkbox' : 'square-outline'}
+                      size={22}
+                      color={on ? t.colors.accent : t.colors.textMuted}
+                    />
+                    <Text style={[styles.serviceCheckText, { color: t.colors.text }]}>{svc.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
           <View
             style={[
               styles.photoRow,
@@ -660,6 +763,9 @@ const styles = StyleSheet.create({
   workRow: { gap: spacing.sm },
   workItem: { gap: spacing.xs, alignItems: 'center' },
   workThumb: { width: 96, height: 96, borderRadius: radius.md },
+  servicesBox: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
+  serviceCheck: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  serviceCheckText: { fontSize: fontSize.md, flex: 1 },
   toggleTitle: { fontSize: fontSize.md, fontWeight: '600' },
   toggleSub: { fontSize: fontSize.sm, lineHeight: 18 },
   row: {
