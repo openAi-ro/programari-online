@@ -116,8 +116,11 @@ export default function SettingsScreen() {
     google_calendar_id: string | null;
     connected_at: string | null;
     last_synced_at: string | null;
+    status?: string | null;
   } | null>(null);
   const [gcalBusy, setGcalBusy] = useState(false);
+  // Sincronizarea rulează separat: nu blochează conectarea/deconectarea sau restul ecranului.
+  const [gcalSyncing, setGcalSyncing] = useState(false);
   const [hasStaff, setHasStaff] = useState(false);
   const [pushDiagOpen, setPushDiagOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
@@ -182,14 +185,16 @@ export default function SettingsScreen() {
   }
 
   async function handleGoogleSync() {
-    if (!businessId) return;
-    setGcalBusy(true);
+    if (!businessId || gcalSyncing) return;
+    setGcalSyncing(true);
     setError(null);
     setMessage(null);
     const { data, error: err } = await supabase.functions.invoke('google-calendar-sync', {
       body: { business_id: businessId },
     });
-    setGcalBusy(false);
+    setGcalSyncing(false);
+    // Ora ultimei sincronizări / starea „reconectare” se reîncarcă oricum s-a terminat.
+    void loadGcalStatus();
     const payload = data as {
       ok?: boolean;
       imported?: number;
@@ -219,10 +224,6 @@ export default function SettingsScreen() {
         pushed: payload.pushed ?? 0,
       })
     );
-    const { data: status } = await supabase.rpc('get_google_calendar_status', {
-      p_business_id: businessId,
-    });
-    setGcalStatus((Array.isArray(status) ? status[0] : status) ?? null);
   }
 
   async function handleGoogleDisconnect() {
@@ -1744,7 +1745,14 @@ export default function SettingsScreen() {
                         ? ` · ${tr('gcal.lastSync', { when: new Date(gcalStatus.last_synced_at).toLocaleString() })}`
                         : ''}
                     </Badge>
-                    <Button label={tr('gcal.syncNow')} variant="secondary" icon="sync-outline" loading={gcalBusy} onPress={() => void handleGoogleSync()} />
+                    {gcalStatus?.status === 'needs_reconnect' ? (
+                      <>
+                        <Text style={[styles.panelText, { color: t.colors.danger }]}>{tr('gcal.ret_auth')}</Text>
+                        <Button label={tr('gcal.connect')} icon="logo-google" loading={gcalBusy} onPress={() => void handleGoogleConnect()} />
+                      </>
+                    ) : (
+                      <Button label={tr('gcal.syncNow')} variant="secondary" icon="sync-outline" loading={gcalSyncing} onPress={() => void handleGoogleSync()} />
+                    )}
                     <Button label={tr('gcal.disconnect')} variant="secondary" icon="unlink-outline" loading={gcalBusy} onPress={() => void handleGoogleDisconnect()} />
                   </>
                 ) : (

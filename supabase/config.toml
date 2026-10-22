@@ -483,8 +483,9 @@ verify_jwt = true
 [functions.google-calendar-connect]
 verify_jwt = true
 
+# Auth în funcție (fail-closed): x-webhook-secret (trigger DB), x-cron-secret (pg_cron), JWT proprietar (buton).
 [functions.google-calendar-sync]
-verify_jwt = true
+verify_jwt = false
 
 [functions.notify-moved]
 verify_jwt = true
