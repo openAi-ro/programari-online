@@ -47,6 +47,7 @@ import {
 } from '@/lib/anyStaff';
 import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
 import { bookingDateRange } from '@/lib/bookingCalendar';
+import { bookingStepNumbers } from '@/lib/bookingSteps';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import {
   buildMapsUrl,
@@ -126,6 +127,11 @@ export default function PublicBookScreen() {
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [lightbox, setLightbox] = useState<string | null>(null);
+  // Poze care nu se încarcă (URL stricat): nu le mai desenăm deloc.
+  const [brokenImages, setBrokenImages] = useState<Record<string, true>>({});
+  const markImageBroken = useCallback((url: string) => {
+    setBrokenImages((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+  }, []);
   const [tipRon, setTipRon] = useState(0);
   const [tipCustom, setTipCustom] = useState('');
 
@@ -548,7 +554,7 @@ export default function PublicBookScreen() {
   const coverSource = business.cover_url
     ? { uri: business.cover_url }
     : (category?.image ?? null);
-  const gallery = normalizeGalleryUrls(business.gallery_urls);
+  const gallery = normalizeGalleryUrls(business.gallery_urls).filter((u) => !brokenImages[u]);
   const descriptionText = effectiveDescription({
     description: business.description,
     name: business.name,
@@ -576,6 +582,8 @@ export default function PublicBookScreen() {
     { key: 'sun', label: tr('hours.sun') },
   ];
   const noSlots = !slotsLoading && slots.length === 0;
+  // Pașii se numerotează doar dintre cei afișați (fără servicii -> 1. Dată, 2. Oră).
+  const stepNo = bookingStepNumbers({ service: services.length > 0, date: true, time: true });
   // Calendar: azi..azi+max_advance_days; zi închisă după programul specialistului ales,
   // iar la „Oricine” zi deschisă dacă lucrează măcar un specialist.
   const { minYmd, maxYmd } = bookingDateRange(business);
@@ -602,7 +610,14 @@ export default function PublicBookScreen() {
             const on = staffId === id;
             const phone = id ? staffPhones[id] : undefined;
             const phoneHref = phone ? telUrl(phone) : null;
-            const portfolio = member ? normalizeGalleryUrls(member.portfolio_urls).slice(0, 3) : [];
+            const portfolio = member
+              ? normalizeGalleryUrls(member.portfolio_urls)
+                  .filter((u) => !brokenImages[u])
+                  .slice(0, 3)
+              : [];
+            // Fără poză sau poză stricată -> cercul cu inițiale.
+            const photo =
+              member?.photo_url && !brokenImages[member.photo_url] ? member.photo_url : null;
             const name = member ? member.name : tr('pub.anyStaff');
             return (
               <Pressable
@@ -623,10 +638,11 @@ export default function PublicBookScreen() {
                   },
                 ]}
               >
-                {member?.photo_url ? (
+                {photo ? (
                   <Image
-                    source={{ uri: member.photo_url }}
+                    source={{ uri: photo }}
                     style={styles.teamPhoto}
+                    onError={() => markImageBroken(photo)}
                     accessibilityIgnoresInvertColors
                   />
                 ) : (
@@ -668,6 +684,7 @@ export default function PublicBookScreen() {
                           source={{ uri: url }}
                           style={styles.teamThumb}
                           resizeMode="cover"
+                          onError={() => markImageBroken(url)}
                           accessibilityIgnoresInvertColors
                         />
                       </Pressable>
@@ -909,6 +926,7 @@ export default function PublicBookScreen() {
                       source={{ uri: url }}
                       style={styles.thumb}
                       resizeMode="cover"
+                      onError={() => markImageBroken(url)}
                       accessibilityIgnoresInvertColors
                     />
                   </Pressable>
@@ -1037,7 +1055,7 @@ export default function PublicBookScreen() {
 
       {services.length > 0 ? (
         <>
-          <SectionTitle>{tr('pub.stepService')}</SectionTitle>
+          <SectionTitle>{tr('pub.stepService', { n: stepNo.service ?? 1 })}</SectionTitle>
           <View style={styles.serviceList}>
             {services.map((s) => {
               const on = s.id === serviceId;
@@ -1077,7 +1095,7 @@ export default function PublicBookScreen() {
         </>
       ) : null}
 
-      <SectionTitle>{tr('pub.stepDate')}</SectionTitle>
+      <SectionTitle>{tr('pub.stepDate', { n: stepNo.date ?? 1 })}</SectionTitle>
       <BookingCalendar
         value={dateLocal}
         onChange={(ymd) => {
@@ -1090,7 +1108,7 @@ export default function PublicBookScreen() {
         schedules={calendarSchedules}
       />
 
-      <SectionTitle>{tr('pub.stepTime')}</SectionTitle>
+      <SectionTitle>{tr('pub.stepTime', { n: stepNo.time ?? 1 })}</SectionTitle>
       {slotsLoading ? (
         <View style={styles.slotsLoading}>
           <ActivityIndicator color={t.colors.accent} />
