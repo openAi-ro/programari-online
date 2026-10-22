@@ -16,8 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 
-import { DatePickerField } from '@/components/DatePickerField';
-import type { DateInputIssue } from '@/lib/dateInput';
+import { BookingCalendar } from '@/components/BookingCalendar';
 import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import {
@@ -37,7 +36,6 @@ import { setAppMode } from '@/lib/appMode';
 import {
   firstBookableDateYmd,
   mapBookingRpcError,
-  maxBookingDate,
   notBeforeUtc,
   staffSchedule,
   toYmd,
@@ -48,6 +46,7 @@ import {
   unionStaffSlots,
 } from '@/lib/anyStaff';
 import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
+import { bookingDateRange } from '@/lib/bookingCalendar';
 import { formatDuration, formatLei, formatRon } from '@/lib/format';
 import {
   buildMapsUrl,
@@ -117,8 +116,6 @@ export default function PublicBookScreen() {
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
-  // Data tastată nu e (încă) utilizabilă: nu arătăm sloturile datei anterioare.
-  const [dateIssue, setDateIssue] = useState<DateInputIssue | null>(null);
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -142,16 +139,6 @@ export default function PublicBookScreen() {
   );
   const durationMinutes =
     selectedService?.duration_minutes ?? business?.session_duration_minutes ?? 60;
-
-  const minDate = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-  const maxDate = useMemo(
-    () => (business ? maxBookingDate(business) : minDate),
-    [business, minDate]
-  );
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -588,8 +575,15 @@ export default function PublicBookScreen() {
     { key: 'sat', label: tr('hours.sat') },
     { key: 'sun', label: tr('hours.sun') },
   ];
-  const shownSlots = dateIssue ? [] : slots;
-  const noSlots = !dateIssue && !slotsLoading && slots.length === 0;
+  const noSlots = !slotsLoading && slots.length === 0;
+  // Calendar: azi..azi+max_advance_days; zi închisă după programul specialistului ales,
+  // iar la „Oricine” zi deschisă dacă lucrează măcar un specialist.
+  const { minYmd, maxYmd } = bookingDateRange(business);
+  const calendarSchedules = selectedStaff
+    ? [staffSchedule(selectedStaff, business).workingHours]
+    : (staffList.length > 0 ? staffList : [null]).map(
+        (m) => staffSchedule(m, business).workingHours
+      );
   // "de la X lei" doar când toate serviciile au preț (minimul > 0).
   const minPrice =
     services.length > 0 ? Math.min(...services.map((s) => Number(s.price) || 0)) : 0;
@@ -806,7 +800,7 @@ export default function PublicBookScreen() {
             </Text>
           ) : null}
         </View>
-        <Badge tone="accent">{tr('book.freeCount', { n: shownSlots.length })}</Badge>
+        <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
       </View>
 
       {pageOn ? (
@@ -1084,24 +1078,20 @@ export default function PublicBookScreen() {
       ) : null}
 
       <SectionTitle>{tr('pub.stepDate')}</SectionTitle>
-      <DatePickerField
-        label={tr('book.dateLabel')}
+      <BookingCalendar
         value={dateLocal}
-        onChange={setDateLocal}
-        onIssueChange={(issue) => {
-          setDateIssue(issue);
-          if (issue) setSelected(null);
+        onChange={(ymd) => {
+          setSelected(null);
+          setDateLocal(ymd);
         }}
-        minimumDate={minDate}
-        maximumDate={maxDate}
+        minYmd={minYmd}
+        maxYmd={maxYmd}
+        blockedDates={business.blocked_dates ?? []}
+        schedules={calendarSchedules}
       />
 
       <SectionTitle>{tr('pub.stepTime')}</SectionTitle>
-      {dateIssue ? (
-        <Callout tone="warning">
-          {tr(dateIssue === 'incomplete' ? 'book.dateInvalid' : 'book.dateOutOfRange')}
-        </Callout>
-      ) : slotsLoading ? (
+      {slotsLoading ? (
         <View style={styles.slotsLoading}>
           <ActivityIndicator color={t.colors.accent} />
         </View>
