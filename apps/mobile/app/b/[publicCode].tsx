@@ -302,6 +302,21 @@ export default function PublicBookScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(0, bookingY.current - 12), animated: true });
   }
 
+  // Formularul de invitat stă sub ore (nu în bara fixă): după alegerea orei îl aducem în vedere.
+  const guestFormY = useRef(0);
+  const guestFormScrollPending = useRef(false);
+
+  function scrollToGuestForm() {
+    scrollRef.current?.scrollTo({ y: Math.max(0, guestFormY.current - 12), animated: true });
+  }
+
+  function selectSlot(slot: FreeSlot) {
+    setSelected(slot);
+    if (session) return;
+    if (selected) scrollToGuestForm();
+    else guestFormScrollPending.current = true;
+  }
+
   const loadSlots = useCallback(async () => {
     if (!business) return;
     const req = slotsRequests.start();
@@ -782,28 +797,7 @@ export default function PublicBookScreen() {
             icon="calendar-outline"
             onPress={scrollToBooking}
           />
-          {!session ? (
-            <>
-            <View style={{ gap: 12 }}>
-              <Field label={tr('set.displayNamePh')} placeholder={tr('pub.guestNamePh')} value={guestName} onChangeText={setGuestName} />
-              <Field label={tr('cal.phone')} placeholder="07…" keyboardType="phone-pad" value={guestPhone} onChangeText={setGuestPhone} />
-              <Field label={tr('cal.email')} placeholder={tr('pub.guestEmailPh')} keyboardType="email-address" autoCapitalize="none" value={guestEmail} onChangeText={setGuestEmail} />
-              <Button
-                label={booking ? tr('common.sending') : tr('pub.bookGuest')}
-                icon="paper-plane-outline"
-                onPress={() => void handleGuestBook()}
-                loading={booking}
-                disabled={!selected}
-              />
-            </View>
-            <View style={{ height: 12 }} />
-            <Button
-              label={tr('pub.haveAccount')}
-              icon="log-in-outline"
-              onPress={goLogin}
-            />
-            </>
-          ) : (
+          {session ? (
             <>
               <Button
                 label={booking ? tr('common.sending') : tr('book.sendRequest')}
@@ -822,7 +816,7 @@ export default function PublicBookScreen() {
                 />
               ) : null}
             </>
-          )}
+          ) : null}
         </>
       }
     >
@@ -1182,7 +1176,7 @@ export default function PublicBookScreen() {
         <SlotPicker
           slots={slots}
           selectedStartUtc={selected?.startUtc}
-          onSelect={setSelected}
+          onSelect={selectSlot}
           emptyLabel={
             dayBlocked
               ? tr('book.dayBlocked')
@@ -1190,6 +1184,35 @@ export default function PublicBookScreen() {
           }
         />
       )}
+
+      {!session && selected ? (
+        <View
+          style={styles.guestForm}
+          onLayout={(e) => {
+            guestFormY.current = e.nativeEvent.layout.y;
+            if (guestFormScrollPending.current) {
+              guestFormScrollPending.current = false;
+              scrollToGuestForm();
+            }
+          }}
+        >
+          <Field label={tr('set.displayNamePh')} placeholder={tr('pub.guestNamePh')} value={guestName} onChangeText={setGuestName} onFocus={scrollToGuestForm} />
+          <Field label={tr('cal.phone')} placeholder="07…" keyboardType="phone-pad" value={guestPhone} onChangeText={setGuestPhone} onFocus={scrollToGuestForm} />
+          <Field label={tr('cal.email')} placeholder={tr('pub.guestEmailPh')} keyboardType="email-address" autoCapitalize="none" value={guestEmail} onChangeText={setGuestEmail} onFocus={scrollToGuestForm} />
+          <Button
+            label={booking ? tr('common.sending') : tr('pub.bookGuest')}
+            icon="paper-plane-outline"
+            onPress={() => void handleGuestBook()}
+            loading={booking}
+          />
+          <Button
+            label={tr('pub.haveAccount')}
+            icon="log-in-outline"
+            variant="secondary"
+            onPress={goLogin}
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -1336,6 +1359,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   lightboxImg: { width: '100%', height: '100%' },
+  guestForm: { gap: 12, marginTop: spacing.lg },
 });
 
 /**
