@@ -1222,6 +1222,8 @@ export const ro = {
   'page.hours': 'Program',
   'page.closed': 'Închis',
   'page.call': 'Sună',
+  'page.share': 'Partajează',
+  'page.linkCopied': 'Link copiat',
   'page.whatsapp': 'WhatsApp',
   'page.map': 'Hartă',
   'page.bookNow': 'Programează-te',

@@ -23,6 +23,10 @@ import { getCurrentUser } from '@/lib/currentUser';
 import { useFocusEffect } from 'expo-router';
 import type { ChatMessage } from '@/lib/types';
 
+// Unique topic for each subscription: supabase.channel(sameTopic) returns a channel that
+// is still subscribed or leaving, and .on() after subscribe() throws.
+let chatChannelSeq = 0;
+
 function shortPreview(body: string): string {
   const clean = body.replace(/\s+/g, ' ').trim();
   return clean.length > 80 ? `${clean.slice(0, 80).trim()}…` : clean;
@@ -108,16 +112,17 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   }, [conversationId, hasOlder, messages]);
   useFocusEffect(useCallback(() => { setLoading(true); void load(); }, [load]));
   useEffect(() => {
-    if (loading || userIdRef.current === null) return;
-    const channel = supabase.channel(`chat-${conversationId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+    if (!conversationId) return;
+    chatChannelSeq += 1;
+    const channel = supabase.channel(`chat-${conversationId}-${chatChannelSeq}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
       const row = payload.new as ChatMessage | undefined;
-      if (!row || row.conversation_id !== conversationId || row.sender_user_id === userIdRef.current || seenIdsRef.current.has(row.id)) return;
+      if (!row || row.sender_user_id === userIdRef.current || seenIdsRef.current.has(row.id)) return;
       seenIdsRef.current.add(row.id); setMessages((prev) => mergeMessages(prev, [row]));
       scrollToBottom(true);
       void presentLocalChatNotification({ title: counterpartyNameRef.current, body: shortPreview(row.body), conversationId, isClient });
     }).subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [conversationId, isClient, loading, scrollToBottom]);
+  }, [conversationId, isClient, scrollToBottom]);
   async function onSend() {
     const body = draft.trim(); if (!body || sending) return;
     setSending(true); setError(null);

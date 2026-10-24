@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /business/
+Disallow: /my-appointments
+Disallow: /settings
+Disallow: /chat
+Disallow: /intake
+Disallow: /favorites
+Disallow: /_expo/loaders/
+
+Sitemap: https://programari.expo.app/sitemap.xml

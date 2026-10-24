@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent, useEventListener } from 'expo';
 import { VideoView, useVideoPlayer, type VideoPlayer } from 'expo-video';
@@ -10,19 +10,18 @@ import { useT } from '@/lib/i18n';
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 
 /**
- * Player pentru video-ul de prezentare al business-ului.
+ * Player pentru video-ul de prezentare al business-ului (telefon; pe web: PromoVideo.web.tsx).
  * Daca playerul nativ esueaza, ofera deschiderea linkului.
  *
  * Overlay-ul (fundal intunecat + buton central) e al nostru, nu controalele
- * native: cele native (web/Android/iOS) isi tin scrim-ul peste video si dupa
+ * native: cele native (Android/iOS) isi tin scrim-ul peste video si dupa
  * Play, iar momentul ascunderii nu e controlabil. Aici overlay-ul depinde doar
  * de starea playerului: dispare cand ruleaza, revine (replay) la final.
  *
- * Ecran complet: Modal propriu (web + nativ) cu acelasi player, buton X
+ * Ecran complet: Modal propriu cu acelasi player, buton X
  * (inchide) si sunet on/off, in zona sigura. Cat timp e deschis, VideoView-ul
  * din card e demontat, ca playerul sa se reataseze curat la inchidere.
- * La comutare se pastreaza pozitia si starea (ruleaza/pauza): pe web noul
- * <video> nu le mosteneste singur, asa ca le reaplicam prin API-ul playerului.
+ * La comutare se pastreaza pozitia si starea (ruleaza/pauza), reaplicate prin API-ul playerului.
  */
 type Resume = { t: number; play: boolean } | null;
 
@@ -32,11 +31,7 @@ function ResumeOnMount({ player, resume }: { player: VideoPlayer; resume: Mutabl
     if (!r) return;
     resume.current = null;
     player.currentTime = r.t;
-    if (!r.play) return;
-    // Web: <video>-ul demontat emite "pause" asincron dupa scoaterea din DOM, iar
-    // expo-video pune atunci pe pauza toate video-urile montate. Pornim dupa el.
-    const timer = setTimeout(() => player.play(), 250);
-    return () => clearTimeout(timer);
+    if (r.play) player.play();
     // ruleaza o data, imediat dupa montarea VideoView-ului frate (efectele fratilor anteriori ruleaza inainte)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -47,7 +42,15 @@ function ResumeOnMount({ player, resume }: { player: VideoPlayer; resume: Mutabl
  * Până la tap nu creăm playerul: fără player nu se descarcă nimic (video-urile au
  * 2–28 MB). Afișăm un „poster” cu buton Play; la tap montăm playerul și pornim.
  */
-export function PromoVideo({ videoUrl, title }: { videoUrl: string; title?: string }) {
+export function PromoVideo({
+  videoUrl,
+  title,
+  poster,
+}: {
+  videoUrl: string;
+  title?: string;
+  poster?: string | null;
+}) {
   const t = useTheme();
   const tr = useT();
   const [active, setActive] = useState(false);
@@ -57,10 +60,11 @@ export function PromoVideo({ videoUrl, title }: { videoUrl: string; title?: stri
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={title ?? tr('video.play')}
+      accessibilityLabel={title ? `${tr('video.play')}: ${title}` : tr('video.play')}
       onPress={() => setActive(true)}
       style={[styles.wrap, { backgroundColor: palette.ink950, borderColor: t.colors.border }]}
     >
+      {poster ? <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
       <View style={[styles.video, styles.overlay, styles.poster]}>
         <View style={styles.playCircle}>
           <Ionicons name="play" size={30} color="#FFFFFF" />

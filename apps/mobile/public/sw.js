@@ -2,10 +2,9 @@
  * Cache-first for static shell; network-first for same-origin API-ish GETs.
  * Never caches Supabase or third-party APIs.
  */
-const CACHE_VERSION = 'programari-shell-v2';
+const CACHE_VERSION = 'programari-shell-v3';
 const SHELL_URLS = [
   '/',
-  '/index.html',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -42,7 +41,7 @@ function isSupabaseOrThirdParty(url) {
 
 function isShellAsset(url) {
   const path = url.pathname;
-  if (path === '/' || path === '/index.html') return true;
+  if (path === '/') return true;
   if (path === '/manifest.webmanifest') return true;
   if (path.startsWith('/icons/')) return true;
   if (/\.(js|css|woff2?|ttf|png|jpg|jpeg|webp|svg|ico)$/i.test(path)) return true;

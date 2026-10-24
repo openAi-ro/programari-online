@@ -1224,6 +1224,8 @@ export const en: typeof ro = {
   'page.hours': 'Opening hours',
   'page.closed': 'Closed',
   'page.call': 'Call',
+  'page.share': 'Share',
+  'page.linkCopied': 'Link copied',
   'page.whatsapp': 'WhatsApp',
   'page.map': 'Map',
   'page.bookNow': 'Book now',

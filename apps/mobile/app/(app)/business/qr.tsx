@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
@@ -18,6 +17,7 @@ import {
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { getBookingPaths } from '@/lib/bookingLink';
 import { getInstallUrl } from '@/lib/installLink';
+import { copyBusinessLink, shareBusinessLink } from '@/lib/shareBusiness';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
@@ -68,19 +68,20 @@ export default function BusinessQrScreen() {
   const qrValue = links?.webUrl ?? '';
   const installUrl = getInstallUrl();
 
+  function flashCopied() {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   async function handleShare() {
-    if (!links || !business) return;
-    await Share.share({
-      message: `${trKey('qr.shareMsg').replace('{name}', business.name)}\n${links.webUrl}`,
-      url: links.webUrl,
-    });
+    if (!business) return;
+    if ((await shareBusinessLink(business)) === 'copied') flashCopied();
   }
 
   async function handleCopy() {
-    if (!links) return;
-    await Clipboard.setStringAsync(links.webUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (!business) return;
+    await copyBusinessLink(business.public_code);
+    flashCopied();
   }
 
   function openBookingInApp() {

@@ -18,6 +18,7 @@ import type { Session } from '@supabase/supabase-js';
 
 import { BookingCalendar } from '@/components/BookingCalendar';
 import { LocationCard } from '@/components/LocationCard';
+import { PromoVideo } from '@/components/PromoVideo';
 import { SlotPicker } from '@/components/SlotPicker';
 import {
   Badge,
@@ -33,6 +34,10 @@ import {
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { setPendingAuthRedirect } from '@/lib/auth-redirect';
 import { setAppMode } from '@/lib/appMode';
+import { buildPublicPageMeta, jsonLdText } from '@/lib/publicPageMeta';
+import { loadPublicPageMetadata } from '@/lib/publicBusinessServer';
+import { shareBusinessLink } from '@/lib/shareBusiness';
+import { getPublicWebOrigin } from '@/lib/webBase';
 import {
   firstBookableDateYmd,
   mapBookingRpcError,
@@ -396,12 +401,31 @@ export default function PublicBookScreen() {
     };
   }, [business?.cover_url]);
 
-  // Titlul filei din browser = numele firmei (doar web).
+  // Date structurate (JSON-LD) pentru motoarele de căutare. Titlul, descrierea și Open Graph
+  // vin deja în HTML-ul de server (generateMetadata, mai jos).
   useEffect(() => {
-    if (Platform.OS === 'web' && business?.name && typeof document !== 'undefined') {
-      document.title = business.name;
+    if (Platform.OS !== 'web' || !business || typeof document === 'undefined') return;
+    const json = jsonLdText(
+      buildPublicPageMeta({ business, rating, origin: getPublicWebOrigin() }).jsonLd
+    );
+    if (!json) return;
+    const el = document.createElement('script');
+    el.type = 'application/ld+json';
+    el.text = json;
+    document.head.appendChild(el);
+    return () => {
+      el.remove();
+    };
+  }, [business, rating]);
+
+  async function handleSharePage() {
+    if (!business) return;
+    try {
+      if ((await shareBusinessLink(business)) === 'copied') setMessage(trKey('page.linkCopied'));
+    } catch {
+      // Partajare indisponibilă / anulată: nimic de făcut.
     }
-  }, [business?.name]);
+  }
 
   function goLogin() {
     setPendingAuthRedirect(`/b/${code}`);
@@ -858,8 +882,12 @@ export default function PublicBookScreen() {
               <SectionTitle>{tr('page.about')}</SectionTitle>
               <Text style={[styles.bodyText, { color: t.colors.text }]}>{descriptionText}</Text>
 
-              {callHref || whatsHref || business.instagram_url || business.facebook_url || mapsHref ? (
-                <View style={styles.contactRow}>
+              <View style={styles.contactRow}>
+                  <ContactChip
+                    icon="share-social-outline"
+                    label={tr('page.share')}
+                    onPress={() => void handleSharePage()}
+                  />
                   {callHref ? (
                     <ContactChip
                       icon="call-outline"
@@ -895,7 +923,13 @@ export default function PublicBookScreen() {
                       onPress={() => void openMaps(mapsHref, buildNativeMapsUrl(location))}
                     />
                   ) : null}
-                </View>
+              </View>
+              {business.promo_video_url ? (
+                <PromoVideo
+                  videoUrl={business.promo_video_url}
+                  title={business.name}
+                  poster={business.cover_url}
+                />
               ) : null}
             </View>
             <View style={isWide ? styles.wideSide : styles.colGap}>
@@ -1165,7 +1199,13 @@ function ContactChip({
   label,
   onPress,
 }: {
-  icon: 'call-outline' | 'logo-whatsapp' | 'logo-instagram' | 'logo-facebook' | 'map-outline';
+  icon:
+    | 'call-outline'
+    | 'logo-whatsapp'
+    | 'logo-instagram'
+    | 'logo-facebook'
+    | 'map-outline'
+    | 'share-social-outline';
   label: string;
   onPress: () => void;
 }) {
@@ -1297,3 +1337,12 @@ const styles = StyleSheet.create({
   },
   lightboxImg: { width: '100%', height: '100%' },
 });
+
+/**
+ * Meta per salon în HTML-ul de server (titlu, descriere, canonical, Open Graph, Twitter).
+ * Rulează doar pe server (SSR web); salon lipsă / pagină oprită -> meta generice + noindex.
+ */
+export async function generateMetadata(_request: unknown, params: Record<string, string | string[]>) {
+  const raw = params.publicCode;
+  return loadPublicPageMetadata(Array.isArray(raw) ? raw[0] : raw);
+}

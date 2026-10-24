@@ -1,4 +1,4 @@
-import { ScrollViewStyleReset } from 'expo-router/html';
+import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
 import type { ReactNode } from 'react';
 
 // This file is web-only and used to configure the root HTML for every
@@ -6,12 +6,17 @@ import type { ReactNode } from 'react';
 // The contents of this function only run in Node.js environments and
 // do not have access to the DOM or browser APIs.
 export default function Root({ children }: { children: ReactNode }) {
+  // SSR: meta per rută (generateMetadata) ajung în headNodes.
+  const { htmlAttributes, bodyAttributes, headNodes, bodyNodes } = useServerDocumentContext();
   return (
-    <html lang="ro">
+    <html lang="ro" translate="no" {...htmlAttributes}>
       <head>
         <meta charSet="utf-8" />
+        {/* Traducere proprie RO/EN (lib/i18n): oprim traducerea automată a browserului. */}
+        <meta name="google" content="notranslate" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        {headNodes}
 
         {/* PWA / installable */}
         <link rel="manifest" href="/manifest.webmanifest" />
@@ -38,7 +43,10 @@ export default function Root({ children }: { children: ReactNode }) {
           }}
         />
       </head>
-      <body>{children}</body>
+      <body {...bodyAttributes}>
+        {children}
+        {bodyNodes}
+      </body>
     </html>
   );
 }
