@@ -46,7 +46,7 @@
                              "favicon":  "./assets/images/favicon.png"
                          },
                  "plugins":  [
-                                 ["expo-router", { "unstable_useServerRendering": true }],
+                                 ["expo-router", { "unstable_useServerRendering": true, "headers": { "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300" } }],
                                 [
                                     "expo-calendar",
                                     {
@@ -97,7 +97,7 @@
                                "router":  {
 
                                           },
-                               "displayVersion":  "2.92",
+                               "displayVersion":  "2.93",
                                "webBaseUrl":  "https://programari.expo.app",
                                "installUrl":  "https://expo.dev/accounts/promixt/projects/programari/builds/4a07edea-1504-4892-adc5-fe8d685c428d",
                                "eas":  {
