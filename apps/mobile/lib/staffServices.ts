@@ -43,6 +43,17 @@ export function staffForService<T extends { id: string }>(
   return team.filter((m) => staffOffersService(map, m.id, serviceId));
 }
 
+/** Specialistul pentru serviciu: cel preferat dacă îl face, altfel primul care îl face; null dacă nimeni. */
+export function pickStaffForService<T extends { id: string }>(
+  team: readonly T[],
+  map: Record<string, string[]>,
+  serviceId: string | null | undefined,
+  preferredId: string | null | undefined
+): T | null {
+  const eligible = staffForService(team, map, serviceId);
+  return eligible.find((m) => m.id === preferredId) ?? eligible[0] ?? null;
+}
+
 /** Specialiștii (în ordinea echipei) care fac toate serviciile alese (rezervare combinată). */
 export function staffForServices<T extends { id: string }>(
   team: readonly T[],

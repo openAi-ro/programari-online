@@ -260,7 +260,7 @@ export function mapBookingRpcError(message: string): string {
 }
 
 export function staffSchedule(
-  staff: Staff | null | undefined,
+  staff: Pick<Staff, 'working_hours' | 'break_hours'> | null | undefined,
   business: Pick<BusinessProfile, 'working_hours' | 'break_hours'>
 ): { workingHours: WorkingHours; breakHours: BreakHours } {
   return {

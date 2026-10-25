@@ -1,5 +1,6 @@
 import {
   initialServiceSelection,
+  pickStaffForService,
   staffForService,
   staffForServices,
   staffOffersService,
@@ -60,4 +61,10 @@ const perStaff = staffForService(team, map, 'vopsit').map((m) => ({
 }));
 const u = unionStaffSlots(perStaff);
 ok(u.slots.length === 1 && u.staffByStart['2026-10-22T07:00:00.000Z'].join(',') === 'ionut,ana', 'oricine: miha (nu face vopsit) exclus din reuniune');
+// Walk-in: specialistul ales rămâne doar dacă face serviciul.
+ok(pickStaffForService(team, map, 'tuns', 'miha')?.id === 'miha', 'walk-in: preferatul face serviciul');
+ok(pickStaffForService(team, map, 'vopsit', 'miha')?.id === 'ionut', 'walk-in: preferatul nu face -> primul eligibil');
+ok(pickStaffForService(team, map, 'vopsit', null)?.id === 'ionut', 'walk-in: fără preferință -> primul eligibil');
+ok(pickStaffForService(team.filter((m) => m.id === 'miha'), map, 'vopsit', 'miha') === null, 'walk-in: nimeni nu face -> null');
+ok(pickStaffForService([], map, 'vopsit', null) === null, 'walk-in: fără echipă -> null');
 console.log(`staffServices+anyStaff: ${n} passed, 0 failed`);

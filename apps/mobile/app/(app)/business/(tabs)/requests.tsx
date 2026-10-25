@@ -19,7 +19,7 @@ import { trKey, useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useBack } from '@/lib/nav';
-import { mapBookingRpcError } from '@/lib/bookingRules';
+import { mapBookingRpcError, staffSchedule } from '@/lib/bookingRules';
 import { listBusyRanges, moveAppointmentToSlot } from '@/lib/bookingRpc';
 import { generateFreeSlots } from '@/lib/slots';
 import { validateMoveInput } from '@/lib/moveRules';
@@ -33,7 +33,7 @@ import { getWebBookingUrl } from '@/lib/bookingLink';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
-import type { Appointment, BusinessProfile, FreeSlot } from '@/lib/types';
+import type { Appointment, BusinessProfile, FreeSlot, Staff } from '@/lib/types';
 
 type Row = Appointment & { business?: BusinessProfile | null };
 
@@ -317,12 +317,29 @@ export default function BusinessRequestsScreen() {
     const busy = rawBusy.filter(
       (b) => !(b.startUtc === apt.start_at && b.endUtc === apt.end_at)
     );
+    // Programul specialistului (null = programul firmei), nu direct al firmei.
+    let member: Pick<Staff, 'working_hours' | 'break_hours'> | null = null;
+    if (apt.staff_id) {
+      const { data: staffRow, error: staffErr } = await supabase
+        .from('staff')
+        .select('working_hours, break_hours')
+        .eq('id', apt.staff_id)
+        .maybeSingle();
+      if (staffErr) {
+        setMoveError(staffErr.message);
+        setMoveSlots([]);
+        setMoveLoading(false);
+        return;
+      }
+      member = staffRow as Pick<Staff, 'working_hours' | 'break_hours'> | null;
+    }
+    const hours = staffSchedule(member, biz);
     const free = generateFreeSlots({
       dateLocal: dateYmd,
       timezone: biz.timezone,
       sessionDurationMinutes: moveDuration(apt, biz),
-      workingHours: biz.working_hours,
-      breakHours: biz.break_hours,
+      workingHours: hours.workingHours,
+      breakHours: hours.breakHours,
       busy,
       bufferMinutes: biz.buffer_minutes ?? 0,
       blockedDates: biz.blocked_dates ?? [],

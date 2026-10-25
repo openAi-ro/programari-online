@@ -21,7 +21,13 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { statusMeta } from '@/lib/status';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
-import { mapBookingRpcError } from '@/lib/bookingRules';
+import { mapBookingRpcError, staffSchedule } from '@/lib/bookingRules';
+import {
+  pickStaffForService,
+  staffForService,
+  staffServicesMap,
+  type StaffServiceRow,
+} from '@/lib/staffServices';
 import { listBusyRanges } from '@/lib/bookingRpc';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { generateFreeSlots } from '@/lib/slots';
@@ -30,7 +36,9 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import { createWalkinAppointment } from '@/lib/walkin';
 import { normalizeWalkinContact, validateWalkinInput } from '@/lib/walkinRules';
-import type { Appointment, BusinessProfile, FreeSlot, Service } from '@/lib/types';
+import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
+
+type CalendarStaff = Pick<Staff, 'id' | 'name' | 'color' | 'working_hours' | 'break_hours'>;
 
 function toYmd(d: Date): string {
   const y = d.getFullYear();
@@ -64,12 +72,13 @@ export default function BusinessCalendarScreen() {
   const dayInitRef = useRef(false);
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
-  const [staffList, setStaffList] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [staffList, setStaffList] = useState<CalendarStaff[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [walkinOpen, setWalkinOpen] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [walkinServiceId, setWalkinServiceId] = useState<string | null>(null);
   const [walkinStaffId, setWalkinStaffId] = useState<string | null>(null);
+  const [walkinStaffServices, setWalkinStaffServices] = useState<Record<string, string[]>>({});
   const [walkinSlots, setWalkinSlots] = useState<FreeSlot[]>([]);
   const [walkinSlotsLoading, setWalkinSlotsLoading] = useState(false);
   const [walkinSlot, setWalkinSlot] = useState<FreeSlot | null>(null);
@@ -107,11 +116,11 @@ export default function BusinessCalendarScreen() {
     }
     const { data: team } = await supabase
       .from('staff')
-      .select('id, name, color')
+      .select('id, name, color, working_hours, break_hours')
       .eq('business_id', profile.id)
       .eq('active', true)
       .order('sort_order', { ascending: true });
-    setStaffList((team ?? []) as { id: string; name: string; color: string }[]);
+    setStaffList((team ?? []) as CalendarStaff[]);
     const rangeStart = viewMode === 'week' ? mondayOfYmd(dateLocal) : dateLocal;
     const rangeEnd = viewMode === 'week' ? addDaysYmd(rangeStart, 6) : dateLocal;
     const { startUtc } = localDayBoundsUtc(rangeStart, profile.timezone);
@@ -176,6 +185,11 @@ export default function BusinessCalendarScreen() {
     setBusiness({ ...business, blocked_dates: next });
   }
 
+  const walkinTeam = useMemo(
+    () => staffForService(staffList, walkinStaffServices, walkinServiceId),
+    [staffList, walkinStaffServices, walkinServiceId]
+  );
+
   const walkinDuration = useMemo(() => {
     const svc = services.find((s) => s.id === walkinServiceId);
     return svc?.duration_minutes ?? business?.session_duration_minutes ?? 30;
@@ -188,33 +202,52 @@ export default function BusinessCalendarScreen() {
     setWalkinSlot(null);
     setWalkinOpen(true);
     setWalkinSlotsLoading(true);
-    const { data: svcRows } = await supabase
-      .from('services')
-      .select('*')
-      .eq('business_id', business.id)
-      .eq('active', true)
-      .order('sort_order', { ascending: true });
+    const [{ data: svcRows }, { data: offeredRows }] = await Promise.all([
+      supabase
+        .from('services')
+        .select('*')
+        .eq('business_id', business.id)
+        .eq('active', true)
+        .order('sort_order', { ascending: true }),
+      staffList.length > 0
+        ? supabase
+            .from('staff_services')
+            .select('staff_id, service_id')
+            .in('staff_id', staffList.map((m) => m.id))
+        : Promise.resolve({ data: [] as StaffServiceRow[] }),
+    ]);
     const list = (svcRows ?? []) as Service[];
     setServices(list);
-    if (!walkinServiceId && list.length > 0) setWalkinServiceId(list[0].id);
-    if (!walkinStaffId) {
-      setWalkinStaffId(staffFilter !== 'all' ? staffFilter : (staffList[0]?.id ?? null));
-    }
+    // Eroare de citire -> hartă goală = toți fac tot (ca la rezervarea publică).
+    const offered = staffServicesMap(offeredRows as StaffServiceRow[] | null);
+    setWalkinStaffServices(offered);
+    const serviceId = walkinServiceId ?? list[0]?.id ?? null;
+    setWalkinServiceId(serviceId);
     await reloadWalkinSlots(
-      (walkinServiceId ?? list[0]?.id ?? null),
-      (staffFilter !== 'all' ? staffFilter : (walkinStaffId ?? staffList[0]?.id ?? null)),
-      list
+      serviceId,
+      staffFilter !== 'all' ? staffFilter : walkinStaffId,
+      list,
+      offered
     );
   }
 
   async function reloadWalkinSlots(
     serviceId: string | null,
-    staffId: string | null,
-    svcList: Service[] = services
+    preferredStaffId: string | null,
+    svcList: Service[] = services,
+    offered: Record<string, string[]> = walkinStaffServices
   ) {
     if (!business) return;
     setWalkinSlotsLoading(true);
     setWalkinSlot(null);
+    // Doar specialiștii care fac serviciul; programul lor, nu al firmei.
+    const member = pickStaffForService(staffList, offered, serviceId, preferredStaffId);
+    setWalkinStaffId(member?.id ?? null);
+    if (staffList.length > 0 && !member) {
+      setWalkinSlots([]);
+      setWalkinSlotsLoading(false);
+      return;
+    }
     const svc = svcList.find((s) => s.id === serviceId);
     const duration = svc?.duration_minutes ?? business.session_duration_minutes;
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
@@ -222,7 +255,7 @@ export default function BusinessCalendarScreen() {
       businessId: business.id,
       fromIso: startUtc.toISOString(),
       toIso: endUtc.toISOString(),
-      staffId,
+      staffId: member?.id ?? null,
     });
     if (busyErr) {
       setWalkinError(busyErr);
@@ -230,12 +263,13 @@ export default function BusinessCalendarScreen() {
       setWalkinSlotsLoading(false);
       return;
     }
+    const hours = staffSchedule(member, business);
     const free = generateFreeSlots({
       dateLocal,
       timezone: business.timezone,
       sessionDurationMinutes: duration,
-      workingHours: business.working_hours,
-      breakHours: business.break_hours,
+      workingHours: hours.workingHours,
+      breakHours: hours.breakHours,
       busy,
       bufferMinutes: business.buffer_minutes ?? 0,
       blockedDates: business.blocked_dates ?? [],
@@ -524,17 +558,19 @@ export default function BusinessCalendarScreen() {
                   </View>
                 </>
               ) : null}
-              {staffList.length > 0 ? (
+              {staffList.length > 0 && walkinTeam.length === 0 ? (
+                <Callout tone="warning">{tr('book.errStaffService')}</Callout>
+              ) : null}
+              {walkinTeam.length > 0 ? (
                 <>
                   <SectionTitle>{tr('team.specialist')}</SectionTitle>
                   <View style={styles.filters}>
-                    {staffList.map((s) => {
+                    {walkinTeam.map((s) => {
                       const on = walkinStaffId === s.id;
                       return (
                         <Pressable
                           key={s.id}
                           onPress={() => {
-                            setWalkinStaffId(s.id);
                             void reloadWalkinSlots(walkinServiceId, s.id);
                           }}
                           style={[
