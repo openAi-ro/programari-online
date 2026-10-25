@@ -1310,6 +1310,7 @@ export const en: typeof ro = {
   'common.deleteConfirm': 'Delete permanently? This cannot be undone.',
   'cal.viewDay': 'Day',
   'cal.viewWeek': 'Week',
+  'cal.noStaff': 'No specialist',
   'cli.call': 'Call',
   'cli.whatsapp': 'WhatsApp',
   'cli.chat': 'Chat',

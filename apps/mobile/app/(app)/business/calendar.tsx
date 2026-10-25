@@ -29,6 +29,7 @@ import {
   type StaffServiceRow,
 } from '@/lib/staffServices';
 import { listBusyRanges } from '@/lib/bookingRpc';
+import { staffOrUnassignedFilter } from '@/lib/calendarStaffFilter';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { generateFreeSlots } from '@/lib/slots';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
@@ -133,7 +134,10 @@ export default function BusinessCalendarScreen() {
       .lt('start_at', endUtc.toISOString())
       .gt('end_at', startUtc.toISOString())
       .order('start_at', { ascending: true });
-    if (staffFilter !== 'all') query = query.eq('staff_id', staffFilter);
+    if (staffFilter !== 'all') {
+      const staffOr = staffOrUnassignedFilter(staffFilter);
+      if (staffOr) query = query.or(staffOr);
+    }
     const { data, error: aErr } = await query;
     if (aErr) {
       setError(aErr.message);
@@ -479,6 +483,9 @@ export default function BusinessCalendarScreen() {
                   <Badge tone={meta.tone}>{meta.label}</Badge>
                   {a.checked_in_at ? (
                     <Badge tone="accent">{tr('appt.checkedIn')}</Badge>
+                  ) : null}
+                  {!a.staff_id && staffList.length > 0 ? (
+                    <Badge tone="warning">{tr('cal.noStaff')}</Badge>
                   ) : null}
                 </View>
                 {a.no_show ? (

@@ -1308,6 +1308,7 @@ export const ro = {
   'common.deleteConfirm': 'Sigur ștergi definitiv? Acțiunea nu poate fi anulată.',
   'cal.viewDay': 'Zi',
   'cal.viewWeek': 'Săptămână',
+  'cal.noStaff': 'Fără specialist',
   'cli.call': 'Sună',
   'cli.whatsapp': 'WhatsApp',
   'cli.chat': 'Chat',
