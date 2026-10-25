@@ -2,14 +2,16 @@
  * Edge Function: auth-whatsapp-otp
  *
  * Public POST { phone } — send Meta/Twilio WhatsApp OTP (custom table, not Supabase phone OTP).
- * No JWT required (verify_jwt = false). Rate-limited: 60s cooldown per phone.
+ * No JWT required (verify_jwt = false). Rate-limited atomically in auth_whatsapp_otp_reserve (v78):
+ * 60s cooldown, max 5 codes per phone per 24h, max per client IP (hashed) per hour and per 24h.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { messageAuthOtp, parseNotifyLang, sendWhatsApp, whatsappUserHint, logNotification } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
+import { clientIpFrom } from '../_shared/aiCore.ts';
+import { OTP_LIMITS, otpLimitHint, parseReserveVerdict } from './limits.ts';
 
-const COOLDOWN_MS = 60_000;
 const TTL_MS = 15 * 60_000;
 
 async function sha256Hex(input: string): Promise<string> {
@@ -63,44 +65,39 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const cooldownSince = new Date(Date.now() - COOLDOWN_MS).toISOString();
-  const { data: recent } = await admin
-    .from('auth_whatsapp_otps')
-    .select('id')
-    .eq('phone', phone)
-    .gte('created_at', cooldownSince)
-    .limit(1)
-    .maybeSingle();
+  const ip = clientIpFrom((n) => req.headers.get(n));
+  const code = generateCode();
+  const codeHash = await sha256Hex(code);
+  const expiresAt = new Date(Date.now() + TTL_MS).toISOString();
 
-  if (recent) {
+  // Limits are checked and the code row reserved in one locked transaction (no parallel bypass).
+  const { data: reserveData, error: reserveErr } = await admin.rpc('auth_whatsapp_otp_reserve', {
+    p_phone: phone,
+    p_ip_hash: ip ? await sha256Hex(`auth-otp:${ip}`) : null,
+    p_code_hash: codeHash,
+    p_expires_at: expiresAt,
+    p_cooldown_seconds: OTP_LIMITS.cooldownSeconds,
+    p_phone_per_day: OTP_LIMITS.phonePerDay,
+    p_ip_per_hour: OTP_LIMITS.ipPerHour,
+    p_ip_per_day: OTP_LIMITS.ipPerDay,
+  });
+  const verdict = reserveErr ? null : parseReserveVerdict(reserveData);
+  if (!verdict) {
+    console.error('auth-whatsapp-otp reserve', reserveErr?.message ?? reserveData);
+    return jsonResponse({ error: 'otp_store_failed' }, 500);
+  }
+  if (!verdict.ok) {
     return jsonResponse(
       {
         error: 'rate_limited',
-        hint: lang === 'en' ? 'Wait 60 seconds before requesting a new code.' : 'Așteaptă 60 de secunde înainte de a cere un cod nou.',
+        reason: verdict.error,
+        retry_after_s: verdict.retryAfterS,
+        hint: otpLimitHint(verdict.error, verdict.retryAfterS, lang),
       },
       429
     );
   }
-
-  const now = new Date();
-  const code = generateCode();
-  const codeHash = await sha256Hex(code);
-  const expiresAt = new Date(now.getTime() + TTL_MS).toISOString();
-
-  const { data: inserted, error: insertErr } = await admin
-    .from('auth_whatsapp_otps')
-    .insert({
-      phone,
-      code_hash: codeHash,
-      expires_at: expiresAt,
-    })
-    .select('id')
-    .single();
-
-  if (insertErr || !inserted?.id) {
-    console.error('auth-whatsapp-otp insert', insertErr);
-    return jsonResponse({ error: 'otp_store_failed' }, 500);
-  }
+  const insertedId = verdict.id;
 
   const copy = messageAuthOtp(code, lang);
   const wa = await sendWhatsApp(phone, copy.text, { otpCode: code });
@@ -108,7 +105,7 @@ Deno.serve(async (req) => {
 
   if (!wa.ok && !wa.stub) {
     console.error('auth-whatsapp-otp send failed', wa);
-    await admin.from('auth_whatsapp_otps').delete().eq('id', inserted.id);
+    await admin.from('auth_whatsapp_otps').delete().eq('id', insertedId);
     return jsonResponse(
       {
         error: 'whatsapp_send_failed',
@@ -124,7 +121,7 @@ Deno.serve(async (req) => {
     .update({ consumed_at: new Date().toISOString() })
     .eq('phone', phone)
     .is('consumed_at', null)
-    .neq('id', inserted.id);
+    .neq('id', insertedId);
 
 
   // Always ok for valid phone (do not leak whether a user account exists).
