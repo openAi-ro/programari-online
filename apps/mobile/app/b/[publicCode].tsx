@@ -1238,7 +1238,7 @@ export default function PublicBookScreen() {
             }
           }}
         >
-          <Field label={tr('set.displayNamePh')} placeholder={tr('pub.guestNamePh')} value={guestName} onChangeText={setGuestName} onFocus={scrollToGuestForm} />
+          <Field label={tr('set.displayNamePh')} placeholder={tr('pub.guestNamePh')} maxLength={80} value={guestName} onChangeText={setGuestName} onFocus={scrollToGuestForm} />
           <Field label={tr('cal.phone')} placeholder="07…" keyboardType="phone-pad" value={guestPhone} onChangeText={setGuestPhone} onFocus={scrollToGuestForm} />
           <Field label={tr('cal.email')} placeholder={tr('pub.guestEmailPh')} keyboardType="email-address" autoCapitalize="none" value={guestEmail} onChangeText={setGuestEmail} onFocus={scrollToGuestForm} />
           <Button

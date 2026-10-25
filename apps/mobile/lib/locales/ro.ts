@@ -377,6 +377,8 @@ export const ro = {
   'book.errWalkinSlot': 'Alege un slot liber din calendar.',
   'book.errBadPhone': 'Numărul de telefon nu pare valid.',
   'book.errBadEmail': 'Adresa de email nu pare validă.',
+  'book.errBadName': 'Numele e prea lung (maxim 80 de caractere).',
+  'book.errGuestRateLimited': 'Prea multe programări fără cont într-un timp scurt. Încearcă mai târziu sau intră în cont.',
   'book.errBadRange': 'Intervalul ales nu este valid.',
   'book.errCannotMove': 'Această programare nu mai poate fi mutată.',
   'book.errMoveSlot': 'Alege un slot liber pentru mutare.',

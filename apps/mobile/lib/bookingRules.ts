@@ -166,6 +166,12 @@ export function mapBookingRpcError(message: string): string {
   if (message.includes('too_many_guest')) {
     return trKey('book.errTooManyGuest');
   }
+  if (message.includes('guest_rate_limited')) {
+    return trKey('book.errGuestRateLimited');
+  }
+  if (message.includes('invalid_name')) {
+    return trKey('book.errBadName');
+  }
   if (message.includes('slot_taken')) {
     return trKey('book.errSlotTaken');
   }

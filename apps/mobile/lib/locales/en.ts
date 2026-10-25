@@ -379,6 +379,8 @@ export const en: typeof ro = {
   'book.errWalkinSlot': 'Pick a free slot from the calendar.',
   'book.errBadPhone': 'The phone number doesn’t look valid.',
   'book.errBadEmail': 'The email address doesn’t look valid.',
+  'book.errBadName': 'The name is too long (80 characters max).',
+  'book.errGuestRateLimited': 'Too many bookings without an account in a short time. Try again later or sign in.',
   'book.errBadRange': 'The chosen range isn’t valid.',
   'book.errCannotMove': 'This booking can no longer be moved.',
   'book.errMoveSlot': 'Pick a free slot for the move.',
