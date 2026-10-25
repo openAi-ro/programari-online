@@ -49,6 +49,16 @@ function webStore(): Storage | null {
   }
 }
 
+/** `?lang=ro|en` în adresă (web, ex. iframe pe site-ul firmei): are prioritate doar la încărcarea asta, nu se salvează. */
+function urlLanguage(): AppLanguage | null {
+  try {
+    const v = new URLSearchParams(window.location.search).get('lang');
+    return v === 'ro' || v === 'en' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseLanguage(value: string | null | undefined): AppLanguage {
   return value === 'en' || value === 'ro' ? value : 'ro';
 }
@@ -83,7 +93,7 @@ export async function getLanguage(): Promise<AppLanguage> {
   try {
     let raw: string | null = null;
     if (isWeb()) {
-      raw = webStore()?.getItem(KEY) ?? null;
+      raw = urlLanguage() ?? webStore()?.getItem(KEY) ?? null;
     } else {
       try {
         const store = await nativeStore();

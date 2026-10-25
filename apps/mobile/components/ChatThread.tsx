@@ -17,6 +17,7 @@ import { presentLocalChatNotification } from '@/lib/notifications';
 import { formatLocalTime } from '@/lib/timezone';
 import { listMessages, markConversationRead, sendMessage } from '@/lib/chatRpc';
 import { mergeMessages } from '@/lib/chatPaging';
+import { useDictation } from '@/lib/useDictation';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
@@ -56,6 +57,8 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const [sending, setSending] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // Microfon (doar web): dictarea completează câmpul, trimiterea rămâne manuală.
+  const dictation = useDictation(draft, setDraft);
   const userIdRef = useRef<string | null>(null);
   const counterpartyNameRef = useRef<string>('Chat');
   const seenIdsRef = useRef<Set<string>>(new Set());
@@ -134,6 +137,11 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   if (loading && messages.length === 0) return <ListLoadingScreen title={counterpartyName} subtitle={isClient ? tr('chat.withBusiness') : tr('chat.withClient')} onBack={back} label={tr('chat.loadingConvo')} />;
   const composer = (
     <View style={[styles.inputRow, { borderTopWidth: 1, borderTopColor: t.colors.border }]}>
+      {dictation.error ? (
+        <Text style={[styles.micError, { color: t.colors.danger }]}>
+          {dictation.error === 'denied' ? tr('chat.micDenied') : tr('chat.micFailed')}
+        </Text>
+      ) : null}
       <TextInput
         style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
         placeholder={tr('chat.writeMessage')}
@@ -146,6 +154,18 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         maxLength={4000}
         autoCorrect={false}
       />
+      {dictation.supported ? (
+        <Pressable
+          style={[styles.sendBtn, { backgroundColor: dictation.listening ? t.colors.danger : t.colors.bgElevated }]}
+          onPress={dictation.toggle}
+          disabled={sending}
+          accessibilityRole="button"
+          accessibilityState={{ selected: dictation.listening }}
+          accessibilityLabel={dictation.listening ? tr('chat.micStopA11y') : tr('chat.micA11y')}
+        >
+          <Ionicons name={dictation.listening ? 'stop' : 'mic-outline'} size={18} color={dictation.listening ? '#fff' : t.colors.text} />
+        </Pressable>
+      ) : null}
       <Pressable
         style={[
           styles.sendBtn,
@@ -234,7 +254,8 @@ const styles = StyleSheet.create({
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
   centerRow: { marginTop: spacing.lg },
   olderSpinner: { paddingVertical: spacing.sm },
-  inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
+  inputRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
+  micError: { width: '100%', fontSize: 12 },
   input: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, maxHeight: 76 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 });

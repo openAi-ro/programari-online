@@ -42,6 +42,12 @@ import {
   notifyAfterBooking,
 } from '@/lib/bookingRpc';
 import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
+import {
+  staffForServices,
+  staffOffersService,
+  staffServicesMap,
+  type StaffServiceRow,
+} from '@/lib/staffServices';
 import { discountedPrice, isOffpeakStart } from '@/lib/offpeak';
 import { parseTipInput, tipOptions } from '@/lib/tip';
 import { normalizeRepeatSelection } from '@/lib/recurringRules';
@@ -112,6 +118,8 @@ export default function BookScreen() {
   const [services, setServices] = useState<Service[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [staffId, setStaffId] = useState<string | null>(null);
+  // staff_services (v67): specialistul fără rânduri face tot.
+  const [staffServices, setStaffServices] = useState<Record<string, string[]>>({});
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const serviceId = serviceIds[0] ?? null;
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
@@ -154,6 +162,19 @@ export default function BookScreen() {
     () => staffList.find((s) => s.id === staffId) ?? null,
     [staffList, staffId]
   );
+  // Doar serviciile pe care le face specialistul ales (pasul specialist vine înaintea serviciilor).
+  const offeredServices = useMemo(
+    () => (staffId ? services.filter((s) => staffOffersService(staffServices, staffId, s.id)) : services),
+    [services, staffServices, staffId]
+  );
+  useEffect(() => {
+    if (offeredServices.length === 0) return;
+    setServiceIds((ids) => {
+      const kept = ids.filter((id) => offeredServices.some((s) => s.id === id));
+      if (kept.length === ids.length && kept.length > 0) return ids;
+      return kept.length > 0 ? kept : [offeredServices[0].id];
+    });
+  }, [offeredServices]);
 
   const durationMinutes =
     combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
@@ -332,9 +353,9 @@ export default function BookScreen() {
           : Array.isArray(serviceIdParam)
             ? serviceIdParam[0]
             : null;
-      if (list.length > 0) {
-        setServiceIds([fromQsSvc && list.some((s) => s.id === fromQsSvc) ? fromQsSvc : list[0].id]);
-      }
+      const firstServiceId =
+        fromQsSvc && list.some((s) => s.id === fromQsSvc) ? fromQsSvc : list[0]?.id ?? null;
+      if (firstServiceId) setServiceIds([firstServiceId]);
 
       const team = (staffRows ?? []) as Staff[];
       setStaffList(team);
@@ -344,9 +365,22 @@ export default function BookScreen() {
           : Array.isArray(staffIdParam)
             ? staffIdParam[0]
             : null;
+      let offered: Record<string, string[]> = {};
       if (team.length > 0) {
-        setStaffId(fromQsStaff && team.some((s) => s.id === fromQsStaff) ? fromQsStaff : team[0].id);
+        // Eroare de citire -> hartă goală = toți fac tot (comportamentul vechi).
+        const { data: offeredRows } = await supabase
+          .from('staff_services')
+          .select('staff_id, service_id')
+          .in('staff_id', team.map((m) => m.id));
+        offered = staffServicesMap(offeredRows as StaffServiceRow[] | null);
+        const pool = staffForServices(team, offered, firstServiceId ? [firstServiceId] : []);
+        setStaffId(
+          fromQsStaff && team.some((s) => s.id === fromQsStaff)
+            ? fromQsStaff
+            : (pool[0] ?? team[0]).id
+        );
       }
+      setStaffServices(offered);
 
       if (svcErr || staffErr) {
         setError(trKey('book.errLoadCatalog'));
@@ -1026,7 +1060,7 @@ export default function BookScreen() {
             </Text>
           ) : null}
           <View style={styles.serviceList}>
-            {services.map((s) => {
+            {offeredServices.map((s) => {
               const on = serviceIds.includes(s.id);
               return (
                 <Pressable

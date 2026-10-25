@@ -1,7 +1,9 @@
 import {
   initialServiceSelection,
   staffForService,
+  staffForServices,
   staffOffersService,
+  staffOffersServices,
   staffServicesMap,
   staffServicesPlan,
 } from './staffServices';
@@ -29,6 +31,11 @@ ok(staffForService(team, map, 'tuns').map((m) => m.id).join(',') === 'ionut,miha
 ok(staffForService(team, map, 'vopsit').map((m) => m.id).join(',') === 'ionut,ana', 'vopsit: ionut, ana');
 ok(staffForService(team, map, undefined).length === 3, 'fara serviciu -> toti');
 ok(staffServicesMap(null) && Object.keys(staffServicesMap(undefined)).length === 0, 'fara date -> harta goala');
+ok(staffOffersServices(map, 'ana', ['vopsit', 'coafat']) && !staffOffersServices(map, 'ana', ['vopsit', 'tuns']), 'combinat: trebuie sa faca toate');
+ok(staffOffersServices(map, 'ionut', ['vopsit', 'tuns']) && staffOffersServices(map, 'ana', []), 'combinat: fara randuri / fara servicii -> da');
+ok(staffForServices(team, map, ['vopsit', 'coafat']).map((m) => m.id).join(',') === 'ionut,ana', 'combinat vopsit+coafat: ionut, ana');
+ok(staffForServices(team, map, ['vopsit', 'tuns']).map((m) => m.id).join(',') === 'ionut', 'combinat vopsit+tuns: doar ionut (fara randuri)');
+ok(staffForServices(team, map, []).length === 3, 'combinat fara servicii -> toti');
 
 const all = ['tuns', 'vopsit', 'coafat'];
 ok(initialServiceSelection([], all).length === 3, 'editor: fara randuri -> toate bifate');

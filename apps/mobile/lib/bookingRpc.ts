@@ -197,6 +197,36 @@ export async function createGuestAppointment(opts: {
   return { appointment, error: null };
 }
 
+/** Rezervare ca invitat cu mai multe servicii — bloc combinat, apelabil anonim (v71). */
+export async function createGuestAppointmentMulti(opts: {
+  businessId: string;
+  startAt: string;
+  serviceIds: string[];
+  staffId: string | null;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('create_guest_appointment_multi', {
+    p_business_id: opts.businessId,
+    p_start_at: opts.startAt,
+    p_service_ids: opts.serviceIds,
+    p_staff_id: opts.staffId,
+    p_client_name: opts.name,
+    p_client_phone: opts.phone,
+    p_client_email: opts.email,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
+}
+
 /** Serie saptamanala atomica 2..8 sedinte (v36). Intoarce randurile create. */
 export async function createRecurringAppointments(opts: {
   businessId: string;

@@ -1732,6 +1732,12 @@ export default function SettingsScreen() {
                 onPress={() => router.push('/(app)/business/qr' as never)}
               />
               <SettingRow
+                icon="code-slash-outline"
+                title={tr('btn.title')}
+                description={tr('btn.rowDesc')}
+                onPress={() => router.push('/(app)/business/booking-button' as never)}
+              />
+              <SettingRow
                 icon="globe-outline"
                 title={tr('set.pageRow')}
                 description={tr('set.pageRowDesc')}

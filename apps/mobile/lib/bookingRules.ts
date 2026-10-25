@@ -175,6 +175,9 @@ export function mapBookingRpcError(message: string): string {
   if (message.includes('cannot_waive')) {
     return trKey('book.errCannotWaive');
   }
+  if (message.includes('staff_service_mismatch')) {
+    return trKey('book.errStaffService');
+  }
   if (message.includes('staff_not_found')) {
     return trKey('book.errStaffGone');
   }

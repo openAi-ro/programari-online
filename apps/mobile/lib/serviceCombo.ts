@@ -10,6 +10,11 @@ export function toggleServiceId(ids: readonly string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
 }
 
+/** Ca toggleServiceId, dar ultimul serviciu ales nu se poate debifa (pagina publică). */
+export function toggleServiceIdKeepOne(ids: readonly string[], id: string): string[] {
+  return ids.length === 1 && ids[0] === id ? [...ids] : toggleServiceId(ids, id);
+}
+
 /** Serviciile alese, în ordinea bifării; id-urile necunoscute sunt ignorate. */
 export function selectedServices<T extends ComboService>(
   services: readonly T[],

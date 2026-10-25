@@ -50,12 +50,22 @@ import {
   bookingStaffCandidates,
   unionStaffSlots,
 } from '@/lib/anyStaff';
-import { createAppointmentIfFree, createGuestAppointment, listBusyRanges, notifyAfterBooking } from '@/lib/bookingRpc';
+import {
+  createAppointmentIfFree,
+  createAppointmentMultiIfFree,
+  createGuestAppointment,
+  createGuestAppointmentMulti,
+  listBusyRanges,
+  notifyAfterBooking,
+} from '@/lib/bookingRpc';
+import { comboTotals, toggleServiceIdKeepOne } from '@/lib/serviceCombo';
+import { isEmbedParam } from '@/lib/bookingButton';
+import { getWebBookingUrl } from '@/lib/bookingLink';
 import { bookingDateRange } from '@/lib/bookingCalendar';
 import { bookingStepNumbers } from '@/lib/bookingSteps';
 import {
-  staffForService,
-  staffOffersService,
+  staffForServices,
+  staffOffersServices,
   staffServicesMap,
   type StaffServiceRow,
 } from '@/lib/staffServices';
@@ -103,7 +113,9 @@ export default function PublicBookScreen() {
   const t = useTheme();
   const goBack = useBack();
   const tr = useT();
-  const { publicCode } = useLocalSearchParams<{ publicCode: string }>();
+  const { publicCode, embed } = useLocalSearchParams<{ publicCode: string; embed?: string }>();
+  // ?embed=1: pagina e într-un iframe pe site-ul salonului (ecranul „Butonul tău de programare”).
+  const embedded = isEmbedParam(embed);
   const { width: windowWidth } = useWindowDimensions();
   const isWide = windowWidth >= 900;
   const code = String(publicCode ?? '').trim();
@@ -119,7 +131,8 @@ export default function PublicBookScreen() {
   const [staffPhones, setStaffPhones] = useState<Record<string, string>>({});
   // Oricine: pentru fiecare oră liberă, specialiștii liberi atunci (în ordinea echipei).
   const [freeStaffByStart, setFreeStaffByStart] = useState<Record<string, string[]>>({});
-  const [serviceId, setServiceId] = useState<string | null>(null);
+  // Serviciile alese (combinat, v71): durate și prețuri adunate; primul = serviciul principal.
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [rating, setRating] = useState<{ avg_rating: number | null; review_count: number } | null>(
     null
   );
@@ -148,28 +161,25 @@ export default function PublicBookScreen() {
   const [tipRon, setTipRon] = useState(0);
   const [tipCustom, setTipCustom] = useState('');
 
-  const selectedService = useMemo(
-    () => services.find((s) => s.id === serviceId) ?? null,
-    [services, serviceId]
-  );
+  const combo = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
   const selectedStaff = useMemo(
     () => staffList.find((s) => s.id === staffId) ?? null,
     [staffList, staffId]
   );
-  // Specialiștii care fac serviciul ales (Echipa, Oricine, calendar).
+  // Specialiștii care fac toate serviciile alese (Echipa, Oricine, calendar).
   const eligibleStaff = useMemo(
-    () => staffForService(staffList, staffServices, serviceId),
-    [staffList, staffServices, serviceId]
+    () => staffForServices(staffList, staffServices, serviceIds),
+    [staffList, staffServices, serviceIds]
   );
-  // Specialistul ales nu face noul serviciu -> înapoi la „Oricine disponibil”.
+  // Specialistul ales nu face noua selecție -> înapoi la „Oricine disponibil”.
   useEffect(() => {
-    if (staffId && !staffOffersService(staffServices, staffId, serviceId)) {
+    if (staffId && !staffOffersServices(staffServices, staffId, serviceIds)) {
       setStaffId(null);
       setSelected(null);
     }
-  }, [staffId, staffServices, serviceId]);
+  }, [staffId, staffServices, serviceIds]);
   const durationMinutes =
-    selectedService?.duration_minutes ?? business?.session_duration_minutes ?? 60;
+    combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -233,7 +243,7 @@ export default function PublicBookScreen() {
         ]);
       const list = (svcRows ?? []) as Service[];
       setServices(list);
-      if (list.length > 0) setServiceId(list[0].id);
+      if (list.length > 0) setServiceIds([list[0].id]);
 
       const team = (staffRows ?? []) as Staff[];
       setStaffList(team);
@@ -254,7 +264,7 @@ export default function PublicBookScreen() {
       setStaffPhones(phones);
 
       // Implicit „Oricine disponibil”: prima zi în care lucrează măcar un specialist.
-      const pool = team.length > 0 ? staffForService(team, offered, list[0]?.id) : [];
+      const pool = team.length > 0 ? staffForServices(team, offered, list[0] ? [list[0].id] : []) : [];
       const firstDays = (pool.length > 0 ? pool : [null]).map((member) => {
         const hours = staffSchedule(member, biz);
         return firstBookableDateYmd({
@@ -443,6 +453,11 @@ export default function PublicBookScreen() {
   }
 
   function goLogin() {
+    // În iframe sesiunea nu se păstrează: contul se deschide în tab nou, pe pagina normală.
+    if (embedded && Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(getWebBookingUrl(code), '_blank', 'noopener');
+      return;
+    }
     setPendingAuthRedirect(`/b/${code}`);
     void setAppMode('client');
     router.push('/(auth)/client');
@@ -464,13 +479,22 @@ export default function PublicBookScreen() {
     const { value: created, error: err } = await bookWithFirstFreeStaff(
       bookingStaffCandidates(staffId, freeStaffByStart[selected.startUtc], staffList.length),
       async (candidate) => {
-        const r = await createAppointmentIfFree({
-          businessId: business.id,
-          startAt: selected.startUtc,
-          endAt: selected.endUtc,
-          serviceId,
-          staffId: candidate,
-        });
+        const r =
+          serviceIds.length > 1
+            ? await createAppointmentMultiIfFree({
+                businessId: business.id,
+                startAt: selected.startUtc,
+                endAt: selected.endUtc,
+                serviceIds,
+                staffId: candidate,
+              })
+            : await createAppointmentIfFree({
+                businessId: business.id,
+                startAt: selected.startUtc,
+                endAt: selected.endUtc,
+                serviceId: serviceIds[0] ?? null,
+                staffId: candidate,
+              });
         return { value: r.appointment, error: r.error };
       }
     );
@@ -542,16 +566,24 @@ export default function PublicBookScreen() {
     const { value: created, error: err } = await bookWithFirstFreeStaff(
       bookingStaffCandidates(staffId, freeStaffByStart[selected.startUtc], staffList.length),
       async (candidate) => {
-        const r = await createGuestAppointment({
-          businessId: business.id,
-          startAt: selected.startUtc,
-          endAt: selected.endUtc,
-          serviceId,
-          staffId: candidate,
-          name,
-          phone: contact.phone,
-          email: contact.email,
-        });
+        const guest = { name, phone: contact.phone, email: contact.email };
+        const r =
+          serviceIds.length > 1
+            ? await createGuestAppointmentMulti({
+                businessId: business.id,
+                startAt: selected.startUtc,
+                serviceIds,
+                staffId: candidate,
+                ...guest,
+              })
+            : await createGuestAppointment({
+                businessId: business.id,
+                startAt: selected.startUtc,
+                endAt: selected.endUtc,
+                serviceId: serviceIds[0] ?? null,
+                staffId: candidate,
+                ...guest,
+              });
         return { value: r.appointment, error: r.error };
       }
     );
@@ -585,7 +617,8 @@ export default function PublicBookScreen() {
     const { error: err } = await supabase.rpc('join_waitlist', {
       p_business_id: business.id,
       p_desired_date: dateLocal,
-      p_service_id: serviceId,
+      // Lista de așteptare ține un singur serviciu: primul ales.
+      p_service_id: serviceIds[0] ?? null,
       p_staff_id: staffId,
     });
     setWaitlistBusy(false);
@@ -792,11 +825,14 @@ export default function PublicBookScreen() {
         <>
           {error ? <Callout tone="danger">{error}</Callout> : null}
           {message ? <Callout tone="success">{message}</Callout> : null}
-          <Button
-            label={tr('page.bookNow')}
-            icon="calendar-outline"
-            onPress={scrollToBooking}
-          />
+          {/* În iframe pe site-ul salonului bara fixă ar acoperi pagina gazdă. */}
+          {embedded ? null : (
+            <Button
+              label={tr('page.bookNow')}
+              icon="calendar-outline"
+              onPress={scrollToBooking}
+            />
+          )}
           {session ? (
             <>
               <Button
@@ -1061,14 +1097,14 @@ export default function PublicBookScreen() {
         </Callout>
       ) : null}
 
-      {session && (business.deposit_ron ?? 0) > 0 && (selectedService?.price ?? 0) > 0 ? (
+      {session && (business.deposit_ron ?? 0) > 0 && combo.price > 0 ? (
         <>
           <SectionTitle>{tr('book.tipTitle')}</SectionTitle>
           <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
             {tr('book.tipHint')}
           </Text>
           <View style={styles.serviceList}>
-            {tipOptions(selectedService?.price ?? 0).map((o) => (
+            {tipOptions(combo.price).map((o) => (
               <Pressable
                 key={o.percent}
                 onPress={() => {
@@ -1094,7 +1130,7 @@ export default function PublicBookScreen() {
             value={tipCustom}
             onChangeText={(v: string) => {
               setTipCustom(v);
-              const parsed = parseTipInput(v, selectedService?.price ?? 0);
+              const parsed = parseTipInput(v, combo.price);
               if (parsed !== null) setTipRon(parsed);
             }}
             placeholder="0"
@@ -1115,14 +1151,28 @@ export default function PublicBookScreen() {
       {services.length > 0 ? (
         <>
           <SectionTitle>{tr('pub.stepService', { n: stepNo.service ?? 1 })}</SectionTitle>
+          <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
+            {combo.count > 1
+              ? tr('book.comboSummary', {
+                  name: combo.name,
+                  duration: formatDuration(combo.durationMinutes),
+                  price: formatRon(combo.price),
+                })
+              : tr('pub.multiHint')}
+          </Text>
+          {staffList.length > 0 && eligibleStaff.length === 0 ? (
+            <Callout tone="warning">{tr('book.errStaffService')}</Callout>
+          ) : null}
           <View style={styles.serviceList}>
             {services.map((s) => {
-              const on = s.id === serviceId;
+              const on = serviceIds.includes(s.id);
               return (
                 <Pressable
                   key={s.id}
+                  role="checkbox"
+                  aria-checked={on}
                   onPress={() => {
-                    setServiceId(s.id);
+                    setServiceIds((ids) => toggleServiceIdKeepOne(ids, s.id));
                     setSelected(null);
                   }}
                   style={[

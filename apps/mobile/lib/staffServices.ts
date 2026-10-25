@@ -25,6 +25,15 @@ export function staffOffersService(
   return !list || list.length === 0 || list.includes(serviceId);
 }
 
+/** Face specialistul TOATE serviciile alese? Fără servicii alese = da (ca pe server, v71). */
+export function staffOffersServices(
+  map: Record<string, string[]>,
+  staffId: string,
+  serviceIds: readonly string[]
+): boolean {
+  return serviceIds.every((id) => staffOffersService(map, staffId, id));
+}
+
 /** Specialiștii (în ordinea echipei) care fac serviciul ales. */
 export function staffForService<T extends { id: string }>(
   team: readonly T[],
@@ -32,6 +41,15 @@ export function staffForService<T extends { id: string }>(
   serviceId: string | null | undefined
 ): T[] {
   return team.filter((m) => staffOffersService(map, m.id, serviceId));
+}
+
+/** Specialiștii (în ordinea echipei) care fac toate serviciile alese (rezervare combinată). */
+export function staffForServices<T extends { id: string }>(
+  team: readonly T[],
+  map: Record<string, string[]>,
+  serviceIds: readonly string[]
+): T[] {
+  return team.filter((m) => staffOffersServices(map, m.id, serviceIds));
 }
 
 /** Bifele de pornire în editor: fără rânduri = toate serviciile bifate. */
