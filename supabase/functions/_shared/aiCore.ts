@@ -686,12 +686,23 @@ export function buildCallerKey(input: {
   return null;
 }
 
-/** First client IP from proxy headers (x-forwarded-for, cf-connecting-ip, x-real-ip). */
+const IP_RE = /^[0-9A-Fa-f:.]{2,45}$/;
+const validIp = (v: string | null | undefined): string | null => {
+  const t = v?.trim();
+  return t && IP_RE.test(t) ? t : null;
+};
+
+/**
+ * Client IP for rate limiting. cf-connecting-ip is set by Cloudflare (a client-sent value is
+ * overwritten), so it wins. Otherwise the LAST x-forwarded-for entry: proxies append the address
+ * they saw, while earlier entries are whatever the client sent (spoofable). Same rule as
+ * public.request_client_ip() in the database (v82).
+ */
 export function clientIpFrom(get: (name: string) => string | null): string | null {
-  const xff = get('x-forwarded-for');
-  const first = xff?.split(',')[0]?.trim();
-  if (first) return first;
-  return get('cf-connecting-ip')?.trim() || get('x-real-ip')?.trim() || null;
+  const cf = validIp(get('cf-connecting-ip'));
+  if (cf) return cf;
+  const last = get('x-forwarded-for')?.split(',').map((e) => e.trim()).filter(Boolean).pop();
+  return validIp(last) ?? validIp(get('x-real-ip'));
 }
 
 /** Friendly Romanian message for HTTP 429. */

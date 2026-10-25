@@ -185,8 +185,12 @@ async function main() {
   assert(buildCallerKey({}) === null, 'cheie: nimic -> null (doar limita business)');
   assert((buildCallerKey({ userId: 'x'.repeat(500) }) ?? '').length === 130, 'cheie: lungime limitată');
   const h = (m: Record<string, string>) => (n: string) => m[n] ?? null;
-  assert(clientIpFrom(h({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1' })) === '1.2.3.4', 'IP din x-forwarded-for');
-  assert(clientIpFrom(h({ 'cf-connecting-ip': '5.6.7.8' })) === '5.6.7.8', 'IP din cf-connecting-ip');
+  assert(clientIpFrom(h({ 'x-forwarded-for': '6.6.6.6, 1.2.3.4' })) === '1.2.3.4', 'IP: ultima intrare x-forwarded-for (prima e falsificabilă)');
+  assert(clientIpFrom(h({ 'x-forwarded-for': '6.6.6.6', 'cf-connecting-ip': '5.6.7.8' })) === '5.6.7.8', 'IP: cf-connecting-ip are prioritate');
+  assert(clientIpFrom(h({ 'cf-connecting-ip': 'evil', 'x-forwarded-for': '1.2.3.4' })) === '1.2.3.4', 'IP: cf invalid ignorat');
+  assert(clientIpFrom(h({ 'x-forwarded-for': '1.2.3.4, ' })) === '1.2.3.4', 'IP: intrări goale ignorate');
+  assert(clientIpFrom(h({ 'x-forwarded-for': '2001:db8::1' })) === '2001:db8::1', 'IP: IPv6');
+  assert(clientIpFrom(h({ 'x-forwarded-for': '<script>' })) === null, 'IP: valoare invalidă -> null');
   assert(clientIpFrom(h({})) === null, 'fără IP');
   assert(/peste 37 secunde/.test(rateLimitMessage('caller_minute', 37)), 'mesaj 429 pe minut');
   assert(/astăzi/.test(rateLimitMessage('caller_day', 3600)) && /business/.test(rateLimitMessage('business_day', 10)), 'mesaje 429 pe zi');
