@@ -5,10 +5,14 @@
  * Deletes the auth user with the service role; public.profiles and the
  * rows referencing it are removed by ON DELETE CASCADE. Business owners
  * lose their business profiles (and cascading business data) as well.
- * Before/after photo files (private bucket 'client-photos') are removed here first.
+ * Storage files are removed here first (rows cascade, files do not):
+ * before/after photos (private 'client-photos') and the public avatar, logo,
+ * video, gallery and staff photos. If any file step fails, the account is kept
+ * so the request can be retried.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
+import { accountPublicFolders, removeFolders, removePaths, StorageCleanupError } from './storageCleanup.ts';
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -38,8 +42,6 @@ Deno.serve(async (req) => {
 
   const admin = createClient(supabaseUrl, serviceKey);
 
-  // Pozele înainte/după din bucket-ul privat: rândurile se șterg în cascadă,
-  // fișierele nu — le ștergem aici, înainte de cont (ca un eșec să poată fi reîncercat).
   // 1) pozele contului ca și client  2) pozele clienților business-urilor contului.
   const { data: ownBiz, error: bizErr } = await admin
     .from('business_profiles')
@@ -54,9 +56,16 @@ Deno.serve(async (req) => {
   const { data: photos, error: photoErr } = await photoQuery;
   if (photoErr) return jsonResponse({ error: 'cleanup_failed', detail: photoErr.message }, 500);
   const paths = (photos ?? []).map((p: { storage_path: string }) => p.storage_path).filter(Boolean);
-  for (let i = 0; i < paths.length; i += 100) {
-    const { error: rmErr } = await admin.storage.from('client-photos').remove(paths.slice(i, i + 100));
-    if (rmErr) return jsonResponse({ error: 'cleanup_failed', detail: rmErr.message }, 500);
+
+  let removedFiles = 0;
+  try {
+    removedFiles += await removePaths(admin.storage.from('client-photos'), paths);
+    // 3) fișierele publice: avatar (<userId>/) și logo, galerie, video, poze echipă (<businessId>/).
+    removedFiles += await removeFolders((bucket) => admin.storage.from(bucket), accountPublicFolders(user.id, bizIds));
+  } catch (e) {
+    const detail = e instanceof StorageCleanupError ? e.message : String(e);
+    console.error('delete-account storage cleanup', detail);
+    return jsonResponse({ error: 'cleanup_failed', detail }, 500);
   }
 
   const { error: delErr } = await admin.auth.admin.deleteUser(user.id);
@@ -64,5 +73,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'delete_failed', detail: delErr.message }, 500);
   }
 
-  return jsonResponse({ ok: true });
+  return jsonResponse({ ok: true, removed_files: removedFiles });
 });
