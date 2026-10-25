@@ -34,7 +34,7 @@ import {
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { setPendingAuthRedirect } from '@/lib/auth-redirect';
 import { setAppMode } from '@/lib/appMode';
-import { buildPublicPageMeta, jsonLdText } from '@/lib/publicPageMeta';
+import { ANON_BUSINESS_COLUMNS, buildPublicPageMeta, jsonLdText } from '@/lib/publicPageMeta';
 import { loadPublicPageMetadata } from '@/lib/publicBusinessServer';
 import { shareBusinessLink } from '@/lib/shareBusiness';
 import { getPublicWebOrigin } from '@/lib/webBase';
@@ -209,7 +209,7 @@ export default function PublicBookScreen() {
       }
       const { data, error: err } = await supabase
         .from('business_profiles')
-        .select('*')
+        .select(ANON_BUSINESS_COLUMNS)
         .eq('public_code', code)
         .maybeSingle();
       if (err) {

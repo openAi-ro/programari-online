@@ -27,6 +27,8 @@ import {
   toExpoMetadata,
   truncate,
   type PublicBusiness,
+  ANON_BUSINESS_COLUMNS,
+  PUBLIC_BUSINESS_COLUMNS,
 } from './publicPageMeta';
 
 const hours = {
@@ -147,5 +149,12 @@ assert.ok(xml.startsWith('<?xml'));
 assert.equal((xml.match(/<url>/g) ?? []).length, 3);
 assert.ok(xml.includes('<loc>https://programari.expo.app/b/abc</loc>'));
 assert.ok(xml.includes('x%26y'));
+
+// 11a: meta SSR/sitemap (anon) folosesc doar coloane permise lui anon; coloanele private nu sunt expuse.
+const anonCols = new Set(ANON_BUSINESS_COLUMNS.split(','));
+for (const c of PUBLIC_BUSINESS_COLUMNS.split(',')) assert.ok(anonCols.has(c));
+for (const c of ['owner_user_id', 'auto_approve_returning', 'no_show_block_after', 'created_at', 'updated_at']) {
+  assert.ok(!anonCols.has(c));
+}
 
 console.log('publicPageMeta.test: ok');
