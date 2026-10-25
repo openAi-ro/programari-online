@@ -10,6 +10,9 @@
  *    Confirmation time = latest CONFIRMED row in notification_log for the appointment (written
  *    when the client is told it was approved, also for owner approvals of pending requests),
  *    else appointments.created_at (auto-approved bookings, clients without email/phone).
+ * 3) Retry: a channel (email / WhatsApp) whose send failed is retried on the next runs while
+ *    the appointment is still in its window, up to 3 attempts; a channel already sent is never
+ *    sent again. Rules and tests: ./retry.ts, ./retry.test.ts.
  *
  * Invoke with service role (cron / scheduled function).
  *
@@ -32,6 +35,7 @@ import {
   waTemplateName,
 } from '../_shared/notify.ts';
 import { soonKind, soonWindow } from './windows.ts';
+import { type Channel, channelsToSend, failedChannels, isFirstAttempt, shouldRetry } from './retry.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -107,7 +111,8 @@ async function processWindow(
   const outcomes: { id: string; ok: boolean; detail?: string; kind: string }[] = [];
 
   // Claim before sending: only the run that flips the flag sends (no double send if two
-  // invocations overlap). A failed send stays marked, as before.
+  // invocations overlap). If a channel failed and has attempts left, release() clears the
+  // flag again so the next run retries only that channel (see ./retry.ts).
   const claim = async (id: string): Promise<boolean> => {
     const rows = await sql`update public.appointments
            set ${sql(opts.flag)} = true, updated_at = now()
@@ -115,6 +120,12 @@ async function processWindow(
          returning id`;
     return rows.length > 0;
   };
+  const release = async (id: string): Promise<void> => {
+    await sql`update public.appointments
+           set ${sql(opts.flag)} = false, updated_at = now()
+         where id = ${id} and ${sql(opts.flag)} = true`;
+  };
+  const logType = opts.kind === '24h' ? 'REMINDER_24H' : 'REMINDER_SOON';
 
   // The old Meta template REMINDER_SOON says "in about 30 minutes"; the soon reminder only
   // goes to WhatsApp once a REMINDER_1H template is configured (WHATSAPP_TPL_REMINDER_1H).
@@ -148,22 +159,27 @@ async function processWindow(
           : appt.client_user_id
             ? appt.profile_phone ?? null
             : null;
-      await notifyClientChannels({
-        email: appt.client_email,
-        phone: wantsWhatsapp ? phone : null,
-        subject: copy.subject,
-        text: copy.text,
-        wa: copy.wa,
-        log: {
-          admin,
-          type: opts.kind === '24h' ? 'REMINDER_24H' : 'REMINDER_SOON',
-          businessId: appt.business_id,
-          appointmentId: appt.id,
-        },
-      });
+      const planned: Channel[] = [];
+      if (appt.client_email) planned.push('email');
+      if (wantsWhatsapp && phone) planned.push('whatsapp');
+      const log = await sql<{ channel: string; status: string | null }[]>`
+        select channel, status from public.notification_log
+         where appointment_id = ${appt.id} and type = ${logType}`;
+      const toSend = channelsToSend(planned, log);
 
-      // Best-effort client push (even if email/phone missing); do not fail reminder
-      if (appt.client_user_id) {
+      const results = toSend.length
+        ? await notifyClientChannels({
+            email: toSend.includes('email') ? appt.client_email : null,
+            phone: toSend.includes('whatsapp') ? phone : null,
+            subject: copy.subject,
+            text: copy.text,
+            wa: copy.wa,
+            log: { admin, type: logType, businessId: appt.business_id, appointmentId: appt.id },
+          })
+        : [];
+
+      // Best-effort client push, once (first attempt only); does not fail the reminder.
+      if (appt.client_user_id && isFirstAttempt(log)) {
         try {
           await sendExpoPushToUser(admin, appt.client_user_id, {
             title: copy.subject,
@@ -176,18 +192,29 @@ async function processWindow(
         }
       }
 
+      const failedNow = failedChannels(results);
+      const retry = shouldRetry(failedNow, log);
+      if (retry) await release(appt.id);
+
       outcomes.push({
         id: appt.id,
-        ok: true,
+        ok: failedNow.length === 0,
         kind: soon ?? opts.kind,
-        ...(soonWhatsappReady ? {} : { detail: 'whatsapp_skipped_no_1h_template' }),
+        ...(failedNow.length
+          ? { detail: `failed:${failedNow.join(',')}${retry ? ' retry_scheduled' : ' gave_up'}` }
+          : soonWhatsappReady
+            ? {}
+            : { detail: 'whatsapp_skipped_no_1h_template' }),
       });
     } catch (e) {
+      // Unexpected error (DB, provider exception): release so the next run retries; channels
+      // already logged as sent are skipped then, so nothing is sent twice.
+      await release(appt.id).catch((relErr) => console.error('reminder release failed', appt.id, relErr));
       outcomes.push({
         id: appt.id,
         ok: false,
         kind: soon ?? opts.kind,
-        detail: e instanceof Error ? e.message : String(e),
+        detail: `${e instanceof Error ? e.message : String(e)} retry_scheduled`,
       });
     }
   }
