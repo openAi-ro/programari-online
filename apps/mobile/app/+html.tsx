@@ -39,7 +39,7 @@ export default function Root({ children }: { children: ReactNode }) {
         {/* Register SW only on https or localhost — safe for Firebase Hosting / local web. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var h=location.hostname;var ok=location.protocol==='https:'||h==='localhost'||h==='127.0.0.1';if(!ok||!('serviceWorker' in navigator))return;window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}catch(e){}})();`,
+            __html: `(function(){try{var h=location.hostname;var ok=location.protocol==='https:'||h==='localhost'||h==='127.0.0.1';if(!ok||!('serviceWorker' in navigator))return;window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(function(r){r.update();}).catch(function(){});});}catch(e){}})();`,
           }}
         />
       </head>

@@ -1,9 +1,12 @@
 /* Programări Online — service worker (PWA shell)
- * Cache-first for static shell; network-first for same-origin API-ish GETs.
- * Never caches Supabase or third-party APIs.
+ * Navigari si "/" : network-first (cache doar offline), ca shell-ul nou sa ajunga imediat.
+ * Asset-uri cu hash (/_expo/static/...): cache-first (continut imuabil).
+ * Restul (sw.js, manifest, iconite, fisiere fara hash): network-first, cache doar ca rezerva offline.
+ * Nu intercepteaza Supabase, Google, Expo sau alte origini.
  */
-const CACHE_VERSION = 'programari-shell-v3';
-const SHELL_URLS = [
+
+const CACHE_VERSION = 'programari-shell-v4';
+const OFFLINE_URLS = [
   '/',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
@@ -15,7 +18,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_VERSION)
-      .then((cache) => cache.addAll(SHELL_URLS).catch(() => undefined))
+      .then((cache) =>
+        cache.addAll(OFFLINE_URLS.map((u) => new Request(u, { cache: 'reload' }))).catch(() => undefined)
+      )
       .then(() => self.skipWaiting())
   );
 });
@@ -24,9 +29,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
-      )
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -39,13 +42,28 @@ function isSupabaseOrThirdParty(url) {
   return false;
 }
 
-function isShellAsset(url) {
-  const path = url.pathname;
-  if (path === '/') return true;
-  if (path === '/manifest.webmanifest') return true;
-  if (path.startsWith('/icons/')) return true;
-  if (/\.(js|css|woff2?|ttf|png|jpg|jpeg|webp|svg|ico)$/i.test(path)) return true;
-  return false;
+function isNavigation(req, url) {
+  return req.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html';
+}
+
+/** Fisierele generate de export au hash in nume (ex. entry-<hash>.js), deci nu se schimba niciodata. */
+function isHashedAsset(url) {
+  return url.pathname.startsWith('/_expo/static/') && /[-.][0-9a-f]{8,}\.[a-z0-9]+$/i.test(url.pathname);
+}
+
+function putInCache(req, res) {
+  if (!res || !res.ok) return;
+  const copy = res.clone();
+  caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => undefined);
+}
+
+function networkFirst(req, { store, fallback }) {
+  return fetch(req)
+    .then((res) => {
+      if (store) putInCache(req, res);
+      return res;
+    })
+    .catch(() => caches.match(req).then((cached) => cached || fallback()));
 }
 
 self.addEventListener('fetch', (event) => {
@@ -58,45 +76,35 @@ self.addEventListener('fetch', (event) => {
   } catch {
     return;
   }
-
   if (isSupabaseOrThirdParty(url)) return;
-
-  // Cross-origin: do not intercept
   if (url.origin !== self.location.origin) return;
 
-  if (isShellAsset(url)) {
-    // Cache-first for static shell
+  if (isNavigation(req, url)) {
     event.respondWith(
-      caches.match(req).then((cached) => {
-        if (cached) return cached;
-        return fetch(req)
-          .then((res) => {
-            if (res && res.ok) {
-              const copy = res.clone();
-              caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => undefined);
-            }
-            return res;
-          })
-          .catch(() => offlineFallback());
+      networkFirst(req, {
+        store: true,
+        fallback: () => caches.match('/').then((shell) => shell || offlineFallback()),
       })
     );
     return;
   }
 
-  // Network-first for navigations / other same-origin GETs (API-ish)
-  event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (res && res.ok && req.mode === 'navigate') {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => undefined);
-        }
-        return res;
-      })
-      .catch(() =>
-        caches.match(req).then((cached) => cached || (req.mode === 'navigate' ? offlineFallback() : undefined))
+  if (isHashedAsset(url)) {
+    event.respondWith(
+      caches.match(req).then(
+        (cached) =>
+          cached ||
+          fetch(req).then((res) => {
+            putInCache(req, res);
+            return res;
+          })
       )
-  );
+    );
+    return;
+  }
+
+  if (url.pathname === '/sw.js') return;
+  event.respondWith(networkFirst(req, { store: false, fallback: () => Response.error() }));
 });
 
 function offlineFallback() {
