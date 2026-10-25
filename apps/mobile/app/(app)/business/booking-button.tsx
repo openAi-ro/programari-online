@@ -17,7 +17,7 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { getBookingPaths } from '@/lib/bookingLink';
 import { buttonSnippet, iframeSnippet } from '@/lib/bookingButton';
 import { shareBusinessLink } from '@/lib/shareBusiness';
-import { trKey, useT, type TrKey } from '@/lib/i18n';
+import { trKey, useLanguage, useT, type TrKey } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { getCurrentUser } from '@/lib/currentUser';
@@ -37,6 +37,7 @@ export default function BookingButtonScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
+  const { lang } = useLanguage();
   const insets = useSafeAreaInsets();
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,8 +67,12 @@ export default function BookingButtonScreen() {
   const codes = useMemo(() => {
     if (!business?.public_code) return null;
     const webUrl = getBookingPaths(business.public_code).webUrl;
-    return { webUrl, button: buttonSnippet(webUrl), iframe: iframeSnippet(webUrl, business.name ?? '') };
-  }, [business]);
+    return {
+      webUrl,
+      button: buttonSnippet(webUrl, lang),
+      iframe: iframeSnippet(webUrl, business.name ?? '', lang),
+    };
+  }, [business, lang]);
 
   async function copy(key: CopyKey, text: string) {
     await Clipboard.setStringAsync(text);

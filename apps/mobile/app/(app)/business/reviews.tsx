@@ -12,7 +12,7 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { useT } from '@/lib/i18n';
+import { localeTag, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { fetchMyBusinessId } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
@@ -113,7 +113,7 @@ export default function BusinessReviewsScreen() {
               {'★'.repeat(Math.min(5, Math.max(1, Math.round(Number(row.rating) || 0))))}
               <Text style={{ color: t.colors.textMuted }}>
                 {'  '}
-                {new Date(row.created_at).toLocaleDateString()}
+                {new Date(row.created_at).toLocaleDateString(localeTag())}
               </Text>
             </Text>
             {row.comment ? (

@@ -9,6 +9,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { authorizeCron } from '../_shared/secret-auth.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
+import { parseNotifyLang } from '../_shared/notify.ts';
+import { referralRewardPush } from './copy.ts';
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -69,11 +71,15 @@ Deno.serve(async (req) => {
 
     const reward = business.referral_reward_text || '';
     try {
+      const { data: referrer } = await admin
+        .from('profiles')
+        .select('language')
+        .eq('id', ref.referrer_user_id)
+        .maybeSingle();
+      const copy = referralRewardPush(parseNotifyLang(referrer?.language), business.name, reward);
       await sendExpoPushToUser(admin, ref.referrer_user_id, {
-        title: 'Ai primit o recompensă!',
-        body: reward
-          ? `Prietenul invitat a fost la ${business.name}. Recompensa ta: ${reward}.`
-          : `Prietenul invitat a fost la ${business.name}. Cere recompensa la salon!`,
+        title: copy.title,
+        body: copy.body,
         channelId: 'cereri_heads',
         data: { screen: 'my-appointments' },
       });

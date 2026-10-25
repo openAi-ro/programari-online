@@ -1,5 +1,6 @@
 import { maxBookingDate, toYmd } from './bookingRules';
 import { formatInTimeZone } from './timezone';
+import type { AppLanguage } from './language';
 import type { BusinessProfile, DayKey, WorkingHours } from './types';
 
 /** Săptămâna începe luni. */
@@ -18,6 +19,32 @@ export const CALENDAR_MONTHS_RO = [
   'Noiembrie',
   'Decembrie',
 ] as const;
+
+export const CALENDAR_WEEKDAYS_EN = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
+export const CALENDAR_MONTHS_EN = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const;
+
+/** Numele zilelor (luni primul) și lunilor pentru calendar, în limba aplicației. */
+export function calendarNames(lang: AppLanguage): {
+  weekdays: readonly string[];
+  months: readonly string[];
+} {
+  return lang === 'en'
+    ? { weekdays: CALENDAR_WEEKDAYS_EN, months: CALENDAR_MONTHS_EN }
+    : { weekdays: CALENDAR_WEEKDAYS_RO, months: CALENDAR_MONTHS_RO };
+}
 
 const DAY_KEYS: DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 

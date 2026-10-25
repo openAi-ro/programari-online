@@ -628,6 +628,8 @@ export const en: typeof ro = {
   'book.pickServiceTitle': 'Pick the service (you can tick several)',
   'book.comboSummary': 'Combined: {name} · {duration} · {price}',
   'book.dateLabel': 'Booking date',
+  'calendar.prevMonth': 'Previous month',
+  'calendar.nextMonth': 'Next month',
   'book.staffLine': 'Specialist: {staff}{service}',
   'book.pickTime': 'Pick the time',
   'book.chosenTime': 'Chosen time',

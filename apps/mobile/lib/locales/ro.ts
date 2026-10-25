@@ -626,6 +626,8 @@ export const ro = {
   'book.pickServiceTitle': 'Alege serviciul (poți bifa mai multe)',
   'book.comboSummary': 'Combinat: {name} · {duration} · {price}',
   'book.dateLabel': 'Data programării',
+  'calendar.prevMonth': 'Luna anterioară',
+  'calendar.nextMonth': 'Luna următoare',
   'book.staffLine': 'Specialist: {staff}{service}',
   'book.pickTime': 'Alege ora',
   'book.chosenTime': 'Ora aleasă',

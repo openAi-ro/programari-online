@@ -86,7 +86,7 @@ import {
   whatsAppUrl,
 } from '@/lib/businessPage';
 import { formatTimeRange } from '@/lib/workingHoursRules';
-import { trKey, useT } from '@/lib/i18n';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { markWaitlistBooked } from '@/lib/notify-client';
 import { normalizeWalkinContact } from '@/lib/walkinRules';
@@ -113,6 +113,7 @@ export default function PublicBookScreen() {
   const t = useTheme();
   const goBack = useBack();
   const tr = useT();
+  const { lang } = useLanguage();
   const { publicCode, embed } = useLocalSearchParams<{ publicCode: string; embed?: string }>();
   // ?embed=1: pagina e într-un iframe pe site-ul salonului (ecranul „Butonul tău de programare”).
   const embedded = isEmbedParam(embed);
@@ -652,7 +653,7 @@ export default function PublicBookScreen() {
   const descriptionText = effectiveDescription({
     description: business.description,
     name: business.name,
-    categoryLabel: categoryLabelForKey(business.category, 'ro'),
+    categoryLabel: categoryLabelForKey(business.category, lang),
     city: business.city,
     county: business.county,
     serviceNames: services.map((s) => s.name),

@@ -11,7 +11,7 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { useT } from '@/lib/i18n';
+import { localeTag, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
@@ -184,7 +184,7 @@ export default function BusinessWaitlistScreen() {
               {row.status === 'notified' ? (
                 <Text style={[styles.meta, { color: t.colors.accent }]}>
                   {row.notified_at
-                    ? tr('wl.notifiedAt', { when: new Date(row.notified_at).toLocaleString() })
+                    ? tr('wl.notifiedAt', { when: new Date(row.notified_at).toLocaleString(localeTag()) })
                     : tr('wl.statusNotified')}
                 </Text>
               ) : null}

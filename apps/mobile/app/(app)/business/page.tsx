@@ -33,7 +33,7 @@ import {
   removeGalleryUrl,
 } from '@/lib/businessPage';
 import { getCurrentUser } from '@/lib/currentUser';
-import { trKey, useT } from '@/lib/i18n';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { useBack } from '@/lib/nav';
 import { normalizePhoneE164 } from '@/lib/phone';
@@ -45,6 +45,7 @@ export default function BusinessPageSettingsScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
+  const { lang } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [serviceNames, setServiceNames] = useState<string[]>([]);
@@ -167,7 +168,7 @@ export default function BusinessPageSettingsScreen() {
     setDescription(
       buildAutoDescription({
         name: business.name,
-        categoryLabel: categoryLabelForKey(business.category, 'ro'),
+        categoryLabel: categoryLabelForKey(business.category, lang),
         city: business.city,
         county: business.county,
         serviceNames,

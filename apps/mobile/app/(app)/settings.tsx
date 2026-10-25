@@ -34,7 +34,7 @@ import {
   setThemePreference,
   type ThemePreference,
 } from '@/lib/themePreference';
-import { trKey, useLanguage, useT } from '@/lib/i18n';
+import { localeTag, trKey, useLanguage, useT } from '@/lib/i18n';
 import { getLanguageSync, setLanguage } from '@/lib/language';
 import { confirmAction } from '@/lib/confirm';
 import { getPublicWebOrigin } from '@/lib/webBase';
@@ -1770,7 +1770,7 @@ export default function SettingsScreen() {
                     <Badge tone="accent" icon="calendar-outline">
                       {tr('gcal.connected')}
                       {gcalStatus?.last_synced_at
-                        ? ` · ${tr('gcal.lastSync', { when: new Date(gcalStatus.last_synced_at).toLocaleString() })}`
+                        ? ` · ${tr('gcal.lastSync', { when: new Date(gcalStatus.last_synced_at).toLocaleString(localeTag()) })}`
                         : ''}
                     </Badge>
                     {hasStaff ? (

@@ -6,8 +6,7 @@ import { useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   addMonths,
-  CALENDAR_MONTHS_RO,
-  CALENDAR_WEEKDAYS_RO,
+  calendarNames,
   canGoNextMonth,
   canGoPrevMonth,
   isDayDisabled,
@@ -15,6 +14,7 @@ import {
   monthOfYmd,
   type CalendarRules,
 } from '@/lib/bookingCalendar';
+import { useLanguage } from '@/lib/i18n';
 
 const SELECTED_BG = '#2dd4bf';
 const SELECTED_TEXT = '#0b1220';
@@ -28,6 +28,8 @@ type Props = CalendarRules & {
 /** Calendar lunar pentru rezervare: luni primul, zilele nerezervabile gri. */
 export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates, schedules }: Props) {
   const t = useTheme();
+  const { lang, t: tr } = useLanguage();
+  const names = calendarNames(lang);
   const [view, setView] = useState(() => monthOfYmd(value || minYmd));
 
   // Când data aleasă se schimbă din afară (ex. prima zi liberă), arătăm luna ei.
@@ -48,7 +50,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Luna anterioară"
+          accessibilityLabel={tr('calendar.prevMonth')}
           accessibilityState={{ disabled: !prevOn }}
           disabled={!prevOn}
           onPress={() => setView((v) => addMonths(v, -1))}
@@ -58,11 +60,11 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
           <Ionicons name="chevron-back" size={20} color={t.colors.text} />
         </Pressable>
         <Text style={[styles.title, { color: t.colors.text }]}>
-          {CALENDAR_MONTHS_RO[view.month]} {view.year}
+          {names.months[view.month]} {view.year}
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Luna următoare"
+          accessibilityLabel={tr('calendar.nextMonth')}
           accessibilityState={{ disabled: !nextOn }}
           disabled={!nextOn}
           onPress={() => setView((v) => addMonths(v, 1))}
@@ -74,7 +76,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
       </View>
 
       <View style={styles.row}>
-        {CALENDAR_WEEKDAYS_RO.map((d) => (
+        {names.weekdays.map((d) => (
           <View key={d} style={styles.cell}>
             <Text style={[styles.weekday, { color: t.colors.textMuted }]}>{d}</Text>
           </View>
