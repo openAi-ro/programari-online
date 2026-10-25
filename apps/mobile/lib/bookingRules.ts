@@ -47,6 +47,42 @@ export function firstBookableDateYmd(opts: {
   return todayYmd;
 }
 
+/**
+ * Prima zi rezervabilă pentru specialiștii dați (cea mai devreme dintre ei).
+ * Listă goală = programul salonului (fără echipă).
+ */
+export function firstBookableDateForStaff(
+  business: Pick<
+    BusinessProfile,
+    | 'timezone'
+    | 'working_hours'
+    | 'break_hours'
+    | 'blocked_dates'
+    | 'min_notice_minutes'
+    | 'max_advance_days'
+    | 'buffer_minutes'
+  >,
+  members: readonly Staff[],
+  sessionDurationMinutes: number
+): string {
+  const pool: readonly (Staff | null)[] = members.length > 0 ? members : [null];
+  return pool
+    .map((member) => {
+      const hours = staffSchedule(member, business);
+      return firstBookableDateYmd({
+        timezone: business.timezone,
+        workingHours: hours.workingHours,
+        breakHours: hours.breakHours,
+        blockedDates: business.blocked_dates ?? [],
+        minNoticeMinutes: business.min_notice_minutes ?? 0,
+        maxAdvanceDays: business.max_advance_days ?? 90,
+        sessionDurationMinutes,
+        bufferMinutes: business.buffer_minutes ?? 0,
+      });
+    })
+    .reduce((a, b) => (b < a ? b : a));
+}
+
 export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }

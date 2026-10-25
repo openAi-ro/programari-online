@@ -26,7 +26,7 @@ import {
 import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   canClientReschedule,
-  firstBookableDateYmd,
+  firstBookableDateForStaff,
   mapBookingRpcError,
   maxBookingDate,
   notBeforeUtc,
@@ -178,6 +178,14 @@ export default function BookScreen() {
 
   const durationMinutes =
     combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
+
+  // Data implicită urmează specialistul și serviciile alese (nu primul din echipă).
+  useEffect(() => {
+    if (!business || !stepsReady) return;
+    setDateLocal(
+      firstBookableDateForStaff(business, selectedStaff ? [selectedStaff] : [], durationMinutes)
+    );
+  }, [business, stepsReady, selectedStaff, durationMinutes]);
 
   const hasStaffChoice = staffList.length > 1;
   const hasServices = services.length > 0;
@@ -387,21 +395,6 @@ export default function BookScreen() {
         setLoading(false);
         return;
       }
-
-      const hours = staffSchedule(team[0] ?? null, biz);
-      setDateLocal(
-        firstBookableDateYmd({
-          timezone: biz.timezone,
-          workingHours: hours.workingHours,
-          breakHours: hours.breakHours,
-          blockedDates: biz.blocked_dates ?? [],
-          minNoticeMinutes: biz.min_notice_minutes ?? 0,
-          maxAdvanceDays: biz.max_advance_days ?? 90,
-          sessionDurationMinutes:
-            list[0]?.duration_minutes ?? biz.session_duration_minutes ?? 60,
-          bufferMinutes: biz.buffer_minutes ?? 0,
-        })
-      );
 
       if (rescheduleId) {
         const apt = rescheduleAptRes?.data;

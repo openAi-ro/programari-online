@@ -2,9 +2,9 @@
  * Run: npx tsx lib/bookingRules.test.ts
  * from apps/mobile
  */
-import { firstBookableDateYmd, maxBookingDate } from './bookingRules';
+import { firstBookableDateForStaff, firstBookableDateYmd, maxBookingDate } from './bookingRules';
 import { addOneDay, formatInTimeZone } from './timezone';
-import type { WorkingHours } from './types';
+import type { BusinessProfile, DayKey, Staff, WorkingHours } from './types';
 
 let passed = 0;
 let failed = 0;
@@ -81,6 +81,44 @@ assert(
   'maxBookingDate numără zilele pe calendarul firmei',
   `expected ${expectedMax}, got ${formatInTimeZone(maxD, TZ, 'yyyy-MM-dd')}`,
 );
+
+// Data implicită urmează specialistul ales, nu primul din echipă (bug #1).
+const bizHours = {
+  timezone: TZ,
+  working_hours: openEveryDay,
+  break_hours: noBreak,
+  blocked_dates: [],
+  min_notice_minutes: 0,
+  max_advance_days: 30,
+  buffer_minutes: 0,
+} as Pick<
+  BusinessProfile,
+  'timezone' | 'working_hours' | 'break_hours' | 'blocked_dates' | 'min_notice_minutes' | 'max_advance_days' | 'buffer_minutes'
+>;
+let plus3 = todayTz;
+for (let i = 0; i < 3; i += 1) plus3 = addOneDay(plus3);
+const dayKeys: DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const plus3Key = dayKeys[new Date(`${plus3}T12:00:00Z`).getUTCDay()];
+const onlyPlus3 = Object.fromEntries(
+  dayKeys.map((k) => [k, k === plus3Key ? { closed: false, start: '09:00', end: '18:00' } : { closed: true }])
+) as WorkingHours;
+const staffLate = { id: 'late', working_hours: onlyPlus3, break_hours: noBreak } as Staff;
+const staffAlways = { id: 'always', working_hours: null, break_hours: null } as unknown as Staff;
+const salonFirst = firstBookableDateYmd({
+  timezone: TZ,
+  workingHours: openEveryDay,
+  breakHours: noBreak,
+  maxAdvanceDays: 30,
+  sessionDurationMinutes: 60,
+});
+const forLate = firstBookableDateForStaff(bizHours, [staffLate], 60);
+assert(forLate === plus3, 'data implicită = prima zi a specialistului ales', `expected ${plus3}, got ${forLate}`);
+const forAlways = firstBookableDateForStaff(bizHours, [staffAlways], 60);
+assert(forAlways === salonFirst, 'specialist fără program propriu -> programul salonului', `expected ${salonFirst}, got ${forAlways}`);
+const forAnyone = firstBookableDateForStaff(bizHours, [staffLate, staffAlways], 60);
+assert(forAnyone === salonFirst, 'Oricine disponibil -> cea mai devreme zi din echipă', `expected ${salonFirst}, got ${forAnyone}`);
+const forNoTeam = firstBookableDateForStaff(bizHours, [], 60);
+assert(forNoTeam === salonFirst, 'fără echipă -> programul salonului', `expected ${salonFirst}, got ${forNoTeam}`);
 
 console.log(`bookingRules: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

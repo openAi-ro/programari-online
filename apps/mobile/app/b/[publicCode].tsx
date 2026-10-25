@@ -39,7 +39,7 @@ import { loadPublicPageMetadata } from '@/lib/publicBusinessServer';
 import { shareBusinessLink } from '@/lib/shareBusiness';
 import { getPublicWebOrigin } from '@/lib/webBase';
 import {
-  firstBookableDateYmd,
+  firstBookableDateForStaff,
   mapBookingRpcError,
   notBeforeUtc,
   staffSchedule,
@@ -181,6 +181,15 @@ export default function PublicBookScreen() {
   const durationMinutes =
     combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
 
+  // Data implicită urmează alegerea: specialistul ales sau, la „Oricine disponibil”,
+  // prima zi în care lucrează măcar un specialist eligibil pentru serviciile alese.
+  useEffect(() => {
+    if (!business || loading) return;
+    setDateLocal(
+      firstBookableDateForStaff(business, selectedStaff ? [selectedStaff] : eligibleStaff, durationMinutes)
+    );
+  }, [business, loading, selectedStaff, eligibleStaff, durationMinutes]);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, next) => {
@@ -262,24 +271,6 @@ export default function PublicBookScreen() {
         if (p?.staff_id && p.phone) phones[p.staff_id] = p.phone;
       }
       setStaffPhones(phones);
-
-      // Implicit „Oricine disponibil”: prima zi în care lucrează măcar un specialist.
-      const pool = team.length > 0 ? staffForServices(team, offered, list[0] ? [list[0].id] : []) : [];
-      const firstDays = (pool.length > 0 ? pool : [null]).map((member) => {
-        const hours = staffSchedule(member, biz);
-        return firstBookableDateYmd({
-          timezone: biz.timezone,
-          workingHours: hours.workingHours,
-          breakHours: hours.breakHours,
-          blockedDates: biz.blocked_dates ?? [],
-          minNoticeMinutes: biz.min_notice_minutes ?? 0,
-          maxAdvanceDays: biz.max_advance_days ?? 90,
-          sessionDurationMinutes:
-            list[0]?.duration_minutes ?? biz.session_duration_minutes ?? 60,
-          bufferMinutes: biz.buffer_minutes ?? 0,
-        });
-      });
-      setDateLocal(firstDays.reduce((a, b) => (b < a ? b : a)));
 
       const row = Array.isArray(rate) ? rate[0] : rate;
       setRating(
