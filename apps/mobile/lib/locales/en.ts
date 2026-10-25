@@ -675,6 +675,7 @@ export const en: typeof ro = {
   'req.notifBody': 'You have a request from {contact}. Open Requests to reply.',
   'req.newClient': 'New client',
   'req.postponeFailed': 'Postponing failed.',
+  'req.postponeSlotTaken': 'The new time would overlap another appointment. Pick another time with Move.',
   'req.hourOne': 'hour',
   'req.hours': 'hours',
   'req.postponedBy': 'The booking was postponed by {label}. The client was notified.',

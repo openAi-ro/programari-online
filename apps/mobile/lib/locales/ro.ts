@@ -673,6 +673,7 @@ export const ro = {
   'req.notifBody': 'Ai o cerere de la {contact}. Deschide Cereri pentru a răspunde.',
   'req.newClient': 'Client nou',
   'req.postponeFailed': 'Amânarea a eșuat.',
+  'req.postponeSlotTaken': 'Noua oră s-ar suprapune cu altă programare. Alege altă oră din Mută.',
   'req.hourOne': 'oră',
   'req.hours': 'ore',
   'req.postponedBy': 'Programarea a fost amânată cu {label}. Clientul a fost notificat.',

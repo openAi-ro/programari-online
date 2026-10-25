@@ -4,7 +4,9 @@
  * Body: { appointment_id, hours: 1 | 2 }
  * Auth: business owner JWT (authorizeNotifyRequest) OR service role / webhook secret.
  *
- * Shifts start_at and end_at by hours, resets reminder_sent, notifies client.
+ * Shifts start_at and end_at by hours via postpone_appointment_checked (v79: refuses with
+ * 409 slot_taken if the new time overlaps another appointment of the same specialist or a
+ * Google busy block), resets reminders, notifies client.
  *
  * URL: https://<ref>.supabase.co/functions/v1/notify-postpone
  */
@@ -60,7 +62,7 @@ Deno.serve(async (req) => {
   if (!appointmentId) {
     return jsonResponse({ error: 'missing_appointment_id' }, 400);
   }
-  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours < 1 || hours > 12) {
+  if (typeof hours !== 'number' || !Number.isInteger(hours) || hours < 1 || hours > 12) {
     return jsonResponse({ error: 'invalid_hours', detail: 'hours must be 1-12' }, 400);
   }
 
@@ -77,46 +79,22 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: authResult.error }, authResult.status);
   }
 
-  const { data: live, error: liveErr } = await admin
-    .from('appointments')
-    .select('*')
-    .eq('id', appointmentId)
-    .maybeSingle();
+  // Approved or pending only; the move and the overlap check run under one lock in SQL.
+  const { data: live, error: updErr } = await admin.rpc('postpone_appointment_checked', {
+    p_appointment_id: appointmentId,
+    p_hours: hours,
+  });
 
-  if (liveErr || !live) {
-    return jsonResponse({ error: 'appointment_not_found' }, 404);
-  }
-
-  // Prefer approved; also allow pending for simple postpone before confirmation
-  if (live.status !== 'approved' && live.status !== 'pending') {
-    return jsonResponse(
-      { error: 'status_not_postponeable', status: live.status },
-      400
-    );
-  }
-
-  const ms = hours * 60 * 60 * 1000;
-  const newStart = new Date(new Date(live.start_at).getTime() + ms).toISOString();
-  const newEnd = new Date(new Date(live.end_at).getTime() + ms).toISOString();
-
-  const { data: updated, error: updErr } = await admin
-    .from('appointments')
-    .update({
-      start_at: newStart,
-      end_at: newEnd,
-      reminder_sent: false,
-      reminder_24h_sent: false,
-      attendance_confirmed: false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', live.id)
-    .select('*')
-    .maybeSingle();
-
-  if (updErr || !updated) {
+  if (updErr || !live) {
+    const msg = updErr?.message ?? '';
+    if (msg.includes('slot_taken')) return jsonResponse({ error: 'slot_taken' }, 409);
+    if (msg.includes('appointment_not_found')) return jsonResponse({ error: 'appointment_not_found' }, 404);
+    if (msg.includes('status_not_postponeable')) return jsonResponse({ error: 'status_not_postponeable' }, 400);
     console.error('postpone update failed', updErr);
-    return jsonResponse({ error: 'update_failed', detail: updErr?.message }, 500);
+    return jsonResponse({ error: 'update_failed', detail: msg }, 500);
   }
+  const newStart: string = live.start_at;
+  const newEnd: string = live.end_at;
 
   const { data: business } = await admin
     .from('business_profiles')

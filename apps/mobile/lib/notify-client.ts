@@ -1,3 +1,4 @@
+import { trKey } from './i18n';
 import { getLanguageSync } from './language';
 import { supabase } from './supabase';
 import type { Appointment } from './types';
@@ -29,6 +30,20 @@ export async function invokeDecisionNotify(
   return { ok: true, data };
 }
 
+/** La non-2xx, supabase-js dă o eroare generică; codul real e în corpul din error.context. */
+async function functionErrorCode(error: unknown): Promise<string | null> {
+  const context = (error as { context?: { clone?: () => Response; json?: () => Promise<unknown> } } | null)
+    ?.context;
+  if (!context || typeof context.json !== 'function') return null;
+  try {
+    const res = typeof context.clone === 'function' ? context.clone() : context;
+    const body = (await res.json!()) as { error?: unknown } | null;
+    return body && typeof body.error === 'string' ? body.error : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Amână programarea cu 1-12h și notifică clientul (WhatsApp/email). */
 export async function invokePostpone(
   appointmentId: string,
@@ -40,7 +55,11 @@ export async function invokePostpone(
 
   if (error) {
     console.warn('notify-postpone invoke failed', error.message);
-    return { ok: false, error: error.message };
+    const code = await functionErrorCode(error);
+    return {
+      ok: false,
+      error: code === 'slot_taken' ? trKey('req.postponeSlotTaken') : trKey('req.postponeFailed'),
+    };
   }
 
   const payload = data as {
