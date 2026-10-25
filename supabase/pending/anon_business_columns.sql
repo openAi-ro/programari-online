@@ -1,4 +1,4 @@
--- v81 (11a): anon vede doar coloanele publice din business_profiles (cele afișate pe /b/<cod>,
+-- (11a, NEAPLICATĂ; la aplicare: mută în migrations/ cu timestamp curent): anon vede doar coloanele publice din business_profiles (cele afișate pe /b/<cod>,
 -- în browse, meta SSR și sitemap). Ascunse: owner_user_id, auto_approve_returning,
 -- no_show_block_after, created_at, updated_at. authenticated rămâne neschimbat.
 -- Lista trebuie să rămână identică cu ANON_BUSINESS_COLUMNS (apps/mobile/lib/publicPageMeta.ts).
