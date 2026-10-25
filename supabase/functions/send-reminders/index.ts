@@ -13,6 +13,9 @@
  * 3) Retry: a channel (email / WhatsApp) whose send failed is retried on the next runs while
  *    the appointment is still in its window, up to 3 attempts; a channel already sent is never
  *    sent again. Rules and tests: ./retry.ts, ./retry.test.ts.
+ *    Each channel's notification_log row is reserved ('sending') BEFORE the provider call and
+ *    updated with the outcome after it; a row left in 'sending' (run died / log update failed)
+ *    counts as sent, so a message is never sent twice (at most once).
  *
  * Invoke with service role (cron / scheduled function).
  *
@@ -27,11 +30,15 @@ import postgres from 'npm:postgres@3.4.5';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { authorizeCron } from '../_shared/secret-auth.ts';
 import {
+  maskRecipient,
   messageReminder,
   messageReminder24h,
-  notifyClientChannels,
+  notificationLogResult,
   notifyLocale,
   parseNotifyLang,
+  sendEmail,
+  sendWhatsApp,
+  type SendResult,
   waTemplateName,
 } from '../_shared/notify.ts';
 import { soonKind, soonWindow } from './windows.ts';
@@ -167,16 +174,27 @@ async function processWindow(
          where appointment_id = ${appt.id} and type = ${logType}`;
       const toSend = channelsToSend(planned, log);
 
-      const results = toSend.length
-        ? await notifyClientChannels({
-            email: toSend.includes('email') ? appt.client_email : null,
-            phone: toSend.includes('whatsapp') ? phone : null,
-            subject: copy.subject,
-            text: copy.text,
-            wa: copy.wa,
-            log: { admin, type: logType, businessId: appt.business_id, appointmentId: appt.id },
-          })
-        : [];
+      const results: SendResult[] = [];
+      for (const channel of toSend) {
+        const to = channel === 'email' ? appt.client_email! : phone!;
+        // Reserve the log row before sending (see header): no duplicate if anything fails after.
+        const [reserved] = await sql<{ id: string }[]>`
+          insert into public.notification_log
+                 (business_id, appointment_id, channel, type, to_masked, status)
+          values (${appt.business_id}, ${appt.id}, ${channel}, ${logType}, ${maskRecipient(to)}, 'sending')
+          returning id`;
+        const r =
+          channel === 'email'
+            ? await sendEmail(to, copy.subject, copy.text)
+            : await sendWhatsApp(to, copy.text, copy.wa ? { template: copy.wa } : undefined);
+        results.push(r);
+        const f = notificationLogResult(to, r);
+        await sql`update public.notification_log
+                     set status = ${f.status}, template = ${f.template}, wamid = ${f.wamid},
+                         error_code = ${f.error_code}, error_message = ${f.error_message},
+                         updated_at = now()
+                   where id = ${reserved.id}`;
+      }
 
       // Best-effort client push, once (first attempt only); does not fail the reminder.
       if (appt.client_user_id && isFirstAttempt(log)) {
@@ -242,7 +260,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'server_misconfigured' }, 500);
   }
 
-  // admin is still used by the shared helpers (notification_log, push tokens).
+  // admin is still used by the shared push helper (push tokens).
   const admin = createClient(supabaseUrl, serviceKey);
   const sql = postgres(dbUrl, { max: 1, prepare: false });
   const now = Date.now();

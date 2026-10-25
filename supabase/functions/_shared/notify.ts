@@ -529,6 +529,18 @@ export type NotifyLogCtx = {
   appointmentId?: string | null;
 };
 
+/** notification_log columns for a send result (shared by logNotification and send-reminders). */
+export function notificationLogResult(to: string | null, r: SendResult) {
+  return {
+    to_masked: maskRecipient(to),
+    template: r.template ?? null,
+    wamid: r.channel === 'whatsapp' ? r.messageId ?? null : null,
+    status: r.outcome ?? (r.ok ? 'accepted' : r.stub ? 'stub' : 'failed'),
+    error_code: r.errorCode ?? (r.stub ? 'not_configured' : null),
+    error_message: r.errorMessage ?? (r.ok ? null : r.error ? `${r.error}`.slice(0, 500) : null),
+  };
+}
+
 /** Best-effort row in public.notification_log; never throws. */
 export async function logNotification(
   ctx: NotifyLogCtx | undefined,
@@ -542,12 +554,7 @@ export async function logNotification(
       appointment_id: ctx.appointmentId ?? null,
       channel: r.channel,
       type: ctx.type,
-      to_masked: maskRecipient(to),
-      template: r.template ?? null,
-      wamid: r.channel === 'whatsapp' ? r.messageId ?? null : null,
-      status: r.outcome ?? (r.ok ? 'accepted' : r.stub ? 'stub' : 'failed'),
-      error_code: r.errorCode ?? (r.stub ? 'not_configured' : null),
-      error_message: r.errorMessage ?? (r.ok ? null : r.error ? `${r.error}`.slice(0, 500) : null),
+      ...notificationLogResult(to, r),
     });
     if (error) console.error('notification_log insert failed', error.message);
   } catch (e) {

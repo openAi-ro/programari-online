@@ -4,8 +4,10 @@
  * A reminder is claimed by flipping its flag (reminder_sent / reminder_24h_sent) before
  * sending, so two overlapping cron runs never both send. Delivery per channel is tracked in
  * public.notification_log (appointment_id + type + channel):
- *   - a channel with any row that is not 'failed' (accepted, delivered, read, stub,
- *     invalid_phone) is done and is never sent again -> no duplicates;
+ *   - a channel with any row that is not 'failed' (sending, accepted, delivered, read, stub,
+ *     invalid_phone) is done and is never sent again -> no duplicates. 'sending' is the row
+ *     reserved before the provider call; if it was never updated the outcome is unknown and
+ *     we prefer a missed reminder over a duplicate;
  *   - a channel whose rows are all 'failed' is retried until MAX_SEND_ATTEMPTS.
  * When a channel failed and still has attempts left, the flag is released so the next cron
  * run (every 5 min) retries it, but only while the appointment is still inside its window

@@ -27,6 +27,14 @@ Deno.test('a delivered channel is never sent again (no duplicates)', () => {
   ]), []);
 });
 
+Deno.test('a reserved row left in sending is final (never sent twice)', () => {
+  assertEquals(channelsToSend(['email', 'whatsapp'], [{ channel: 'whatsapp', status: 'sending' }]), ['email']);
+  assertEquals(channelsToSend(['whatsapp'], [
+    { channel: 'whatsapp', status: 'failed' },
+    { channel: 'whatsapp', status: 'sending' },
+  ]), []);
+});
+
 Deno.test('stub and invalid_phone are final, not retried', () => {
   assertEquals(channelsToSend(['email', 'whatsapp'], [
     { channel: 'email', status: 'stub' },
