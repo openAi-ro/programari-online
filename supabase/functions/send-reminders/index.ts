@@ -3,7 +3,13 @@
  *
  * Cron every 1–5 minutes:
  * 1) 24h before: approved, reminder_24h_sent=false, start_at in now+23.5h … now+24.5h
- * 2) 30min before: approved, reminder_sent=false, start_at in now+25m .. now+35m.
+ * 2) ~1h before ("soon", flag reminder_sent): approved, reminder_sent=false, start_at in
+ *    (now+15m, now+65m], confirmation sent >= 20 min ago. Normal bookings are picked 60-65 min
+ *    before (text "într-o oră"); late bookings get a catch-up once the 20 min have passed (text
+ *    "în curând, azi la ora HH:MM"). Rules and tests: ./windows.ts, ./windows.test.ts.
+ *    Confirmation time = latest CONFIRMED row in notification_log for the appointment (written
+ *    when the client is told it was approved, also for owner approvals of pending requests),
+ *    else appointments.created_at (auto-approved bookings, clients without email/phone).
  *
  * Invoke with service role (cron / scheduled function).
  *
@@ -23,7 +29,9 @@ import {
   notifyClientChannels,
   notifyLocale,
   parseNotifyLang,
+  waTemplateName,
 } from '../_shared/notify.ts';
+import { soonKind, soonWindow } from './windows.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -65,9 +73,23 @@ async function processWindow(
     from: string;
     to: string;
     flag: 'reminder_sent' | 'reminder_24h_sent';
-    kind: '30min' | '24h';
+    kind: 'soon' | '24h';
+    /** soon only: confirmation must be at or before this */
+    confirmedBefore?: string;
+    nowMs: number;
   }
 ): Promise<{ id: string; ok: boolean; detail?: string; kind: string }[]> {
+  const confirmedFilter =
+    opts.kind === 'soon'
+      ? sql`and coalesce(
+               (select max(l.created_at) from public.notification_log l
+                 where l.appointment_id = a.id and l.type = 'CONFIRMED'),
+               a.created_at) <= ${opts.confirmedBefore!}::timestamptz`
+      : sql``;
+  const startFrom =
+    opts.kind === 'soon'
+      ? sql`a.start_at > ${opts.from}::timestamptz`
+      : sql`a.start_at >= ${opts.from}::timestamptz`;
   const list = await sql<DueRow[]>`
     select a.id, a.business_id, a.client_user_id, a.client_email, a.client_phone,
            to_char(a.start_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as start_at,
@@ -78,21 +100,31 @@ async function processWindow(
       left join public.business_profiles b on b.id = a.business_id
      where a.status = 'approved'
        and a.${sql(opts.flag)} = false
-       and a.start_at >= ${opts.from}::timestamptz
-       and a.start_at <= ${opts.to}::timestamptz`;
+       and ${startFrom}
+       and a.start_at <= ${opts.to}::timestamptz
+       ${confirmedFilter}`;
 
   const outcomes: { id: string; ok: boolean; detail?: string; kind: string }[] = [];
 
-  const markSent = (id: string) =>
-    sql`update public.appointments
+  // Claim before sending: only the run that flips the flag sends (no double send if two
+  // invocations overlap). A failed send stays marked, as before.
+  const claim = async (id: string): Promise<boolean> => {
+    const rows = await sql`update public.appointments
            set ${sql(opts.flag)} = true, updated_at = now()
-         where id = ${id} and ${sql(opts.flag)} = false`;
+         where id = ${id} and ${sql(opts.flag)} = false
+         returning id`;
+    return rows.length > 0;
+  };
+
+  // The old Meta template REMINDER_SOON says "in about 30 minutes"; the soon reminder only
+  // goes to WhatsApp once a REMINDER_1H template is configured (WHATSAPP_TPL_REMINDER_1H).
+  const soonWhatsappReady = opts.kind !== 'soon' || waTemplateName('REMINDER_1H') !== null;
 
   for (const appt of list) {
+    if (!(await claim(appt.id))) continue;
     const wantsReminder = !appt.client_user_id || appt.notify_reminders !== false;
 
     if (!wantsReminder) {
-      await markSent(appt.id);
       outcomes.push({ id: appt.id, ok: true, kind: opts.kind, detail: 'opted_out' });
       continue;
     }
@@ -101,13 +133,15 @@ async function processWindow(
     const timezone = appt.timezone ?? 'Europe/Bucharest';
     const lang: 'ro' | 'en' = appt.client_user_id ? parseNotifyLang(appt.language) : 'ro';
     const timeLocal = formatTimeLocal(appt.start_at, timezone, lang);
+    const soon = opts.kind === 'soon' ? soonKind(Date.parse(appt.start_at), opts.nowMs) : null;
     const copy =
       opts.kind === '24h'
         ? messageReminder24h(businessName, timeLocal, timezone, lang)
-        : messageReminder(businessName, timeLocal, timezone, lang);
+        : messageReminder(businessName, timeLocal, timezone, lang, soon!);
 
     try {
-      const wantsWhatsapp = !appt.client_user_id || appt.notify_whatsapp !== false;
+      const wantsWhatsapp =
+        soonWhatsappReady && (!appt.client_user_id || appt.notify_whatsapp !== false);
       const phone =
         appt.client_phone && `${appt.client_phone}`.trim()
           ? appt.client_phone
@@ -142,14 +176,17 @@ async function processWindow(
         }
       }
 
-      await markSent(appt.id);
-      outcomes.push({ id: appt.id, ok: true, kind: opts.kind });
+      outcomes.push({
+        id: appt.id,
+        ok: true,
+        kind: soon ?? opts.kind,
+        ...(soonWhatsappReady ? {} : { detail: 'whatsapp_skipped_no_1h_template' }),
+      });
     } catch (e) {
-      await markSent(appt.id);
       outcomes.push({
         id: appt.id,
         ok: false,
-        kind: opts.kind,
+        kind: soon ?? opts.kind,
         detail: e instanceof Error ? e.message : String(e),
       });
     }
@@ -183,36 +220,36 @@ Deno.serve(async (req) => {
   const sql = postgres(dbUrl, { max: 1, prepare: false });
   const now = Date.now();
 
-  const window30min = {
-    from: new Date(now + 25 * 60 * 1000).toISOString(),
-    to: new Date(now + 35 * 60 * 1000).toISOString(),
-  };
+  const windowSoon = soonWindow(now);
   const window24h = {
     from: new Date(now + 23.5 * 60 * 60 * 1000).toISOString(),
     to: new Date(now + 24.5 * 60 * 60 * 1000).toISOString(),
   };
 
   try {
-    const [outcomes24h, outcomes30min] = await Promise.all([
+    const [outcomes24h, outcomesSoon] = await Promise.all([
       processWindow(sql, admin, {
         from: window24h.from,
         to: window24h.to,
         flag: 'reminder_24h_sent',
         kind: '24h',
+        nowMs: now,
       }),
       processWindow(sql, admin, {
-        from: window30min.from,
-        to: window30min.to,
+        from: windowSoon.from,
+        to: windowSoon.to,
+        confirmedBefore: windowSoon.confirmedBefore,
         flag: 'reminder_sent',
-        kind: '30min',
+        kind: 'soon',
+        nowMs: now,
       }),
     ]);
 
-    const outcomes = [...outcomes24h, ...outcomes30min];
+    const outcomes = [...outcomes24h, ...outcomesSoon];
     return jsonResponse({
       ok: true,
       window_24h: window24h,
-      window_30min: window30min,
+      window_soon: windowSoon,
       processed: outcomes.length,
       outcomes,
     });

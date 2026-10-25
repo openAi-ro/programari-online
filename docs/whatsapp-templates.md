@@ -86,20 +86,28 @@ Folosit atât când salonul mută programarea, cât și când o amână cu câte
 - **Exemple:** {{1}} `Salon Ana` · {{2}} `10:00`
 - **Footer (opțional):** `Programari`
 
-## 5. Reminder cu 30 de minute înainte
+## 5. Reminder cu o oră înainte (și reamintire pentru programările făcute târziu)
 
-- **Secret:** `WHATSAPP_TPL_REMINDER_SOON`
-- **Name:** `reminder_programare_curand`
+- **Secret:** `WHATSAPP_TPL_REMINDER_1H`
+- **Name:** `reminder_programare_azi`
 - **Category:** Utility · **Language:** Romanian
 - **Body:**
 
   ```
-  Bună ziua! Programarea dumneavoastră la {{1}} începe la ora {{2}}, în aproximativ 30 de minute. Vă așteptăm.
+  Bună ziua! Vă reamintim că astăzi aveți o programare la {{1}}, la ora {{2}}. Vă așteptăm.
   ```
 
 - **Variabile:** {{1}} = numele salonului · {{2}} = ora (HH:MM)
 - **Exemple:** {{1}} `Salon Ana` · {{2}} `10:00`
 - **Footer (opțional):** `Programari`
+
+Textul nu spune „într-o oră”, pentru că același șablon se folosește și pentru reamintirea
+trimisă mai târziu (programări făcute cu mai puțin de o oră înainte).
+Până când secretul `WHATSAPP_TPL_REMINDER_1H` este setat, reminder-ul de o oră pleacă doar pe
+email și push (WhatsApp este sărit).
+
+Vechiul șablon `reminder_programare_curand` (secret `WHATSAPP_TPL_REMINDER_SOON`, text „în
+aproximativ 30 de minute”) nu mai este folosit de cod.
 
 ## 6. Reamintire pentru o nouă programare (rebook)
 

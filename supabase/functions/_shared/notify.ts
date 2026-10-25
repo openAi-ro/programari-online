@@ -51,6 +51,7 @@ export type WaTemplateKey =
   | 'MOVED'
   | 'REMINDER_24H'
   | 'REMINDER_SOON'
+  | 'REMINDER_1H'
   | 'REBOOK'
   | 'WAITLIST'
   | 'OWNER_PENDING'
@@ -66,6 +67,7 @@ export const WA_TEMPLATE_VARS: Record<WaTemplateKey, string[]> = {
   MOVED: ['business_name', 'new_date_time'],
   REMINDER_24H: ['business_name', 'time'],
   REMINDER_SOON: ['business_name', 'time'],
+  REMINDER_1H: ['business_name', 'time'],
   REBOOK: ['business_name', 'service_name'],
   WAITLIST: ['business_name', 'date', 'booking_link'],
   OWNER_PENDING: ['business_name', 'client_contact', 'date_time'],
@@ -677,22 +679,43 @@ export function messageRejected(
   return { subject: 'Programare respinsă', text, wa };
 }
 
+/**
+ * "Soon" reminder: kind '1h' when it goes out ~1 hour before the start, 'catchup' for late
+ * bookings that get it closer to the start (text then names the time, not a duration).
+ * WhatsApp uses the REMINDER_1H template (generic text: business + time); REMINDER_SOON is the
+ * old Meta template that says "in about 30 minutes" and must not be used for this anymore.
+ */
 export function messageReminder(
   businessName: string,
   timeLocal: string,
   timezone: string,
-  lang: NotifyLang = 'ro'
+  lang: NotifyLang = 'ro',
+  kind: '1h' | 'catchup' = '1h'
 ): { subject: string; text: string; wa: WaTemplateRef } {
-  const wa: WaTemplateRef = { key: 'REMINDER_SOON', vars: [businessName, timeLocal] };
+  const wa: WaTemplateRef = { key: 'REMINDER_1H', vars: [businessName, timeLocal] };
   if (lang === 'en') {
+    if (kind === 'catchup') {
+      return {
+        subject: `Booking reminder — today at ${timeLocal}`,
+        text: `Hi! Reminder: you have a booking at ${businessName} soon, today at ${timeLocal} (${timezone}).`,
+        wa,
+      };
+    }
     return {
-      subject: 'Booking reminder — 30 minutes',
-      text: `Hi! You have a booking at ${businessName} in 30 minutes (${timeLocal}, ${timezone}).`,
+      subject: 'Booking reminder — in 1 hour',
+      text: `Hi! You have a booking at ${businessName} in 1 hour, at ${timeLocal} (${timezone}).`,
       wa,
     };
   }
-  const text = `Salut! Ai o programare la ${businessName} în 30 de minute (${timeLocal}, ${timezone}).`;
-  return { subject: 'Reminder programare — 30 de minute', text, wa };
+  if (kind === 'catchup') {
+    return {
+      subject: `Reminder programare — azi la ora ${timeLocal}`,
+      text: `Salut! Îți reamintim că ai o programare la ${businessName} în curând, azi la ora ${timeLocal} (${timezone}).`,
+      wa,
+    };
+  }
+  const text = `Salut! Ai o programare la ${businessName} într-o oră, la ora ${timeLocal} (${timezone}).`;
+  return { subject: 'Reminder programare — într-o oră', text, wa };
 }
 
 export function messageReminder24h(
