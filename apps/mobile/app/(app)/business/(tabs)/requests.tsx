@@ -31,6 +31,7 @@ import { ensureChatConversationForClient, sendMessage } from '@/lib/chatRpc';
 import { resolveBusinessChatTarget } from '@/lib/chatTarget';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
+import { businessIdFilter } from '@/lib/realtimeFilters';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Appointment, BusinessProfile, FreeSlot, Staff } from '@/lib/types';
@@ -156,7 +157,8 @@ export default function BusinessRequestsScreen() {
   // + local notification popup on each NEW request (fallback if remote push fails).
   // Unique channel per mount — reusing a subscribed channel after tab remount throws.
   useEffect(() => {
-    if (businessIds.length === 0) return;
+    const filter = businessIdFilter(businessIds);
+    if (!filter) return;
 
     const base = `biz-requests-${businessIds.join(',')}`;
     for (const ch of supabase.getChannels()) {
@@ -172,6 +174,7 @@ export default function BusinessRequestsScreen() {
         event: '*',
         schema: 'public',
         table: 'appointments',
+        filter,
       },
       (payload) => {
         const eventType = (payload as { eventType?: string }).eventType ?? '';

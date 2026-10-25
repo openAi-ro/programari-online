@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { BusinessTabBar } from '@/components/BusinessTabBar';
+import { businessIdFilter } from '@/lib/realtimeFilters';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import { useForegroundInterval } from '@/lib/useForegroundInterval';
@@ -16,12 +17,15 @@ export default function BusinessTabsLayout() {
   // Business-urile proprii nu se schimbă în timpul sesiunii: le citim o dată
   // (per utilizator), apoi badge-ul costă o singură cerere (count).
   const bizIdsRef = useRef<{ userId: string; ids: string[] } | null>(null);
+  // Filtrul Realtime depinde de id-uri: canalul se (re)creează când se schimbă.
+  const [badgeFilter, setBadgeFilter] = useState<string | null>(null);
 
   const refreshBadge = useCallback(async () => {
     try {
       const user = await getCurrentUser();
       if (!user) {
         bizIdsRef.current = null;
+        setBadgeFilter(null);
         setRequestBadge(0);
         return;
       }
@@ -34,6 +38,7 @@ export default function BusinessTabsLayout() {
         bizIdsRef.current = { userId: user.id, ids: (businesses ?? []).map((b) => b.id as string) };
       }
       const ids = bizIdsRef.current.ids;
+      setBadgeFilter(businessIdFilter(ids));
       if (ids.length === 0) {
         setRequestBadge(0);
         return;
@@ -51,20 +56,24 @@ export default function BusinessTabsLayout() {
 
   useEffect(() => {
     void refreshBadge();
-    // Schimbările vin prin realtime; sondajul e doar plasă de siguranță
+  }, [refreshBadge]);
+
+  useEffect(() => {
+    if (!badgeFilter) return;
+    // Schimbările vin prin realtime (doar saloanele proprii); sondajul e doar plasă de siguranță
     // (5 min, oprit în fundal, reîmprospătare la revenirea în aplicație).
     const channel = supabase
-      .channel('business-requests-badge')
+      .channel(`business-requests-badge-${Date.now()}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'appointments' },
+        { event: '*', schema: 'public', table: 'appointments', filter: badgeFilter },
         () => void refreshBadge()
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [refreshBadge]);
+  }, [badgeFilter, refreshBadge]);
   useForegroundInterval(() => void refreshBadge(), 5 * 60_000);
 
   return (

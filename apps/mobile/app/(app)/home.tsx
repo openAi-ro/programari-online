@@ -46,6 +46,7 @@ import {
 import { getUnreadTotal } from '@/lib/chatRpc';
 import { useForegroundInterval } from '@/lib/useForegroundInterval';
 import { formatInTimeZone } from '@/lib/timezone';
+import { businessIdFilter } from '@/lib/realtimeFilters';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { AppointmentStatus } from '@/lib/types';
@@ -486,7 +487,8 @@ export default function HomeScreen() {
   // channel after tab remount (Cereri → Acasă), and .on() after subscribe() throws.
   useEffect(() => {
     const bizId = business?.id;
-    if (!bizId || mode !== 'business') return;
+    const filter = bizId ? businessIdFilter([bizId]) : null;
+    if (!bizId || !filter || mode !== 'business') return;
 
     const topic = `biz-home-${bizId}`;
     for (const ch of supabase.getChannels()) {
@@ -498,7 +500,7 @@ export default function HomeScreen() {
     const channel = supabase.channel(`${topic}-${Date.now()}`);
     channel.on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'appointments' },
+      { event: 'INSERT', schema: 'public', table: 'appointments', filter },
       (payload) => {
         const row = payload.new as
           | {
