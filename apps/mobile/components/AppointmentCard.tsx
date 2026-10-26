@@ -372,18 +372,6 @@ export function AppointmentCard({
               </Text>
 
               <View style={[styles.wheelWrap, { backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border }]}>
-                <View
-                  pointerEvents="none"
-                  style={[
-                    styles.wheelHighlight,
-                    {
-                      borderColor: t.colors.accent,
-                      backgroundColor: t.colors.accentSoft,
-                      top: WHEEL_PAD,
-                      height: WHEEL_ITEM_H,
-                    },
-                  ]}
-                />
                 <ScrollView
                   ref={wheelRef}
                   showsVerticalScrollIndicator={false}
@@ -402,7 +390,17 @@ export function AppointmentCard({
                   {POSTPONE_HOURS.map((h) => {
                     const selected = h === postponeHours;
                     return (
-                      <View key={h} style={[styles.wheelItem, { height: WHEEL_ITEM_H }]}>
+                      <View
+                        key={h}
+                        style={[
+                          styles.wheelItem,
+                          { height: WHEEL_ITEM_H },
+                          selected && [
+                            styles.wheelItemSelected,
+                            { borderColor: t.colors.accent, backgroundColor: t.colors.accentSoft },
+                          ],
+                        ]}
+                      >
                         <Text
                           style={[
                             styles.wheelText,
@@ -805,22 +803,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.lg,
     overflow: 'hidden',
-    position: 'relative',
     alignSelf: 'stretch',
-  },
-  wheelHighlight: {
-    position: 'absolute',
-    left: spacing.sm,
-    right: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    zIndex: 1,
   },
   wheelItem: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     overflow: 'hidden',
+  },
+  // Randul ales isi poarta singur evidentierea: un strat absolut peste lista acoperea ora aleasa
+  // (fundalul accentSoft e opac pe tema deschisa).
+  wheelItemSelected: {
+    marginHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
   },
   wheelText: {
     textAlign: 'center',
