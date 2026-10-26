@@ -551,7 +551,11 @@ export function handleNotificationNavigation(data: Record<string, unknown> | und
 
   if (screen === 'requests') {
     void setAppMode('business');
-    router.push('/(app)/business/(tabs)/requests');
+    // v87: push-ul 'Reprogramare cerută' deschide filtrul De decis pe cardul respectiv.
+    const params: Record<string, string> = {};
+    if (typeof data.appointmentId === 'string' && data.appointmentId) params.focus = data.appointmentId;
+    if (data.filter === 'decide') params.filter = 'decide';
+    router.push({ pathname: '/(app)/business/(tabs)/requests', params } as never);
     return;
   }
 

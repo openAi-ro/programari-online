@@ -229,3 +229,19 @@ Deno.test('owner pending: template when WHATSAPP_TPL_OWNER_PENDING set, 3 vars',
     assertEquals(m.calls[0].body.type, 'template');
   } finally { m.restore(); Deno.env.delete('WHATSAPP_TPL_OWNER_PENDING'); resetEnv(); }
 });
+
+Deno.test('reschedule copy: RO/EN, MOVED template only on accept', async () => {
+  const { messageRescheduleRequested, messageRescheduleAccepted, messageRescheduleDeclined, messageRescheduleExpired, messageCancelledByBusiness } = await import('./notify.ts');
+  const req = messageRescheduleRequested('Salon X', 'ana@x.ro', '3 nov. 15:00', '4 nov. 16:00', 'ro');
+  assertStringIncludes(req.text, '3 nov. 15:00 → 4 nov. 16:00');
+  assertStringIncludes(messageRescheduleRequested('Salon X', 'a', 'A', 'B', 'en').text, 'accept or decline');
+  const acc = messageRescheduleAccepted('Salon X', '4 nov. 16:00', 'ro');
+  assertEquals(acc.wa, { key: 'MOVED', vars: ['Salon X', '4 nov. 16:00'] });
+  const dec = messageRescheduleDeclined('Salon X', '3 nov. 15:00', 'https://programari.expo.app/my-appointments', 'ro');
+  assertStringIncludes(dec.text, 'rămâne pe 3 nov. 15:00');
+  assertStringIncludes(dec.text, '/my-appointments');
+  assert(!('wa' in dec));
+  assertStringIncludes(messageRescheduleExpired('Salon X', 'Nov 3', 'en').text, 'stays on Nov 3');
+  const c = messageCancelledByBusiness('Salon X', '3 nov.', 'Boală', 'https://x/b/C', 'ro');
+  assertStringIncludes(c.text, 'Motiv: Boală');
+});

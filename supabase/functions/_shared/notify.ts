@@ -849,3 +849,106 @@ export function messageWaitlistSpot(
   const text = `S-a eliberat un loc la ${businessName} pe ${dateLabel}. Rezervă acum: ${bookingUrl}`;
   return { subject: 'Loc eliberat — Programari', text, wa };
 }
+
+/** Owner: a client asked to move an approved booking (the salon decides). */
+export function messageRescheduleRequested(
+  businessName: string,
+  contact: string,
+  fromLabel: string,
+  toLabel: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Reschedule requested',
+      text: `${contact} asks to move the booking at ${businessName}: ${fromLabel} → ${toLabel}. Open Requests to accept or decline.`,
+    };
+  }
+  return {
+    subject: 'Reprogramare cerută',
+    text: `${contact} cere mutarea programării la ${businessName}: ${fromLabel} → ${toLabel}. Deschide Cereri ca să accepți sau să refuzi.`,
+  };
+}
+
+/** Client: the salon accepted the requested time. WhatsApp reuses the approved MOVED template. */
+export function messageRescheduleAccepted(
+  businessName: string,
+  newTimeLocal: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string; wa: WaTemplateRef } {
+  const wa: WaTemplateRef = { key: 'MOVED', vars: [businessName, newTimeLocal] };
+  if (lang === 'en') {
+    return {
+      wa,
+      subject: 'Reschedule accepted',
+      text: `${businessName} accepted your new time: ${newTimeLocal}.`,
+    };
+  }
+  return {
+    wa,
+    subject: 'Reprogramare acceptată',
+    text: `${businessName} a acceptat ora nouă: ${newTimeLocal}.`,
+  };
+}
+
+/** Client: the salon declined the requested time; the original booking stays. */
+export function messageRescheduleDeclined(
+  businessName: string,
+  keptTimeLocal: string,
+  link: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Reschedule declined',
+      text: `${businessName} can't do the time you asked for. Your booking stays on ${keptTimeLocal}. Propose another time: ${link}`,
+    };
+  }
+  return {
+    subject: 'Reprogramare refuzată',
+    text: `${businessName} nu poate la ora cerută. Programarea rămâne pe ${keptTimeLocal}. Propune altă oră: ${link}`,
+  };
+}
+
+/** Client: nobody answered the reschedule request in time; the original booking stays. */
+export function messageRescheduleExpired(
+  businessName: string,
+  keptTimeLocal: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Reschedule request expired',
+      text: `${businessName} didn't answer your reschedule request in time. Your booking stays on ${keptTimeLocal}.`,
+    };
+  }
+  return {
+    subject: 'Cererea de reprogramare a expirat',
+    text: `${businessName} nu a răspuns la timp cererii de reprogramare. Programarea rămâne pe ${keptTimeLocal}.`,
+  };
+}
+
+/** Client: the salon cancelled the booking, with its reason. */
+export function messageCancelledByBusiness(
+  businessName: string,
+  whenLabel: string,
+  reason: string,
+  link: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking cancelled by the salon',
+      text: `${businessName} cancelled your booking on ${whenLabel}. Reason: ${reason}. Book another time: ${link}`,
+    };
+  }
+  return {
+    subject: 'Programare anulată de salon',
+    text: `${businessName} a anulat programarea ta din ${whenLabel}. Motiv: ${reason}. Alege altă oră: ${link}`,
+  };
+}
+
+/** Public web base for links in client messages. */
+export function appWebBase(): string {
+  return (Deno.env.get('PUBLIC_WEB_BASE_URL') ?? 'https://programari.expo.app').replace(/\/$/, '');
+}

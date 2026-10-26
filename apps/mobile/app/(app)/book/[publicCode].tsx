@@ -40,7 +40,9 @@ import {
   createRecurringMultiAppointments,
   listBusyRanges,
   notifyAfterBooking,
+  unwrapRpcRow,
 } from '@/lib/bookingRpc';
+import { hasPendingReschedule, isOwnBusyRange, ownBusyKeys } from '@/lib/rescheduleRequest';
 import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
 import {
   staffForServices,
@@ -462,7 +464,7 @@ export default function BookScreen() {
       rescheduleId
         ? supabase
             .from('appointments')
-            .select('start_at, end_at')
+            .select('start_at, end_at, requested_start_at, requested_end_at')
             .eq('id', String(rescheduleId))
             .maybeSingle()
         : null,
@@ -479,9 +481,9 @@ export default function BookScreen() {
     let busy = rawBusy;
     const current = currentRes?.data;
     if (current?.start_at) {
-      busy = rawBusy.filter(
-        (b) => !(b.startUtc === current.start_at && b.endUtc === current.end_at)
-      );
+      // Ora curenta si o eventuala ora deja ceruta (v87) sunt ale acestei programari.
+      const own = ownBusyKeys(current);
+      busy = rawBusy.filter((b) => !isOwnBusyRange(own, b));
     }
 
     const hours = staffSchedule(selectedStaff, business);
@@ -521,43 +523,27 @@ export default function BookScreen() {
     setMessage(null);
 
     if (isReschedule && rescheduleId) {
-      const { error: err } = await supabase.rpc('reschedule_appointment', {
+      const { data, error: err } = await supabase.rpc('reschedule_appointment', {
         p_appointment_id: String(rescheduleId),
         p_start_at: selected.startUtc,
         p_end_at: selected.endUtc,
       });
       setBooking(false);
-      if (err) {
-        setError(mapBookingRpcError(err.message));
+      const moved = unwrapRpcRow<Appointment>(data);
+      if (err || !moved?.id) {
+        setError(mapBookingRpcError(err?.message ?? 'booking_empty_result'));
         await loadSlots();
         return;
       }
+      // v87: fara auto-aprobare, ora noua devine cerere (slotul e tinut) si salonul decide.
+      const requested = hasPendingReschedule(moved);
       // Push-ul către business pleacă în fundal; UI-ul nu-l așteaptă.
-      void (async () => {
-        const { data: moved } = await supabase
-          .from('appointments')
-          .select('id, business_id, status, client_email, client_phone, start_at')
-          .eq('id', String(rescheduleId))
-          .maybeSingle();
-        if (moved?.id && moved?.business_id) {
-          fireAndForget(
-            invokePendingPush(
-              {
-                id: moved.id,
-                business_id: moved.business_id,
-                status: moved.status ?? 'approved',
-                client_email: moved.client_email,
-                client_phone: moved.client_phone,
-                start_at: moved.start_at,
-              },
-              { reason: 'rescheduled' }
-            ),
-            'notify after reschedule failed'
-          );
-        }
-      })().catch((e) => console.warn('notify after reschedule failed', e));
+      fireAndForget(
+        invokePendingPush(moved, { reason: requested ? 'reschedule_requested' : 'rescheduled' }),
+        'notify after reschedule failed'
+      );
       setSelected(null);
-      setMessage(trKey('book.moved'));
+      setMessage(trKey(requested ? 'book.rescheduleRequested' : 'book.moved'));
       setTimeout(() => router.replace('/(app)/my-appointments'), 800);
       return;
     }

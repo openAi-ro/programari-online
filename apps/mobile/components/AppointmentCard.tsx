@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Linking,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -20,6 +21,8 @@ import { cancelPolicyLine } from '@/lib/cancelPolicyCopy';
 import { canMarkNoShow } from '@/lib/bookingRules';
 import { localeTag, useT } from '@/lib/i18n';
 import type { Appointment } from '@/lib/types';
+import { telUrl, whatsAppUrl } from '@/lib/businessPage';
+import { hasPendingReschedule } from '@/lib/rescheduleRequest';
 
 const POSTPONE_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const WHEEL_ITEM_H = 44;
@@ -61,6 +64,14 @@ type Props = {
   checkedIn?: boolean;
   cancelNoticeMinutes?: number | null;
   onShare?: () => void;
+  /** v87 (business): cererea de reprogramare a clientului. */
+  onAcceptReschedule?: () => void;
+  onDeclineReschedule?: () => void;
+  rescheduleBusy?: boolean;
+  /** Ora ceruta formatata in fusul business-ului (altfel locala). */
+  requestedLabel?: string;
+  /** v87 (business): anulare cu motiv, vazut de client. */
+  onBusinessCancel?: (reason: string) => void;
 };
 
 export function AppointmentCard({
@@ -96,6 +107,11 @@ export function AppointmentCard({
   checkedIn,
   cancelNoticeMinutes,
   onShare,
+  onAcceptReschedule,
+  onDeclineReschedule,
+  rescheduleBusy,
+  requestedLabel,
+  onBusinessCancel,
 }: Props) {
   const t = useTheme();
   const tr = useT();
@@ -111,6 +127,20 @@ export function AppointmentCard({
     .join(' · ');
 
   const [confirming, setConfirming] = useState(false);
+  const [bizCancelOpen, setBizCancelOpen] = useState(false);
+  const [bizCancelReason, setBizCancelReason] = useState('');
+  const active = status === 'pending' || status === 'approved';
+  const pendingRequest = hasPendingReschedule(appointment);
+  const requestedText =
+    requestedLabel ??
+    (appointment.requested_start_at
+      ? new Date(appointment.requested_start_at).toLocaleString(localeTag(), {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        })
+      : '');
+  const phoneTel = showActions ? telUrl(appointment.client_phone) : null;
+  const phoneWa = showActions ? whatsAppUrl(appointment.client_phone) : null;
 
   function doCancel() {
     setConfirming(false);
@@ -230,6 +260,84 @@ export function AppointmentCard({
           </View>
         ) : null}
 
+        {phoneTel || phoneWa ? (
+          <ButtonRow>
+            {phoneTel ? (
+              <View style={styles.actionFlex}>
+                <Button
+                  label={tr('appt.call')}
+                  icon="call-outline"
+                  variant="secondary"
+                  size="sm"
+                  labelNumberOfLines={1}
+                  onPress={() => void Linking.openURL(phoneTel)}
+                />
+              </View>
+            ) : null}
+            {phoneWa ? (
+              <View style={styles.actionFlex}>
+                <Button
+                  label={tr('appt.whatsapp')}
+                  icon="logo-whatsapp"
+                  variant="secondary"
+                  size="sm"
+                  labelNumberOfLines={1}
+                  onPress={() => void Linking.openURL(phoneWa)}
+                />
+              </View>
+            ) : null}
+          </ButtonRow>
+        ) : null}
+
+        {pendingRequest ? (
+          <View
+            style={[
+              styles.requestBox,
+              { borderColor: t.colors.warning, backgroundColor: t.colors.surfaceMuted },
+            ]}
+          >
+            <View style={styles.contactRow}>
+              <Ionicons name="swap-horizontal-outline" size={14} color={t.colors.warning} />
+              <Text style={[styles.requestText, { color: t.colors.text }]} numberOfLines={3}>
+                {showActions
+                  ? tr('appt.rescheduleRequested', { from: localLabel ?? fallbackLabel, to: requestedText })
+                  : tr('appt.rescheduleWaiting', { to: requestedText })}
+              </Text>
+            </View>
+            {showActions && (onAcceptReschedule || onDeclineReschedule) ? (
+              <ButtonRow>
+                <View style={styles.actionFlex}>
+                  <Button
+                    label={tr('appt.declineRequest')}
+                    icon="close"
+                    variant="secondary"
+                    size="sm"
+                    disabled={Boolean(rescheduleBusy)}
+                    onPress={onDeclineReschedule}
+                  />
+                </View>
+                <View style={styles.actionFlex}>
+                  <Button
+                    label={tr('appt.accept')}
+                    icon="checkmark"
+                    variant="success"
+                    size="sm"
+                    loading={Boolean(rescheduleBusy)}
+                    disabled={Boolean(rescheduleBusy)}
+                    onPress={onAcceptReschedule}
+                  />
+                </View>
+              </ButtonRow>
+            ) : null}
+          </View>
+        ) : null}
+
+        {status === 'cancelled' && appointment.cancel_reason ? (
+          <Text style={[styles.nextStep, { color: t.colors.textMuted }]} numberOfLines={3}>
+            {tr('appt.cancelReasonLine', { reason: appointment.cancel_reason })}
+          </Text>
+        ) : null}
+
 
         {/* P0: cancel + reschedule easy to find (client) */}
         {!showActions &&
@@ -324,6 +432,15 @@ export function AppointmentCard({
           </ButtonRow>
         ) : null}
 
+        {showActions && onMoveToSlot && (status === 'approved' || status === 'pending') ? (
+          <Button
+            label={tr('appt.moveToSlot')}
+            icon="swap-horizontal-outline"
+            variant="secondary"
+            size="sm"
+            onPress={onMoveToSlot}
+          />
+        ) : null}
         {canPostpone ? (
           <Button
             label={tr('appt.postpone')}
@@ -333,14 +450,59 @@ export function AppointmentCard({
             onPress={() => setPostponeOpen(true)}
           />
         ) : null}
-        {showActions && onMoveToSlot && (status === 'approved' || status === 'pending') ? (
-          <Button
-            label={tr('appt.moveToSlot')}
-            icon="swap-horizontal-outline"
-            variant="secondary"
-            size="sm"
-            onPress={onMoveToSlot}
-          />
+        {showActions && onBusinessCancel && active ? (
+          bizCancelOpen ? (
+            <View style={[styles.confirmBox, { borderTopColor: t.colors.border }]}>
+              <Text style={[styles.confirmText, { color: t.colors.textMuted }]} numberOfLines={3}>
+                {tr('appt.bizCancelHint')}
+              </Text>
+              <TextInput
+                value={bizCancelReason}
+                onChangeText={setBizCancelReason}
+                placeholder={tr('appt.bizCancelPlaceholder')}
+                placeholderTextColor={t.colors.textFaint}
+                maxLength={300}
+                multiline
+                style={[
+                  styles.reasonInput,
+                  { color: t.colors.text, borderColor: t.colors.border, backgroundColor: t.colors.surfaceMuted },
+                ]}
+              />
+              <ButtonRow>
+                <View style={styles.actionFlex}>
+                  <Button
+                    label={tr('appt.giveUp')}
+                    variant="secondary"
+                    size="sm"
+                    labelNumberOfLines={1}
+                    onPress={() => setBizCancelOpen(false)}
+                  />
+                </View>
+                <View style={styles.actionFlex}>
+                  <Button
+                    label={tr('appt.bizCancelConfirm')}
+                    icon="close-circle-outline"
+                    variant="danger"
+                    size="sm"
+                    labelNumberOfLines={1}
+                    disabled={bizCancelReason.trim().length === 0}
+                    onPress={() => {
+                      setBizCancelOpen(false);
+                      onBusinessCancel(bizCancelReason.trim());
+                    }}
+                  />
+                </View>
+              </ButtonRow>
+            </View>
+          ) : (
+            <Button
+              label={tr('appt.bizCancel')}
+              icon="close-circle-outline"
+              variant="secondary"
+              size="sm"
+              onPress={() => setBizCancelOpen(true)}
+            />
+          )
         ) : null}
 
         <Modal
@@ -746,6 +908,9 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   time: { fontSize: fontSize.md, fontWeight: '600', flexShrink: 1 },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  requestBox: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm },
+  requestText: { fontSize: fontSize.sm, fontWeight: '600', flexShrink: 1 },
+  reasonInput: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, minHeight: 64, fontSize: fontSize.md, textAlignVertical: 'top' },
   contact: { fontSize: fontSize.sm, flexShrink: 1 },
   nextStep: { fontSize: fontSize.sm, flexShrink: 1, marginTop: 2 },
   actionFlex: { flex: 1, minWidth: 0 },

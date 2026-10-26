@@ -20,6 +20,7 @@ import { bearerToken, checkWebhookSecret, isServiceRole } from '../_shared/secre
 import {
   messageNewPendingRequest,
   messageRescheduledRequest,
+  messageRescheduleRequested,
   notifyClientChannels,
   type WaTemplateRef,
 } from '../_shared/notify.ts';
@@ -35,6 +36,7 @@ type AppointmentRow = {
   client_phone?: string | null;
   client_user_id?: string | null;
   start_at?: string;
+  requested_start_at?: string | null;
 };
 
 type WebhookPayload = {
@@ -155,7 +157,7 @@ Deno.serve(async (req) => {
   if (authResult.userId) {
     const { data: live } = await admin
       .from('appointments')
-      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at')
       .eq('id', record.id)
       .maybeSingle();
     if (!live) return jsonResponse({ error: 'appointment_not_found' }, 404);
@@ -180,7 +182,7 @@ Deno.serve(async (req) => {
   ) {
     const { data: live } = await admin
       .from('appointments')
-      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at')
       .eq('id', record.id)
       .maybeSingle();
     if (live) {
@@ -217,15 +219,28 @@ Deno.serve(async (req) => {
     .eq('id', business.owner_user_id)
     .maybeSingle();
   const lang = parseNotifyLang((ownerProfile as { language?: string } | null)?.language ?? payload.lang);
-  const rescheduled = payload.reason === 'rescheduled';
+  // 'reschedule_requested' (v87): the client proposed a new time; requested_start_at is read from the DB.
+  const requestedLocal =
+    payload.reason === 'reschedule_requested' && record.requested_start_at
+      ? formatWhen(record.requested_start_at, business.timezone ?? 'Europe/Bucharest', lang)
+      : undefined;
+  const rescheduleRequested = Boolean(requestedLocal);
+  const rescheduled = payload.reason === 'rescheduled' || rescheduleRequested;
   const autoApproved = record.status === 'approved' && !rescheduled;
   const startLocal = formatWhen(record.start_at, business.timezone ?? 'Europe/Bucharest', lang);
-  const pushTitle = rescheduled
+  const requestCopy = rescheduleRequested
+    ? messageRescheduleRequested(business.name, contact, startLocal ?? '-', requestedLocal!, lang)
+    : null;
+  const pushTitle = requestCopy
+    ? requestCopy.subject
+    : rescheduled
     ? (lang === 'en' ? 'Booking moved' : 'Programare mutată')
     : autoApproved
       ? (lang === 'en' ? 'Auto-approved booking' : 'Programare auto-aprobată')
       : (lang === 'en' ? 'New booking request' : 'Cerere nouă de programare');
-  const bodyText = rescheduled
+  const bodyText = requestCopy
+    ? requestCopy.text
+    : rescheduled
     ? startLocal
       ? (lang === 'en' ? `${contact} moved the booking (${startLocal}). Open the Calendar.` : `${contact} a mutat programarea (${startLocal}). Deschide Calendarul.`)
       : (lang === 'en' ? `${contact} moved the booking. Open the Calendar.` : `${contact} a mutat programarea. Deschide Calendarul.`)
@@ -267,6 +282,7 @@ Deno.serve(async (req) => {
         screen: 'requests',
         appointmentId: record!.id,
         businessId: record!.business_id,
+        ...(rescheduleRequested ? { filter: 'decide' } : {}),
       },
     }));
 
@@ -335,7 +351,9 @@ Deno.serve(async (req) => {
 
   // --- Owner WhatsApp / email (profile loaded above; even when no push tokens) ---
 
-  const msg: { subject: string; text: string; wa?: WaTemplateRef } = rescheduled
+  const msg: { subject: string; text: string; wa?: WaTemplateRef } = requestCopy
+    ? requestCopy
+    : rescheduled
     ? messageRescheduledRequest(business.name, contact, startLocal, lang)
     : messageNewPendingRequest(business.name, contact, startLocal, lang);
   let sentWhatsapp = false;
@@ -354,7 +372,7 @@ Deno.serve(async (req) => {
       wa: autoApproved ? undefined : msg.wa,
       log: {
         admin,
-        type: rescheduled ? 'OWNER_RESCHEDULED' : 'OWNER_PENDING',
+        type: rescheduleRequested ? 'OWNER_RESCHEDULE_REQUEST' : rescheduled ? 'OWNER_RESCHEDULED' : 'OWNER_PENDING',
         businessId: record!.business_id,
         appointmentId: record!.id,
       },

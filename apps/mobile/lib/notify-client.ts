@@ -134,7 +134,7 @@ export async function invokePendingPush(
     Appointment,
     'id' | 'business_id' | 'status' | 'client_email' | 'client_phone' | 'start_at'
   >,
-  opts?: { reason?: 'rescheduled' }
+  opts?: { reason?: 'rescheduled' | 'reschedule_requested' }
 ): Promise<InvokeResult<PendingPushResult>> {
   const { data, error } = await supabase.functions.invoke('notify-pending-push', {
     body: {
@@ -168,6 +168,28 @@ export async function invokePendingPush(
   }
 
   return { ok: true, data: data as PendingPushResult };
+}
+
+/**
+ * Notifica clientul dupa decizia salonului (v87): reprogramare acceptata / refuzata,
+ * sau anulare cu motiv. Textul e construit server-side din randul din DB.
+ */
+export async function invokeRescheduleNotify(
+  appointmentId: string,
+  event: 'accepted' | 'declined' | 'cancelled'
+): Promise<InvokeResult<{ event?: string }>> {
+  const { data, error } = await supabase.functions.invoke('notify-reschedule', {
+    body: { appointment_id: appointmentId, event, lang: getLanguageSync() },
+  });
+  if (error) {
+    console.warn('notify-reschedule invoke failed', error.message);
+    return { ok: false, error: error.message };
+  }
+  const payload = data as { ok?: boolean; error?: string; event?: string } | null;
+  if (payload?.error || payload?.ok === false) {
+    return { ok: false, error: payload?.error ?? 'reschedule_notify_failed', data: payload ?? undefined };
+  }
+  return { ok: true, data: payload ?? undefined };
 }
 
 /** Notifica clientul ca programarea a fost mutata pe alt slot (dupa business_move_appointment). */

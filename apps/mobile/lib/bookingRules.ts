@@ -190,6 +190,21 @@ export function mapBookingRpcError(message: string): string {
   if (message.includes('service_not_found')) {
     return trKey('book.errServiceGone');
   }
+  if (message.includes('no_reschedule_request')) {
+    return trKey('book.errNoRescheduleRequest');
+  }
+  if (message.includes('reschedule_expired')) {
+    return trKey('book.errRescheduleExpired');
+  }
+  if (message.includes('reschedule_changed')) {
+    return trKey('book.errRescheduleChanged');
+  }
+  if (message.includes('reason_required')) {
+    return trKey('book.errReasonRequired');
+  }
+  if (message.includes('reason_too_long')) {
+    return trKey('book.errReasonTooLong');
+  }
   if (message.includes('too_late')) {
     return trKey('book.errTooLate');
   }

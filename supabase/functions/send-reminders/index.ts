@@ -17,6 +17,9 @@
  *    updated with the outcome after it; a row left in 'sending' (run died / log update failed)
  *    counts as sent, so a message is never sent twice (at most once).
  *
+ * 4) Reschedule requests (v87) not answered by 2h before the earlier start expire; the
+ *    client is told the original time stays (./rescheduleExpiry.ts).
+ *
  * Invoke with service role (cron / scheduled function).
  *
  * Reads and reminder flags go straight to Postgres (SUPABASE_DB_URL), not through
@@ -44,6 +47,7 @@ import {
 import { soonKind, soonWindow } from './windows.ts';
 import { type Channel, channelsToSend, failedChannels, isFirstAttempt, shouldRetry } from './retry.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
+import { expireRescheduleRequests } from './rescheduleExpiry.ts';
 
 // deno-lint-ignore no-explicit-any
 type Admin = any;
@@ -290,8 +294,12 @@ Deno.serve(async (req) => {
       }),
     ]);
 
+    // Sequential on the single connection: expiry runs after the reminder windows.
+    const rescheduleExpired = await expireRescheduleRequests(sql, admin);
+
     const outcomes = [...outcomes24h, ...outcomesSoon];
     return jsonResponse({
+      reschedule_expired: rescheduleExpired,
       ok: true,
       window_24h: window24h,
       window_soon: windowSoon,

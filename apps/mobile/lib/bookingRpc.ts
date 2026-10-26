@@ -303,6 +303,40 @@ export async function moveAppointmentToSlot(opts: {
   return { appointment, error: null };
 }
 
+async function businessAppointmentRpc(
+  fn: 'business_accept_reschedule' | 'business_decline_reschedule' | 'business_cancel_appointment',
+  args: Record<string, unknown>
+): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
+}
+
+/** Salonul accepta ora ceruta de client (v87); programarea se muta pe ea. */
+export function acceptReschedule(appointmentId: string) {
+  return businessAppointmentRpc('business_accept_reschedule', { p_appointment_id: appointmentId });
+}
+
+/** Salonul refuza ora ceruta de client (v87); ora initiala ramane. */
+export function declineReschedule(appointmentId: string) {
+  return businessAppointmentRpc('business_decline_reschedule', { p_appointment_id: appointmentId });
+}
+
+/** Salonul anuleaza programarea cu motiv (v87). Fara rambursari. */
+export function businessCancelAppointment(appointmentId: string, reason: string) {
+  return businessAppointmentRpc('business_cancel_appointment', {
+    p_appointment_id: appointmentId,
+    p_reason: reason,
+  });
+}
+
 export async function notifyAfterBooking(
   appointment: Appointment
 ): Promise<{ ok: boolean; error?: string }> {

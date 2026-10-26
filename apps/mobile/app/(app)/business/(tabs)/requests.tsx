@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
 import { DatePickerField } from '@/components/DatePickerField';
@@ -20,10 +20,23 @@ import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useBack } from '@/lib/nav';
 import { mapBookingRpcError, staffSchedule } from '@/lib/bookingRules';
-import { listBusyRanges, moveAppointmentToSlot } from '@/lib/bookingRpc';
+import {
+  acceptReschedule,
+  businessCancelAppointment,
+  declineReschedule,
+  listBusyRanges,
+  moveAppointmentToSlot,
+} from '@/lib/bookingRpc';
+import { isOwnBusyRange, needsDecision, ownBusyKeys } from '@/lib/rescheduleRequest';
 import { generateFreeSlots } from '@/lib/slots';
 import { validateMoveInput } from '@/lib/moveRules';
-import { invokeDecisionNotify, invokeMoved, invokePostpone, invokeWaitlistNotify } from '@/lib/notify-client';
+import {
+  invokeDecisionNotify,
+  invokeMoved,
+  invokePostpone,
+  invokeRescheduleNotify,
+  invokeWaitlistNotify,
+} from '@/lib/notify-client';
 import { fireAndForget } from '@/lib/fireAndForget';
 import { presentLocalBookingNotification } from '@/lib/notifications';
 import { invokeRefundDeposit, invokeWaiveDeposit } from '@/lib/payments';
@@ -51,7 +64,12 @@ export default function BusinessRequestsScreen() {
   const tr = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'pending' | 'all'>('all');
+  // Push 'Reprogramare cerută' deschide ecranul cu ?filter=decide&focus=<id>.
+  const params = useLocalSearchParams<{ focus?: string; filter?: string }>();
+  const [filter, setFilter] = useState<'decide' | 'all'>(params.filter === 'decide' ? 'decide' : 'all');
+  const [rescheduleBusyId, setRescheduleBusyId] = useState<string | null>(null);
+  const listRef = useRef<FlatList<Row>>(null);
+  const focusDoneRef = useRef<string | null>(null);
   const [error, setError] = useTransientMessage();
   const [success, setSuccess] = useTransientMessage();
   const [postponeBusyId, setPostponeBusyId] = useState<string | null>(null);
@@ -122,15 +140,17 @@ export default function BusinessRequestsScreen() {
       .in('business_id', ids)
       .order('created_at', { ascending: false });
 
-    if (filter === 'pending') {
-      query = query.eq('status', 'pending');
+    if (filter === 'decide') {
+      // Cereri noi + reprogramari cerute (v87); filtrul exact e needsDecision.
+      query = query.or('status.eq.pending,requested_start_at.not.is.null');
     }
 
     const { data, error: aErr } = await query;
     if (aErr) {
       setError(aErr.message, { sticky: true });
     } else {
-      const list = (data ?? []) as Row[];
+      const all = (data ?? []) as Row[];
+      const list = filter === 'decide' ? all.filter(needsDecision) : all;
       setRows(list);
       // Marchează tot ce există deja ca „văzut" — popup doar pentru ce vine nou.
       for (const r of list) seenIdsRef.current.add(r.id);
@@ -139,6 +159,19 @@ export default function BusinessRequestsScreen() {
   }, [filter]);
 
   loadRef.current = load;
+
+  useEffect(() => {
+    if (params.filter === 'decide') setFilter('decide');
+  }, [params.filter, params.focus]);
+
+  useEffect(() => {
+    const focus = typeof params.focus === 'string' ? params.focus : null;
+    if (!focus || focusDoneRef.current === focus) return;
+    const index = rows.findIndex((r) => r.id === focus);
+    if (index < 0) return;
+    focusDoneRef.current = focus;
+    setTimeout(() => listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 }), 150);
+  }, [params.focus, rows]);
 
   useFocusEffect(
     useCallback(() => {
@@ -318,9 +351,9 @@ export default function BusinessRequestsScreen() {
       setMoveLoading(false);
       return;
     }
-    const busy = rawBusy.filter(
-      (b) => !(b.startUtc === apt.start_at && b.endUtc === apt.end_at)
-    );
+    // Ora curenta si ora ceruta de client (v87) sunt ale acestei programari.
+    const own = ownBusyKeys(apt);
+    const busy = rawBusy.filter((b) => !isOwnBusyRange(own, b));
     // Programul specialistului (null = programul firmei), nu direct al firmei.
     let member: Pick<Staff, 'working_hours' | 'break_hours'> | null = null;
     if (apt.staff_id) {
@@ -408,6 +441,49 @@ export default function BusinessRequestsScreen() {
     await load();
   }
 
+  async function decideReschedule(row: Row, accept: boolean) {
+    if (rescheduleBusyId) return;
+    setError(null);
+    setSuccess(null);
+    setRescheduleBusyId(row.id);
+    try {
+      const { appointment, error: err } = accept
+        ? await acceptReschedule(row.id)
+        : await declineReschedule(row.id);
+      if (err || !appointment) {
+        setError(mapBookingRpcError(err ?? 'booking_empty_result'));
+        await load();
+        return;
+      }
+      fireAndForget(invokeRescheduleNotify(row.id, accept ? 'accepted' : 'declined'), 'reschedule notify:');
+      if (accept) {
+        // Ora veche s-a eliberat.
+        notifyWaitlistForRow(row);
+        setSuccess(trKey('req.rescheduleAccepted').replace('{label}', localLabel(appointment)));
+      } else {
+        setSuccess(trKey('req.rescheduleDeclined'));
+      }
+      await load();
+    } finally {
+      setRescheduleBusyId(null);
+    }
+  }
+
+  async function cancelByBusiness(row: Row, reason: string) {
+    setError(null);
+    setSuccess(null);
+    const { error: err } = await businessCancelAppointment(row.id, reason);
+    if (err) {
+      setError(mapBookingRpcError(err));
+      await load();
+      return;
+    }
+    fireAndForget(invokeRescheduleNotify(row.id, 'cancelled'), 'cancel notify:');
+    notifyWaitlistForRow(row);
+    setSuccess(trKey('req.cancelledByBiz'));
+    await load();
+  }
+
   async function markNoShow(id: string) {
     setError(null);
     const { error: err } = await supabase.rpc('mark_no_show', { p_appointment_id: id });
@@ -475,6 +551,13 @@ export default function BusinessRequestsScreen() {
     await load();
   }
 
+  function requestedLabel(a: Appointment): string {
+    const tz = timezoneByBusiness[a.business_id] ?? 'Europe/Bucharest';
+    const start = formatInTimeZone(new Date(a.requested_start_at as string), tz, 'dd.MM.yyyy HH:mm');
+    const end = formatInTimeZone(new Date(a.requested_end_at ?? (a.requested_start_at as string)), tz, 'HH:mm');
+    return `${start} – ${end}`;
+  }
+
   function localLabel(a: Appointment): string {
     const tz = timezoneByBusiness[a.business_id] ?? 'Europe/Bucharest';
     const start = formatInTimeZone(new Date(a.start_at), tz, 'dd.MM.yyyy HH:mm');
@@ -482,7 +565,7 @@ export default function BusinessRequestsScreen() {
     return `${start} – ${end}`;
   }
 
-  const pendingRows = filter === 'pending' ? rows : rows.filter((r) => r.status === 'pending');
+  const pendingRows = rows.filter(needsDecision);
 
   if (loading && rows.length === 0) {
     return (
@@ -501,7 +584,11 @@ export default function BusinessRequestsScreen() {
     <View style={{ flex: 1 }}>
       <Screen title={tr('req.title')} subtitle={tr('req.subtitle')} onBack={back} scroll={false}>
       <FlatList
+        ref={listRef}
         data={rows}
+        onScrollToIndexFailed={(info) =>
+          listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true })
+        }
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
@@ -519,7 +606,7 @@ export default function BusinessRequestsScreen() {
               value={filter}
               onChange={setFilter}
               options={[
-                { value: 'pending', label: tr('req.pending') },
+                { value: 'decide', label: tr('req.decide') },
                 { value: 'all', label: tr('req.all') },
               ]}
             />
@@ -544,12 +631,12 @@ export default function BusinessRequestsScreen() {
         }
         ListEmptyComponent={
           <EmptyState
-            icon={filter === 'pending' ? 'hourglass-outline' : 'calendar-clear-outline'}
+            icon={filter === 'decide' ? 'hourglass-outline' : 'calendar-clear-outline'}
             title={
-              filter === 'pending' ? tr('req.emptyPending') : tr('req.emptyAll')
+              filter === 'decide' ? tr('req.emptyPending') : tr('req.emptyAll')
             }
             description={
-              filter === 'pending'
+              filter === 'decide'
                 ? tr('req.emptyPendingDesc')
                 : tr('req.emptyAllDesc')
             }
@@ -570,6 +657,11 @@ export default function BusinessRequestsScreen() {
             onDelete={() => { setError(null); setSuccess(null); setDeleteTarget(item); }}
             onQuickMessage={(txt) => sendQuickMessage(item, txt)}
             onWaiveDeposit={() => void waiveDeposit(item.id)}
+            requestedLabel={item.requested_start_at ? requestedLabel(item) : undefined}
+            onAcceptReschedule={() => void decideReschedule(item, true)}
+            onDeclineReschedule={() => void decideReschedule(item, false)}
+            rescheduleBusy={rescheduleBusyId === item.id}
+            onBusinessCancel={(reason) => void cancelByBusiness(item, reason)}
           />
         )}
       />
