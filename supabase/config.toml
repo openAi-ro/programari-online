@@ -446,10 +446,6 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
-[functions.expire-pending]
-enabled = true
-verify_jwt = false
-
 # Callback OAuth Google: redirectul vine fără JWT Supabase (state semnat HMAC în funcție)
 [functions.google-calendar-callback]
 verify_jwt = false

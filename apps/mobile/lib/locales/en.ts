@@ -215,6 +215,7 @@ export const en: typeof ro = {
   'appt.rescheduleRequested': 'Reschedule requested: {from} → {to}',
   'appt.rescheduleWaiting': 'Reschedule request pending: {to}. Until the salon answers, the current time stays.',
   'appt.cancelReasonLine': 'Cancelled by the salon. Reason: {reason}',
+  'appt.requestExpiredLine': 'The salon did not answer the request in time. You can pick another time.',
   'appt.bizCancel': 'Cancel booking',
   'appt.bizCancelHint': 'The client gets the reason by email/WhatsApp and a notification. No automatic refunds.',
   'appt.bizCancelPlaceholder': 'Reason for cancelling (required)',

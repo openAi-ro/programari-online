@@ -928,6 +928,43 @@ export function messageRescheduleExpired(
   };
 }
 
+/** Client: the salon did not answer the booking request in time; the request was closed. */
+export function messagePendingExpired(
+  businessName: string,
+  whenLabel: string,
+  link: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Booking request expired',
+      text: `${businessName} didn't answer your request for ${whenLabel} in time, so it was closed. Book another time: ${link}`,
+    };
+  }
+  return {
+    subject: 'Cererea de programare a expirat',
+    text: `${businessName} nu a răspuns la timp cererii tale pentru ${whenLabel}, așa că a fost închisă. Alege altă oră: ${link}`,
+  };
+}
+
+/** Owner: a booking request expired without an answer. */
+export function messagePendingExpiredOwner(
+  contact: string,
+  whenLabel: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    return {
+      subject: 'Request expired',
+      text: `The request from ${contact} for ${whenLabel} expired without an answer. The client was told.`,
+    };
+  }
+  return {
+    subject: 'Cerere expirată',
+    text: `Cererea de la ${contact} pentru ${whenLabel} a expirat fără răspuns. Clientul a fost anunțat.`,
+  };
+}
+
 /** Client: the salon cancelled the booking, with its reason. */
 export function messageCancelledByBusiness(
   businessName: string,

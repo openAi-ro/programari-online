@@ -213,6 +213,7 @@ export const ro = {
   'appt.rescheduleRequested': 'Reprogramare cerută: {from} → {to}',
   'appt.rescheduleWaiting': 'Cerere de reprogramare în așteptare: {to}. Până răspunde salonul, rămâne ora actuală.',
   'appt.cancelReasonLine': 'Anulată de salon. Motiv: {reason}',
+  'appt.requestExpiredLine': 'Salonul nu a răspuns la timp cererii. Poți alege altă oră.',
   'appt.bizCancel': 'Anulează programarea',
   'appt.bizCancelHint': 'Clientul primește motivul pe email/WhatsApp și notificare. Nu se fac rambursări automate.',
   'appt.bizCancelPlaceholder': 'Motivul anulării (obligatoriu)',

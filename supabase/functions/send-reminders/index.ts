@@ -19,6 +19,8 @@
  *
  * 4) Reschedule requests (v87) not answered by 2h before the earlier start expire; the
  *    client is told the original time stays (./rescheduleExpiry.ts).
+ * 5) Booking requests (pending) nobody answered expire at their deadline (v88); client and
+ *    owner are told (./pendingExpiry.ts). Until then pending holds the slot.
  *
  * Invoke with service role (cron / scheduled function).
  *
@@ -48,6 +50,7 @@ import { soonKind, soonWindow } from './windows.ts';
 import { type Channel, channelsToSend, failedChannels, isFirstAttempt, shouldRetry } from './retry.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 import { expireRescheduleRequests } from './rescheduleExpiry.ts';
+import { expirePendingRequests } from './pendingExpiry.ts';
 
 // deno-lint-ignore no-explicit-any
 type Admin = any;
@@ -296,10 +299,12 @@ Deno.serve(async (req) => {
 
     // Sequential on the single connection: expiry runs after the reminder windows.
     const rescheduleExpired = await expireRescheduleRequests(sql, admin);
+    const pendingExpired = await expirePendingRequests(sql, admin);
 
     const outcomes = [...outcomes24h, ...outcomesSoon];
     return jsonResponse({
       reschedule_expired: rescheduleExpired,
+      pending_expired: pendingExpired,
       ok: true,
       window_24h: window24h,
       window_soon: windowSoon,

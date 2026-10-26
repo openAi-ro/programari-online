@@ -334,7 +334,9 @@ export function AppointmentCard({
 
         {status === 'cancelled' && appointment.cancel_reason ? (
           <Text style={[styles.nextStep, { color: t.colors.textMuted }]} numberOfLines={3}>
-            {tr('appt.cancelReasonLine', { reason: appointment.cancel_reason })}
+            {appointment.cancel_reason === 'request_expired'
+              ? tr('appt.requestExpiredLine')
+              : tr('appt.cancelReasonLine', { reason: appointment.cancel_reason })}
           </Text>
         ) : null}
 
