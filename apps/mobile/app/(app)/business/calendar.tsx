@@ -36,6 +36,15 @@ import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import { createWalkinAppointment } from '@/lib/walkin';
+import { searchBusinessClients } from '@/lib/businessMembers';
+import {
+  fetchStaffUnavailability,
+  type StaffUnavailability,
+} from '@/lib/staffUnavailability';
+import {
+  searchWalkinClients,
+  type WalkinClientCandidate,
+} from '@/lib/walkinClientSearch';
 import { normalizeWalkinContact, validateWalkinInput } from '@/lib/walkinRules';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
@@ -70,6 +79,7 @@ export default function BusinessCalendarScreen() {
   const [saving, setSaving] = useState(false);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
   const [rows, setRows] = useState<Appointment[]>([]);
+  const [detailApt, setDetailApt] = useState<Appointment | null>(null);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const dayInitRef = useRef(false);
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
@@ -87,6 +97,8 @@ export default function BusinessCalendarScreen() {
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinEmail, setWalkinEmail] = useState('');
   const [walkinSaving, setWalkinSaving] = useState(false);
+  const [unavailRows, setUnavailRows] = useState<StaffUnavailability[]>([]);
+  const [walkinClients, setWalkinClients] = useState<WalkinClientCandidate[]>([]);
   const [walkinError, setWalkinError] = useTransientMessage();
   const [walkinOk, setWalkinOk] = useTransientMessage();
 
@@ -139,6 +151,13 @@ export default function BusinessCalendarScreen() {
       const staffOr = staffOrUnassignedFilter(staffFilter);
       if (staffOr) query = query.or(staffOr);
     }
+    const { rows: unavail } = await fetchStaffUnavailability({
+      businessId: profile.id,
+      fromYmd: rangeStart,
+      toYmd: rangeEnd,
+      staffId: staffFilter !== 'all' ? staffFilter : null,
+    });
+    setUnavailRows(unavail);
     const { data, error: aErr } = await query;
     if (aErr) {
       setError(aErr.message, { sticky: true });
@@ -195,6 +214,12 @@ export default function BusinessCalendarScreen() {
     [staffList, walkinStaffServices, walkinServiceId]
   );
 
+  const walkinSuggestions = useMemo(() => {
+    const byPhone = searchWalkinClients(walkinClients, walkinPhone);
+    if (byPhone.length > 0) return byPhone;
+    return searchWalkinClients(walkinClients, walkinEmail);
+  }, [walkinClients, walkinPhone, walkinEmail]);
+
   const walkinDuration = useMemo(() => {
     const svc = services.find((s) => s.id === walkinServiceId);
     return svc?.duration_minutes ?? business?.session_duration_minutes ?? 30;
@@ -221,6 +246,8 @@ export default function BusinessCalendarScreen() {
             .in('staff_id', staffList.map((m) => m.id))
         : Promise.resolve({ data: [] as StaffServiceRow[] }),
     ]);
+    const { clients } = await searchBusinessClients(business.id, '');
+    setWalkinClients(clients);
     const list = (svcRows ?? []) as Service[];
     setServices(list);
     // Eroare de citire -> hartă goală = toți fac tot (ca la rezervarea publică).
@@ -341,36 +368,23 @@ export default function BusinessCalendarScreen() {
   }
 
   return (
+    <View style={styles.screenWrap}>
     <Screen
       title={tr('cal.title')}
       subtitle={business.name}
       onBack={back}
-      footer={
-        <View style={styles.footer}>
-          {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
-          <Button
-            label={blocked ? tr('cal.unblockDay') : tr('cal.blockDay')}
-            icon={blocked ? 'lock-open-outline' : 'lock-closed-outline'}
-            variant={blocked ? 'secondary' : 'danger'}
-            loading={saving}
-            onPress={() => void toggleBlockDay()}
-          />
-          <Button
-            label={tr('cal.addWalkin')}
-            icon="add-circle-outline"
-            onPress={() => void openWalkin()}
-          />
-          <Button
-            label={tr('cal.viewRequests')}
-            variant="secondary"
-            icon="hourglass-outline"
-            onPress={() => router.push('/(app)/business/(tabs)/requests')}
-          />
-        </View>
-      }
     >
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
       <Segmented value={viewMode} onChange={(v) => setViewMode(v as 'day' | 'week')} options={[{ value: 'day', label: tr('cal.viewDay') }, { value: 'week', label: tr('cal.viewWeek') }]} />
       <DatePickerField label={tr('cal.day')} value={dateLocal} onChange={setDateLocal} />
+      <Button
+        label={blocked ? tr('cal.unblockDay') : tr('cal.blockDay')}
+        icon={blocked ? 'lock-open-outline' : 'lock-closed-outline'}
+        variant="secondary"
+        size="sm"
+        loading={saving}
+        onPress={() => void toggleBlockDay()}
+      />
 
       {staffList.length > 1 ? (
         <View style={styles.filters}>
@@ -429,6 +443,15 @@ export default function BusinessCalendarScreen() {
         </Callout>
       ) : null}
 
+      {unavailRows.map((u) => (
+        <Callout key={u.id} tone="warning">
+          {tr('unavail.day', {
+            name: staffList.find((s) => s.id === u.staff_id)?.name ?? '',
+            reason: u.reason ?? `${u.start_date} -> ${u.end_date}`,
+          })}
+        </Callout>
+      ))}
+
       {rows.length === 0 ? (
         <EmptyState
           icon="sunny-outline"
@@ -454,7 +477,7 @@ export default function BusinessCalendarScreen() {
                   setDateLocal(formatInTimeZone(new Date(a.start_at), business.timezone, 'yyyy-MM-dd'));
                   setViewMode('day');
                 } else {
-                  router.push('/(app)/business/(tabs)/requests');
+                  setDetailApt(a);
                 }
               }}
               style={({ pressed }) => [
@@ -658,6 +681,26 @@ export default function BusinessCalendarScreen() {
                 onChangeText={setWalkinEmail}
               />
               <Text style={[styles.walkinHint, { color: t.colors.textFaint }]}>
+              {walkinSuggestions.length > 0 ? (
+                <>
+                  <SectionTitle>{tr('walkin.clientSearch')}</SectionTitle>
+                  {walkinSuggestions.map((c) => (
+                    <Pressable
+                      key={c.clientUserId}
+                      onPress={() => {
+                        if (c.phone) setWalkinPhone(c.phone);
+                        if (c.email) setWalkinEmail(c.email);
+                        setWalkinOk(trKey('walkin.existingFilled'));
+                      }}
+                      style={[styles.chip, { backgroundColor: t.colors.surface, borderColor: t.colors.border, alignSelf: 'flex-start' }]}
+                    >
+                      <Text style={{ color: t.colors.text, fontWeight: '700', fontSize: fontSize.sm }}>
+                        {[c.displayName, c.phone ?? c.email].filter(Boolean).join(' - ')}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </>
+              ) : null}
                 {tr('cal.walkinHint')}
               </Text>
             </ScrollView>
@@ -687,11 +730,74 @@ export default function BusinessCalendarScreen() {
         </View>
       </Modal>
     </Screen>
+    <Pressable
+      onPress={() => void openWalkin()}
+      accessibilityRole="button"
+      accessibilityLabel={tr('cal.addWalkin')}
+      style={({ pressed }) => [styles.fab, { backgroundColor: t.colors.accent, opacity: pressed ? 0.85 : 1 }]}
+    >
+      <Ionicons name="add" size={20} color={t.colors.onAccent} />
+      <Text style={[styles.fabText, { color: t.colors.onAccent }]}>{tr('cal.addWalkin')}</Text>
+    </Pressable>
+    <Modal
+      visible={detailApt !== null}
+      animationType="slide"
+      transparent
+      onRequestClose={() => setDetailApt(null)}
+      statusBarTranslucent
+    >
+      <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+        <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
+          <View style={styles.modalHead}>
+            <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
+              {tr('cal.tapDetails')}
+            </Text>
+            <Pressable onPress={() => setDetailApt(null)} accessibilityRole="button" accessibilityLabel={tr('common.close')} hitSlop={8}>
+              <Ionicons name="close" size={22} color={t.colors.textMuted} />
+            </Pressable>
+          </View>
+          {detailApt ? (
+            <>
+              <Text style={{ color: t.colors.text, fontWeight: '700', fontSize: fontSize.md }}>
+                {detailApt.service_name ?? tr('cli.session')}{detailApt.staff_name ? ` - ${detailApt.staff_name}` : ''}
+              </Text>
+              <Text style={{ color: t.colors.textMuted }}>
+                {formatInTimeZone(new Date(detailApt.start_at), business.timezone, 'dd.MM.yyyy HH:mm')} - {formatInTimeZone(new Date(detailApt.end_at), business.timezone, 'HH:mm')}
+              </Text>
+              {[detailApt.client_email, detailApt.client_phone].filter(Boolean).length > 0 ? (
+                <Text style={{ color: t.colors.textMuted }}>
+                  {[detailApt.client_email, detailApt.client_phone].filter(Boolean).join(' - ')}
+                </Text>
+              ) : null}
+              {detailApt.no_show ? (
+                <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{tr('cli.noShow')}</Text>
+              ) : null}
+              <ButtonRow>
+                <View style={styles.actionFlex}>
+                  <Button label={tr('common.close')} variant="secondary" size="sm" onPress={() => setDetailApt(null)} />
+                </View>
+                <View style={styles.actionFlex}>
+                  <Button
+                    label={tr('cal.viewRequests')}
+                    icon="hourglass-outline"
+                    size="sm"
+                    onPress={() => { setDetailApt(null); router.push('/(app)/business/(tabs)/requests'); }}
+                  />
+                </View>
+              </ButtonRow>
+            </>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  footer: { gap: spacing.md },
+  screenWrap: { flex: 1 },
+  fab: { position: 'absolute', right: spacing.md, bottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 999 },
+  fabText: { fontWeight: '800', fontSize: fontSize.sm },
   item: {
     flexDirection: 'row',
     borderRadius: radius.lg,

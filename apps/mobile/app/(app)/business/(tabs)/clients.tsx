@@ -14,7 +14,7 @@ import {
   useTheme,
 } from '@/components/ui';
 import { getCurrentUser } from '@/lib/currentUser';
-import { useT } from '@/lib/i18n';
+import { trKey, useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { useBack } from '@/lib/nav';
@@ -25,6 +25,7 @@ import { ensureChatConversationForClient } from '@/lib/chatRpc';
 import { isWinbackCandidate } from '@/lib/winback';
 import { visitCountKey } from '@/lib/visitLabel';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
+import { fetchBusinessRole } from '@/lib/businessMembers';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import type { ClientIntake, ClientPhoto } from '@/lib/types';
 import { CLIENT_PHOTO_BUCKET, clientPhotoPath, withSignedUrls } from '@/lib/clientPhotos';
@@ -83,6 +84,10 @@ export default function BusinessClientsScreen() {
       const { data: biz } = me
         ? await fetchMyBusinessResult(me.id)
         : { data: null };
+      if (biz?.id) {
+        const role = await fetchBusinessRole(biz.id);
+        if (role === 'staff') setError(trKey('members.staffOnly'), { sticky: true });
+      }
       if (biz?.name) setBizName(biz.name);
       if (biz?.id) setBizId(biz.id);
       if (biz?.timezone) setBizTimezone(biz.timezone);

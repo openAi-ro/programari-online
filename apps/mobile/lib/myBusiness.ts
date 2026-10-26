@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from './supabase';
+import { fetchMemberBusinessIds } from './businessMembers';
 import type { BusinessProfile } from './types';
 
 const KEY = 'programari.selectedBusinessId';
@@ -28,7 +29,17 @@ export async function listMyBusinesses(ownerUserId: string): Promise<BusinessPro
     .select('*')
     .eq('owner_user_id', ownerUserId)
     .order('created_at', { ascending: true });
-  return (data ?? []) as BusinessProfile[];
+  const owned = (data ?? []) as BusinessProfile[];
+  // v89: angajatii (business_members) vad business-urile la care sunt membri, nu doar pe cele detinute.
+  const memberIds = await fetchMemberBusinessIds(ownerUserId);
+  const extraIds = memberIds.filter((id) => !owned.some((b) => b.id === id));
+  if (extraIds.length === 0) return owned;
+  const { data: memberBiz } = await supabase
+    .from('business_profiles')
+    .select('*')
+    .in('id', extraIds)
+    .order('created_at', { ascending: true });
+  return [...owned, ...((memberBiz ?? []) as BusinessProfile[])];
 }
 
 /**

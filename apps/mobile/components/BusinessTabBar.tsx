@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { spacing } from '@/constants/theme';
 import { markNavStart } from '@/lib/navTiming';
 import { TabCountBadge } from '@/components/CountBadge';
 
-type TabKey = 'home' | 'requests' | 'clients' | 'reports' | 'settings';
+type TabKey = 'home' | 'requests' | 'calendar' | 'clients' | 'reports' | 'settings';
 
 type TabBarRoute = { key: string; name: string; params?: object };
 type TabBarNavProps = {
@@ -36,7 +36,7 @@ const TABS: {
       (p.includes('/business') &&
         (p.endsWith('/business') ||
           p.endsWith('/business/') ||
-          p.includes('/business/(tabs)') ||
+          p.endsWith('/business/(tabs)') || p.includes('/business/(tabs)/index') ||
           p.match(/\/business\/?$/) != null)) ||
       ((p.includes('/home') || p.endsWith('/(app)') || p.endsWith('/(app)/')) &&
         !p.includes('/business/')),
@@ -48,6 +48,14 @@ const TABS: {
     href: '/(app)/business/(tabs)/requests',
     routeName: 'requests',
     match: (p) => p.includes('/business/(tabs)/requests'),
+  },
+  {
+    key: 'calendar',
+    labelKey: 'bizTabs.calendar',
+    icon: 'calendar-outline',
+    href: '/(app)/business/(tabs)/calendar',
+    routeName: 'calendar',
+    match: (p) => p.includes('/business/(tabs)/calendar') || p.endsWith('/business/calendar'),
   },
   {
     key: 'clients',

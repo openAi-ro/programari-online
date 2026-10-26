@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Callout, Screen, SkeletonScreen } from '@/components/ui';
+import { InvitationAcceptCard } from '@/components/InvitationAcceptCard';
 import { useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { resolveAppMode, type AppMode } from '@/lib/appMode';
@@ -51,6 +52,7 @@ export default function BusinessLayout() {
         <Callout tone="danger" title={tr('biz.clientAccount')}>
           {tr('biz.clientOnly')}
         </Callout>
+        <InvitationAcceptCard onAccepted={() => router.replace('/(app)/home')} />
         <View style={styles.actions}>
           <Button
             label={tr('biz.backToMyBookings')}

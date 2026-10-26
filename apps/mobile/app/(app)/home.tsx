@@ -1021,7 +1021,7 @@ function BusinessHome({
         title={tr('home.cardCalendar')}
         hint={tr('home.cardCalendarHint')}
         chevron
-        onPress={() => router.push('/(app)/business/calendar' as never)}
+        onPress={() => router.push('/(app)/business/(tabs)/calendar' as never)}
       />
       <Card
         icon="notifications-outline"

@@ -622,6 +622,76 @@ export default function BusinessSetupScreen() {
     }
   }
 
+  type SetupSection = 'identity' | 'location' | 'schedule' | 'booking' | 'more';
+
+  /** Salvare separata pe sectiune (doar coloanele sectiunii); la creare foloseste salvarea completa. */
+  async function saveSection(section: SetupSection) {
+    if (!existingId) {
+      await handleSave();
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    let columns: Record<string, unknown> = {};
+    if (section === 'identity') {
+      const trimmed = name.trim();
+      if (!trimmed) { setError(trKey('setup.nameRequired')); return; }
+      const minutes = parseInt(duration, 10);
+      if (!Number.isFinite(minutes) || minutes < 5 || minutes > 480) { setError(trKey('svc.badDuration')); return; }
+      if (!timezone.trim()) { setError(trKey('setup.tzRequired')); return; }
+      if (!isValidTimeZone(timezone.trim())) { setError(trKey('setup.badTimezone')); return; }
+      columns = { name: trimmed, category: category.trim() || null, timezone: timezone.trim(), session_duration_minutes: minutes };
+    } else if (section === 'location') {
+      if (county.trim() && !city.trim()) { setError(trKey('setup.pickCity')); return; }
+      const lat = latitude.trim() === '' ? null : Number(String(latitude).replace(',', '.'));
+      const lon = longitude.trim() === '' ? null : Number(String(longitude).replace(',', '.'));
+      if ((lat === null) !== (lon === null)) { setError(trKey('setup.bothCoords')); return; }
+      if (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) { setError(trKey('setup.badLat')); return; }
+      if (lon !== null && (!Number.isFinite(lon) || lon < -180 || lon > 180)) { setError(trKey('setup.badLon')); return; }
+      if ((instagramInput.trim() && !normalizeInstagramUrl(instagramInput)) || (facebookInput.trim() && !normalizeFacebookUrl(facebookInput))) { setError(trKey('setup.badSocial')); return; }
+      columns = {
+        country, county: country === 'RO' ? county.trim() || null : null, city: city.trim() || null,
+        address: address.trim() || null, maps_url: mapsUrl.trim() || null, latitude: lat, longitude: lon,
+        google_review_url: googleReviewUrl.trim() || null,
+        instagram_url: normalizeInstagramUrl(instagramInput),
+        facebook_url: normalizeFacebookUrl(facebookInput),
+      };
+    } else if (section === 'schedule') {
+      const scheduleErr = validateSchedule(workingHours, breakHours);
+      if (scheduleErr) { setError(trKey(scheduleErr === 'hours' ? 'setup.badHours' : 'setup.badBreak')); return; }
+      const deposit = Number(String(depositRon).replace(',', '.'));
+      if (!Number.isFinite(deposit) || deposit < 0 || deposit > 100000) { setError(trKey('svc.badPrice')); return; }
+      const offpeakPctRaw = offpeakPercent.trim();
+      const offpeakPct = offpeakPctRaw === '' ? 0 : parseInt(offpeakPctRaw, 10);
+      const hoursParts = offpeakHours.trim() === '' ? [] : offpeakHours.trim().split('-');
+      const offpeakStartH = (hoursParts[0] ?? '').trim() === '' ? null : parseInt((hoursParts[0] ?? '').trim(), 10);
+      const offpeakEndH = (hoursParts[1] ?? '').trim() === '' ? null : parseInt((hoursParts[1] ?? '').trim(), 10);
+      if (hoursParts.length > 2 || !Number.isFinite(offpeakPct) || offpeakPct < 0 || offpeakPct > 90 || (offpeakStartH !== null && (!Number.isFinite(offpeakStartH) || offpeakStartH < 0 || offpeakStartH > 23)) || (offpeakEndH !== null && (!Number.isFinite(offpeakEndH) || offpeakEndH < 0 || offpeakEndH > 23)) || ((offpeakStartH === null) !== (offpeakEndH === null)) || (offpeakPct === 0 && (offpeakStartH !== null || offpeakEndH !== null))) { setError(trKey('setup.badOffpeak')); return; }
+      columns = { working_hours: workingHours, break_hours: breakHours, deposit_ron: deposit, offpeak_discount_percent: offpeakPct, offpeak_start_hour: offpeakStartH, offpeak_end_hour: offpeakEndH };
+    } else if (section === 'booking') {
+      const minNotice = Math.round(Number(String(minNoticeHours).replace(',', '.')) * 60);
+      const buffer = parseInt(bufferMinutes, 10);
+      const maxDays = parseInt(maxAdvanceDays, 10);
+      const cancelNotice = Math.round(Number(String(cancelNoticeHours).replace(',', '.')) * 60);
+      if (!Number.isFinite(minNotice) || minNotice < 0 || minNotice > 10080) { setError(trKey('setup.badMinNotice')); return; }
+      if (!Number.isFinite(buffer) || buffer < 0 || buffer > 240) { setError(trKey('setup.badBuffer')); return; }
+      if (!Number.isFinite(maxDays) || maxDays < 1 || maxDays > 365) { setError(trKey('setup.badMaxDays')); return; }
+      if (!Number.isFinite(cancelNotice) || cancelNotice < 0 || cancelNotice > 10080) { setError(trKey('setup.badCancelNotice')); return; }
+      columns = { min_notice_minutes: minNotice, buffer_minutes: buffer, max_advance_days: maxDays, cancel_notice_minutes: cancelNotice };
+    } else {
+      const blockN = parseInt(blockAfter, 10);
+      const loyalty = parseInt(loyaltyEvery, 10);
+      if (!Number.isFinite(blockN) || blockN < 0 || blockN > 20) { setError(trKey('setup.badBlock')); return; }
+      if (!Number.isFinite(loyalty) || loyalty < 0 || loyalty > 50) { setError(trKey('setup.badLoyalty')); return; }
+      if (loyalty === 1) { setError(trKey('setup.loyaltyMin')); return; }
+      columns = { auto_approve_returning: autoApprove, no_show_block_after: blockN, loyalty_every: loyalty, referral_enabled: referralOn, referral_reward_text: referralReward.trim() || null, blocked_dates: blockedDates };
+    }
+    setSaving(true);
+    const { error: err } = await supabase.from('business_profiles').update({ ...columns, updated_at: new Date().toISOString() }).eq('id', existingId);
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setMessage(trKey('setup.updated'));
+  }
   if (loading) {
     return (
       <SkeletonScreen
@@ -705,14 +775,7 @@ export default function BusinessSetupScreen() {
         icon="time-outline"
         hint={tr('setup.sessionHint')}
       />
-      <Field
-        label="Timezone IANA (avansat)"
-        value={timezone}
-        editable
-        onChangeText={setTimezone}
-        placeholder="Europe/Bucharest"
-        icon="globe-outline"
-      />
+
       <PickerField
         label="Timezone"
         value={timezone}
@@ -723,6 +786,7 @@ export default function BusinessSetupScreen() {
                 hint={tr('setup.tzHint')}
       />
 
+            {existingId ? <Button label={tr('setup.saveSection')} variant="secondary" size="sm" loading={saving} onPress={() => void saveSection('identity')} /> : null}
       <SectionTitle>{tr('setup.location')}</SectionTitle>
       <Callout tone="info" title={tr('setup.bizAddress')}>
         {tr('setup.addrHint', { myLoc: tr('setup.useMyLoc') })}
@@ -855,6 +919,7 @@ export default function BusinessSetupScreen() {
         </Text>
       )}
 
+      {existingId ? <Button label={tr('setup.saveSection')} variant="secondary" size="sm" loading={saving} onPress={() => void saveSection('location')} /> : null}
             <Pressable onPress={() => setOpenSections((s) => ({ ...s, schedule: !s.schedule }))} accessibilityRole="button">
         <SectionTitle>{tr('setup.secSchedule')}</SectionTitle>
       </Pressable>
@@ -937,6 +1002,7 @@ export default function BusinessSetupScreen() {
       
         </>
       ) : null}
+      {existingId ? <Button label={tr('setup.saveSection')} variant="secondary" size="sm" loading={saving} onPress={() => void saveSection('schedule')} /> : null}
       <Pressable onPress={() => setOpenSections((s) => ({ ...s, booking: !s.booking }))} accessibilityRole="button">
         <SectionTitle>{tr('setup.secBooking')}</SectionTitle>
       </Pressable>
@@ -981,6 +1047,7 @@ export default function BusinessSetupScreen() {
       
         </>
       ) : null}
+      {existingId ? <Button label={tr('setup.saveSection')} variant="secondary" size="sm" loading={saving} onPress={() => void saveSection('booking')} /> : null}
       <Pressable onPress={() => setOpenSections((s) => ({ ...s, more: !s.more }))} accessibilityRole="button">
         <SectionTitle>{tr('setup.secMore')}</SectionTitle>
       </Pressable>
@@ -1160,6 +1227,7 @@ export default function BusinessSetupScreen() {
 
         </>
       ) : null}
+      {existingId ? <Button label={tr('setup.saveSection')} variant="secondary" size="sm" loading={saving} onPress={() => void saveSection('more')} /> : null}
     </Screen>
   );
 }

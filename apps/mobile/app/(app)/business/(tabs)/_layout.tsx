@@ -94,6 +94,7 @@ export default function BusinessTabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Acasă' }} />
       <Tabs.Screen name="requests" options={{ title: 'Cereri' }} />
+      <Tabs.Screen name="calendar" options={{ title: 'Calendar' }} />
       <Tabs.Screen name="clients" options={{ title: 'Clienți' }} />
       <Tabs.Screen name="reports" options={{ title: 'Rapoarte' }} />
       <Tabs.Screen name="settings" options={{ title: 'Setări' }} />

@@ -6,6 +6,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 
 import { StaffBadge } from '@/components/StaffBadge';
+import { StaffUnavailabilitySection } from '@/components/StaffUnavailabilitySection';
+import { TeamAccessSection } from '@/components/TeamAccessSection';
+import { fetchBusinessRole, type BusinessRole } from '@/lib/businessMembers';
 import { BreakHoursForm } from '@/components/BreakHoursForm';
 import { WorkingHoursForm } from '@/components/WorkingHoursForm';
 import {
@@ -91,6 +94,7 @@ export default function BusinessStaffScreen() {
   const [services, setServices] = useState<{ id: string; name: string }[]>([]);
   // Rândurile staff_services salvate pentru specialistul editat (pentru diferență la salvare).
   const [savedServiceIds, setSavedServiceIds] = useState<string[]>([]);
+  const [myRole, setMyRole] = useState<BusinessRole | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -113,6 +117,7 @@ export default function BusinessStaffScreen() {
       return;
     }
     setBusinessId(biz.id);
+    setMyRole(await fetchBusinessRole(biz.id));
     const [{ data, error: sErr }, { data: svcRows, error: svcErr }] = await Promise.all([
       supabase
         .from('staff')
@@ -716,6 +721,18 @@ export default function BusinessStaffScreen() {
             </>
           ) : null}
         </>
+      ) : null}
+
+      {!editingId && businessId ? (
+        <TeamAccessSection
+          businessId={businessId}
+          staffList={rows.map((s) => ({ id: s.id, name: s.name }))}
+          myRole={myRole}
+        />
+      ) : null}
+
+      {editingId && editingId !== 'new' && businessId ? (
+        <StaffUnavailabilitySection businessId={businessId} staffId={editingId} />
       ) : null}
 
       {rows.length === 0 && !editingId ? (

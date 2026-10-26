@@ -34,6 +34,8 @@ type Props = {
   businessName?: string;
   localLabel?: string;
   showActions?: boolean;
+  /** Lista business (Cereri): card restrâns implicit, acțiunile secundare apar la extindere. */
+  compact?: boolean;
   onApprove?: () => void;
   onReject?: () => void;
   onCancel?: () => void;
@@ -79,6 +81,7 @@ export function AppointmentCard({
   businessName,
   localLabel,
   showActions,
+  compact,
   onApprove,
   onReject,
   onCancel,
@@ -127,6 +130,9 @@ export function AppointmentCard({
     .join(' · ');
 
   const [confirming, setConfirming] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const showDetails = !compact || expanded;
+  const HeadWrap = (compact ? Pressable : View) as unknown as typeof View;
   const [bizCancelOpen, setBizCancelOpen] = useState(false);
   const [bizCancelReason, setBizCancelReason] = useState('');
   const active = status === 'pending' || status === 'approved';
@@ -210,7 +216,7 @@ export function AppointmentCard({
 
       <View style={styles.content}>
         <View style={styles.headRow}>
-          <View style={styles.headText}>
+          <HeadWrap style={styles.headText} {...(compact ? { onPress: () => setExpanded((v) => !v), accessibilityRole: 'button' as const } : {})}>
             {businessName ? (
               <Text style={[styles.title, { color: t.colors.text }]} numberOfLines={1}>
                 {businessName}
@@ -233,12 +239,13 @@ export function AppointmentCard({
                 {localLabel ?? fallbackLabel}
               </Text>
             </View>
-          </View>
+          </HeadWrap>
           <Badge tone={appointment.no_show ? 'danger' : meta.tone} dot>
             {appointment.no_show ? tr('appt.noShowBadge') : meta.label}
           </Badge>
         </View>
 
+        {showDetails ? (
         <Text
           style={[styles.nextStep, { color: t.colors.textMuted }]}
           numberOfLines={2}
@@ -250,6 +257,7 @@ export function AppointmentCard({
             canReschedule: Boolean(canReschedule && onReschedule),
           })}
         </Text>
+        ) : null}
 
         {contact ? (
           <View style={styles.contactRow}>
@@ -260,6 +268,19 @@ export function AppointmentCard({
           </View>
         ) : null}
 
+        {compact ? (
+          <Pressable
+            onPress={() => setExpanded((v) => !v)}
+            accessibilityRole="button"
+            hitSlop={6}
+            style={styles.expandRow}
+          >
+            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={t.colors.textMuted} />
+            <Text style={[styles.contact, { color: t.colors.textMuted }]}>
+              {expanded ? tr('appt.showLess') : tr('appt.moreActions')}
+            </Text>
+          </Pressable>
+        ) : null}
         {phoneTel || phoneWa ? (
           <ButtonRow>
             {phoneTel ? (
@@ -434,7 +455,7 @@ export function AppointmentCard({
           </ButtonRow>
         ) : null}
 
-        {showActions && onMoveToSlot && (status === 'approved' || status === 'pending') ? (
+        {showDetails && showActions && onMoveToSlot && (status === 'approved' || status === 'pending') ? (
           <Button
             label={tr('appt.moveToSlot')}
             icon="swap-horizontal-outline"
@@ -443,7 +464,7 @@ export function AppointmentCard({
             onPress={onMoveToSlot}
           />
         ) : null}
-        {canPostpone ? (
+        {showDetails && canPostpone ? (
           <Button
             label={tr('appt.postpone')}
             icon="time-outline"
@@ -452,7 +473,7 @@ export function AppointmentCard({
             onPress={() => setPostponeOpen(true)}
           />
         ) : null}
-        {showActions && onBusinessCancel && active ? (
+        {showDetails && showActions && onBusinessCancel && active ? (
           bizCancelOpen ? (
             <View style={[styles.confirmBox, { borderTopColor: t.colors.border }]}>
               <Text style={[styles.confirmText, { color: t.colors.textMuted }]} numberOfLines={3}>
@@ -614,7 +635,7 @@ export function AppointmentCard({
         </Modal>
 
 
-        {onMarkNoShow && canMarkNoShow(appointment) ? (
+        {showDetails && onMarkNoShow && canMarkNoShow(appointment) ? (
           <Button
             label={tr('appt.markNoShow')}
             icon="alert-circle-outline"
@@ -624,7 +645,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onClearNoShow && appointment.no_show ? (
+        {showDetails && onClearNoShow && appointment.no_show ? (
           <Button
             label={tr('appt.clearNoShow')}
             variant="secondary"
@@ -633,7 +654,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onDelete ? (
+        {showDetails && onDelete ? (
           <Button
             label={tr('appt.deleteSession')}
             icon="trash-outline"
@@ -643,7 +664,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onCancelSeries && appointment.recurring_series_id && (status === 'pending' || status === 'approved') ? (
+        {showDetails && onCancelSeries && appointment.recurring_series_id && (status === 'pending' || status === 'approved') ? (
           <Button
             label={`${tr('appt.series')} · ${tr('appt.cancelSeries')}`}
             icon="repeat-outline"
@@ -655,7 +676,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onWaiveDeposit && appointment.payment_status === 'unpaid' && (appointment.deposit_ron ?? 0) > 0 ? (
+        {showDetails && onWaiveDeposit && appointment.payment_status === 'unpaid' && (appointment.deposit_ron ?? 0) > 0 ? (
           <Button
             label={tr('pay.waiveDeposit')}
             icon="cash-outline"
@@ -667,7 +688,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onReview ? (
+        {showDetails && onReview ? (
           <Button
             label={reviewLabel ?? tr('appt.leaveReview')}
             icon="star-outline"
@@ -678,7 +699,7 @@ export function AppointmentCard({
             onPress={onReview}
           />
         ) : null}
-        {onGoogleReview ? (
+        {showDetails && onGoogleReview ? (
           <Button
             label={tr('appt.googleReview')}
             icon="logo-google"
@@ -689,9 +710,9 @@ export function AppointmentCard({
             onPress={onGoogleReview}
           />
         ) : null}
-        {checkedIn ? (
+        {showDetails && checkedIn ? (
           <Text style={[styles.payHint, { color: t.colors.accent }]}>{tr('appt.checkedIn')}</Text>
-        ) : onCheckIn ? (
+        ) : showDetails && onCheckIn ? (
           <Button
             label={tr('appt.checkIn')}
             icon="checkmark-circle-outline"
@@ -704,7 +725,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onQuickMessage ? (
+        {showDetails && onQuickMessage ? (
           <View
             style={[
               styles.chatSection,
@@ -750,7 +771,7 @@ export function AppointmentCard({
           </View>
         ) : null}
 
-        {canConfirm && onConfirmAttendance ? (
+        {showDetails && canConfirm && onConfirmAttendance ? (
           <Button
             label={tr('appt.confirmAttendance')}
             icon="checkmark-circle-outline"
@@ -765,7 +786,7 @@ export function AppointmentCard({
         ) : null}
 
         {/* Reschedule already in primary ButtonRow for client (!showActions) */}
-        {showActions && canReschedule && onReschedule ? (
+        {showDetails && showActions && canReschedule && onReschedule ? (
           <Button
             label={tr('appt.reschedule')}
             icon="swap-horizontal-outline"
@@ -775,7 +796,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onDrive && status === 'approved' ? (
+        {showDetails && onDrive && status === 'approved' ? (
           <View
             style={[
               styles.driveBox,
@@ -812,7 +833,7 @@ export function AppointmentCard({
           </View>
         ) : null}
 
-        {onAddToCalendar && status === 'approved' ? (
+        {showDetails && onAddToCalendar && status === 'approved' ? (
           <Button
             label={tr('appt.addToCalendar')}
             icon="calendar-outline"
@@ -824,7 +845,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {onShare ? (
+        {showDetails && onShare ? (
           <Button
             label={tr('appt.share')}
             icon="share-outline"
@@ -836,7 +857,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {showActions && onCancel && canCancel && (status === 'pending' || status === 'approved') ? (
+        {showDetails && showActions && onCancel && canCancel && (status === 'pending' || status === 'approved') ? (
           confirming ? (
             <View style={[styles.confirmBox, { borderTopColor: t.colors.border }]}>
               <Text style={[styles.confirmText, { color: t.colors.textMuted }]} numberOfLines={3}>
@@ -910,6 +931,7 @@ const styles = StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   time: { fontSize: fontSize.md, fontWeight: '600', flexShrink: 1 },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  expandRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   requestBox: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm },
   requestText: { fontSize: fontSize.sm, fontWeight: '600', flexShrink: 1 },
   reasonInput: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, minHeight: 64, fontSize: fontSize.md, textAlignVertical: 'top' },

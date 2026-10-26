@@ -670,6 +670,7 @@ export default function BusinessRequestsScreen() {
             appointment={item}
             localLabel={localLabel(item)}
             showActions
+            compact
             onApprove={() => updateStatus(item.id, 'approved')}
             onReject={() => updateStatus(item.id, 'rejected')}
             onPostpone={(hours) => postponeAppointment(item.id, hours)}
