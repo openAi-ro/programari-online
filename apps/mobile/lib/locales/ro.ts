@@ -1535,7 +1535,7 @@ export const ro = {
   'btn.guideNote': 'Denumirile din meniuri diferă de la o versiune la alta a aplicațiilor; caută opțiunea pentru link, site web sau programări.',
   'chat.micA11y': 'Dictează mesajul',
   'chat.micStopA11y': 'Oprește dictarea',
-  'chat.micDenied': 'Permite accesul la microfon din browser ca să poți dicta.',
+  'chat.micDenied': 'Permite accesul la microfon (din browser sau din setările telefonului) ca să poți dicta.',
   'chat.micFailed': 'Dictarea nu a mers. Încearcă din nou sau scrie mesajul.',
   // __APPEND__
 };

@@ -1,7 +1,6 @@
 /**
- * Dictare în chat (web): Web Speech API din browser (Chrome/Edge/Safari).
- * Pe aplicația nativă nu există încă modul de recunoaștere vocală în build,
- * așa că butonul de microfon nu apare acolo (vezi useDictation).
+ * Dictare în chat: logica pură din jurul expo-speech-recognition (vezi useDictation).
+ * Codurile de eroare sunt cele din Web Speech API, comune pe web, Android și iOS.
  */
 
 /** Textul din câmp după dictare: ce era scris + ce s-a dictat, cu un spațiu între ele. */
@@ -15,6 +14,6 @@ export function joinDictation(base: string, spoken: string): string {
 /** Mesajul afișat pentru o eroare a recunoașterii vocale (null = nimic de arătat). */
 export function dictationErrorKind(code: string | undefined): 'denied' | 'failed' | null {
   if (code === 'not-allowed' || code === 'service-not-allowed') return 'denied';
-  if (code === 'aborted' || code === 'no-speech') return null;
+  if (code === 'aborted' || code === 'no-speech' || code === 'speech-timeout') return null;
   return 'failed';
 }

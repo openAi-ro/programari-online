@@ -1537,7 +1537,7 @@ export const en: typeof ro = {
   'btn.guideNote': 'Menu names differ between app versions; look for the link, website or appointments option.',
   'chat.micA11y': 'Dictate message',
   'chat.micStopA11y': 'Stop dictation',
-  'chat.micDenied': 'Allow microphone access in your browser to dictate.',
+  'chat.micDenied': 'Allow microphone access (in your browser or phone settings) to dictate.',
   'chat.micFailed': 'Dictation did not work. Try again or type the message.',
   // __APPEND__
 };
