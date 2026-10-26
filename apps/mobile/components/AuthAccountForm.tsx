@@ -43,6 +43,7 @@ import {
   loadRememberedCredentials,
   saveRememberedCredentials,
 } from '@/lib/rememberCredentials';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Channel = 'email' | 'phone';
 type Mode = 'login' | 'register';
@@ -127,8 +128,8 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const otpLock = useRef(false);
 
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useTransientMessage();
+  const [error, setError] = useTransientMessage();
   const [activationEmail, setActivationEmail] = useState<string | null>(null);
   const [referralInput, setReferralInput] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
@@ -471,8 +472,8 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               </Text>
             </Pressable>
 
-            {error ? <Callout tone="danger">{error}</Callout> : null}
-            {message ? <Callout tone="success">{message}</Callout> : null}
+            {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+            {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
 
             <LoginButtonRow>
               <LoginButtonHalf>
@@ -553,8 +554,8 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                     </Text>
                   </Text>
                 </Pressable>
-                {error ? <Callout tone="danger">{error}</Callout> : null}
-                {message ? <Callout tone="success">{message}</Callout> : null}
+                {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+                {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
                 <LoginButton
                   label={tr('auth.sendWaCode')}
                   onPress={() => void handleSendWhatsAppOtp()}
@@ -578,8 +579,8 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                   returnKeyType="go"
                 />
 
-                {error ? <Callout tone="danger">{error}</Callout> : null}
-                {message ? <Callout tone="success">{message}</Callout> : null}
+                {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+                {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
 
                 <LoginButton
                   label={tr('auth.signIn')}

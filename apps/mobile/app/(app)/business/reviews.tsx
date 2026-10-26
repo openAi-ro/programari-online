@@ -18,6 +18,7 @@ import { fetchMyBusinessId } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Review } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 export default function BusinessReviewsScreen() {
   const t = useTheme();
@@ -25,7 +26,7 @@ export default function BusinessReviewsScreen() {
   const tr = useT();
   const [rows, setRows] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -48,7 +49,7 @@ export default function BusinessReviewsScreen() {
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
       .limit(100);
-    if (err) setError(err.message);
+    if (err) setError(err.message, { sticky: true });
     else setRows((data ?? []) as Review[]);
     setLoading(false);
   }, []);
@@ -95,7 +96,7 @@ export default function BusinessReviewsScreen() {
 
   return (
     <Screen title={tr('rev.title')} subtitle={tr('rev.subtitle')} onBack={back}>
-      {error ? <Callout tone="danger">{error}</Callout> : null}
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
       {avg != null ? (
         <Text style={[styles.avg, { color: t.colors.text }]}>
           ★ {avg.toFixed(1)} · {rows.length}

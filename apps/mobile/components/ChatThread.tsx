@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import { useFocusEffect } from 'expo-router';
 import type { ChatMessage } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 // Unique topic for each subscription: supabase.channel(sameTopic) returns a channel that
 // is still subscribed or leaving, and .on() after subscribe() throws.
@@ -50,7 +51,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const back = useBack();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [counterpartyName, setCounterpartyName] = useState('Chat');
   const [counterpartyTz, setCounterpartyTz] = useState('Europe/Bucharest');
   const [draft, setDraft] = useState('');
@@ -74,11 +75,11 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const load = useCallback(async () => {
     setError(null);
     const user = await getCurrentUser();
-    if (!user) { setLoading(false); setError(trKey('auth.notSignedIn')); return; }
+    if (!user) { setLoading(false); setError(trKey('auth.notSignedIn'), { sticky: true }); return; }
     userIdRef.current = user.id;
     const { data: conv, error: convErr } = await supabase.from('chat_conversations').select('*').eq('id', conversationId).maybeSingle();
-    if (convErr) { setLoading(false); setError(convErr.message); return; }
-    if (!conv) { setLoading(false); setError(trKey('chat.noAccess')); return; }
+    if (convErr) { setLoading(false); setError(convErr.message, { sticky: true }); return; }
+    if (!conv) { setLoading(false); setError(trKey('chat.noAccess'), { sticky: true }); return; }
     let name = isClient ? 'Business' : 'Client';
     let tz = 'Europe/Bucharest';
     if (isClient) {
@@ -93,7 +94,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     }
     setCounterpartyName(name); counterpartyNameRef.current = name; setCounterpartyTz(tz);
     const { messages: fetched, hasMore, error: msgErr } = await listMessages(conversationId);
-    if (msgErr) { setLoading(false); setError(msgErr); return; }
+    if (msgErr) { setLoading(false); setError(msgErr, { sticky: true }); return; }
     setMessages(fetched);
     setHasOlder(hasMore);
     void markConversationRead(conversationId);
@@ -200,7 +201,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       <View style={styles.body}>
         {error ? (
           <View style={styles.centerContent}>
-            <Callout tone="danger" title={tr('chat.errorTitle')}>
+            <Callout onClose={() => setError(null)} tone="danger" title={tr('chat.errorTitle')}>
               {error}
             </Callout>
             <View style={styles.centerRow}>

@@ -35,6 +35,7 @@ import { businessIdFilter } from '@/lib/realtimeFilters';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Appointment, BusinessProfile, FreeSlot, Staff } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Row = Appointment & { business?: BusinessProfile | null };
 
@@ -51,8 +52,8 @@ export default function BusinessRequestsScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'pending' | 'all'>('all');
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [success, setSuccess] = useTransientMessage();
   const [postponeBusyId, setPostponeBusyId] = useState<string | null>(null);
   const [timezoneByBusiness, setTimezoneByBusiness] = useState<Record<string, string>>({});
   const [codeByBusiness, setCodeByBusiness] = useState<Record<string, string>>({});
@@ -64,7 +65,7 @@ export default function BusinessRequestsScreen() {
   const [moveSlot, setMoveSlot] = useState<FreeSlot | null>(null);
   const [moveLoading, setMoveLoading] = useState(false);
   const [moveSaving, setMoveSaving] = useState(false);
-  const [moveError, setMoveError] = useState<string | null>(null);
+  const [moveError, setMoveError] = useTransientMessage();
   const loadRef = useRef<() => Promise<void>>(async () => {});
   // Id-uri deja văzute — ca popup-ul din bara de notificări să apară
   // doar pentru cereri NOI, nu la fiecare refresh / focus.
@@ -79,7 +80,7 @@ export default function BusinessRequestsScreen() {
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
-      setError(trKey('req.notAuthed'));
+      setError(trKey('req.notAuthed'), { sticky: true });
       return;
     }
 
@@ -89,7 +90,7 @@ export default function BusinessRequestsScreen() {
       .eq('owner_user_id', user.id);
 
     if (bErr) {
-      setError(bErr.message);
+      setError(bErr.message, { sticky: true });
       setLoading(false);
       return;
     }
@@ -127,7 +128,7 @@ export default function BusinessRequestsScreen() {
 
     const { data, error: aErr } = await query;
     if (aErr) {
-      setError(aErr.message);
+      setError(aErr.message, { sticky: true });
     } else {
       const list = (data ?? []) as Row[];
       setRows(list);
@@ -530,12 +531,12 @@ export default function BusinessRequestsScreen() {
               </Callout>
             ) : null}
             {error ? (
-              <Callout tone="danger" title={tr('common.errorTitle')}>
+              <Callout onClose={() => setError(null)} tone="danger" title={tr('common.errorTitle')}>
                 {error}
               </Callout>
             ) : null}
             {success ? (
-              <Callout tone="success" title={tr('common.done')}>
+              <Callout onClose={() => setSuccess(null)} tone="success" title={tr('common.done')}>
                 {success}
               </Callout>
             ) : null}
@@ -595,7 +596,7 @@ export default function BusinessRequestsScreen() {
               </Pressable>
             </View>
             <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
-              {moveError ? <Callout tone="danger">{moveError}</Callout> : null}
+              {moveError ? <Callout onClose={() => setMoveError(null)} tone="danger">{moveError}</Callout> : null}
               <DatePickerField
                 label={tr('req.newDay')}
                 value={moveDate}

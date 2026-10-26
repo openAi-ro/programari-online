@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { ClientPhoto } from '@/lib/types';
 import { withSignedUrls } from '@/lib/clientPhotos';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Biz = { id: string; name: string };
 
@@ -35,8 +36,8 @@ export default function IntakeScreen() {
   const [notes, setNotes] = useState('');
   const [consent, setConsent] = useState(false);
   const [photos, setPhotos] = useState<ClientPhoto[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [message, setMessage] = useTransientMessage();
 
   const loadBusinesses = useCallback(async () => {
     setError(null);
@@ -145,8 +146,8 @@ export default function IntakeScreen() {
 
   return (
     <Screen title={tr('int.title')} subtitle={tr('int.subtitle')} onBack={back}>
-      {error ? <Callout tone="danger">{error}</Callout> : null}
-      {message ? <Callout tone="success">{message}</Callout> : null}
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+      {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
       <SectionTitle>{tr('int.pickBiz')}</SectionTitle>
       <View style={styles.chips}>
         {businesses.map((b) => (

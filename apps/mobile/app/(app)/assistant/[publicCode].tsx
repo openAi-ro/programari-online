@@ -24,6 +24,7 @@ import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
 import { supabase } from '@/lib/supabase';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Message = { from: 'user' | 'bot'; text: string; actions: AssistantAction[] };
 
@@ -64,7 +65,7 @@ export default function AssistantScreen() {
   const { publicCode } = useLocalSearchParams<{ publicCode?: string | string[] }>();
   const code = String(Array.isArray(publicCode) ? publicCode[0] : publicCode ?? '').trim();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('');
   const [knowledge, setKnowledge] = useState<AssistantKnowledge | null>(null);
@@ -91,7 +92,7 @@ export default function AssistantScreen() {
       .eq('public_code', code)
       .maybeSingle();
     if (err || !data) {
-      setError(err?.message ?? trKey('book.notFound'));
+      setError(err?.message ?? trKey('book.notFound'), { sticky: true });
       setLoading(false);
       return;
     }
@@ -247,7 +248,7 @@ export default function AssistantScreen() {
       keyboardAvoid
       footer={composer}
     >
-      {error ? <Callout tone="danger">{error}</Callout> : null}
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
       <ScrollView
         ref={listRef}
         style={styles.list}

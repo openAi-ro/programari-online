@@ -42,6 +42,7 @@ import { initialServiceSelection, staffServicesPlan } from '@/lib/staffServices'
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Draft = {
   name: string;
@@ -81,8 +82,8 @@ export default function BusinessStaffScreen() {
   const [saving, setSaving] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [rows, setRows] = useState<Staff[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [message, setMessage] = useTransientMessage();
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -96,12 +97,12 @@ export default function BusinessStaffScreen() {
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
-      setError(trKey('req.notAuthed'));
+      setError(trKey('req.notAuthed'), { sticky: true });
       return;
     }
     const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
-      setError(bErr.message);
+      setError(bErr.message, { sticky: true });
       setLoading(false);
       return;
     }
@@ -127,7 +128,7 @@ export default function BusinessStaffScreen() {
         .order('sort_order', { ascending: true }),
     ]);
     if (sErr || svcErr) {
-      setError((sErr ?? svcErr)?.message ?? trKey('team.saveFail'));
+      setError((sErr ?? svcErr)?.message ?? trKey('team.saveFail'), { sticky: true });
     } else {
       setRows((data ?? []) as Staff[]);
       setServices((svcRows ?? []) as { id: string; name: string }[]);
@@ -472,7 +473,7 @@ export default function BusinessStaffScreen() {
       footer={
         editingId ? (
           <View style={styles.footer}>
-            {error ? <Callout tone="danger">{error}</Callout> : null}
+            {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
             <Button
               label={saving ? tr('cli.saving') : editingId === 'new' ? tr('team.addShort') : tr('common.save')}
               icon="checkmark"
@@ -490,8 +491,8 @@ export default function BusinessStaffScreen() {
           </View>
         ) : (
           <View style={styles.footer}>
-            {error ? <Callout tone="danger">{error}</Callout> : null}
-            {message ? <Callout tone="success">{message}</Callout> : null}
+            {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+            {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
             <Button label={tr('team.add')} icon="add" onPress={startNew} />
           </View>
         )

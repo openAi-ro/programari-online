@@ -39,6 +39,7 @@ import { useBack } from '@/lib/nav';
 import { normalizePhoneE164 } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 /** Setări business: pagina publică de prezentare (/b/[publicCode]). */
 export default function BusinessPageSettingsScreen() {
@@ -56,8 +57,8 @@ export default function BusinessPageSettingsScreen() {
   const [enabled, setEnabled] = useState(true);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [message, setMessage] = useTransientMessage();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -65,12 +66,12 @@ export default function BusinessPageSettingsScreen() {
       const user = await getCurrentUser();
       if (!user) {
         setLoading(false);
-        setError(trKey('req.notAuthed'));
+        setError(trKey('req.notAuthed'), { sticky: true });
         return;
       }
       const { data, error: err } = await fetchMyBusinessResult(user.id);
       if (err) {
-        setError(err.message);
+        setError(err.message, { sticky: true });
         setLoading(false);
         return;
       }
@@ -232,7 +233,7 @@ export default function BusinessPageSettingsScreen() {
   if (!business) {
     return (
       <Screen title={tr('pageEdit.title')} subtitle={tr('pageEdit.subtitle')} onBack={back}>
-        {error ? <Callout tone="danger">{error}</Callout> : null}
+        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
         <EmptyState
           icon="storefront-outline"
           title={tr('pageEdit.noBusiness')}
@@ -255,8 +256,8 @@ export default function BusinessPageSettingsScreen() {
       onBack={back}
       footer={
         <View style={styles.footer}>
-          {error ? <Callout tone="danger">{error}</Callout> : null}
-          {message ? <Callout tone="success">{message}</Callout> : null}
+          {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+          {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
           <Button
             label={saving ? tr('cli.saving') : tr('pageEdit.save')}
             icon="checkmark"

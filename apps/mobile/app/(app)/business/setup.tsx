@@ -63,6 +63,7 @@ import { COUNTRY_TIMEZONES, countryByCode, countryByName, countryCodeOf, country
 import { getDeviceCoords } from '@/lib/discover';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 function todayYmd(): string {
   const d = new Date();
@@ -170,16 +171,9 @@ export default function BusinessSetupScreen() {
   const [blockDateDraft, setBlockDateDraft] = useState(todayYmd);
   const [blockRangeStart, setBlockRangeStart] = useState(todayYmd);
   const [blockRangeEnd, setBlockRangeEnd] = useState(todayYmd);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [loadFailed, setLoadFailed] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  // Mesajul de confirmare / informare dispare singur (nu rămâne peste „Salvează”).
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(null), 4000);
-    return () => clearTimeout(timer);
-  }, [message]);
+  const [message, setMessage] = useTransientMessage();
 
   useEffect(() => {
     let cancelled = false;
@@ -188,7 +182,7 @@ export default function BusinessSetupScreen() {
     const timer = setTimeout(() => {
       if (cancelled) return;
       cancelled = true;
-      setError(trKey('setup.loadFail'));
+      setError(trKey('setup.loadFail'), { sticky: true });
       setLoading(false);
     }, 15000);
     const done = () => {
@@ -200,7 +194,7 @@ export default function BusinessSetupScreen() {
         await loadBusiness();
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : trKey('setup.loadFailShort'));
+          setError(e instanceof Error ? e.message : trKey('setup.loadFailShort'), { sticky: true });
         }
       } finally {
         done();
@@ -220,7 +214,7 @@ export default function BusinessSetupScreen() {
       if (loadErr) {
         if (!cancelled) {
           setLoadFailed(true);
-          setError(trKey('setup.loadFail'));
+          setError(trKey('setup.loadFail'), { sticky: true });
         }
         return;
       }
@@ -647,12 +641,12 @@ export default function BusinessSetupScreen() {
       footer={
         <View style={styles.footer}>
           {error ? (
-            <Callout tone="danger" title={tr('setup.checkData')}>
+            <Callout onClose={() => setError(null)} tone="danger" title={tr('setup.checkData')}>
               {error}
             </Callout>
           ) : null}
           {message ? (
-            <Callout tone="success" title={tr('common.done')}>
+            <Callout onClose={() => setMessage(null)} tone="success" title={tr('common.done')}>
               {message}
             </Callout>
           ) : null}

@@ -28,6 +28,7 @@ import { deleteMyAccount, exportMyData } from '@/lib/accountData';
 import { mapAuthError, signOut, updatePassword } from '@/lib/auth';
 import { getAppVersionLabel } from '@/lib/appVersion';
 import { parseAccountKind } from '@/lib/accountKind';
+import { functionErrorCode } from '@/lib/notify-client';
 import { getAppMode, type AppMode } from '@/lib/appMode';
 import {
   getThemePreference,
@@ -67,6 +68,7 @@ import {
   type ServiceChecklistState,
 } from '@/lib/serviceChecklist';
 import type { Profile } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 export default function SettingsScreen() {
   const segments = useSegments();
@@ -130,8 +132,8 @@ export default function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [credBusy, setCredBusy] = useState(false);
   const [themePref, setThemePref] = useState<ThemePreference>('system');
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useTransientMessage();
+  const [error, setError] = useTransientMessage();
 
   // Bannerul de succes e temporar: dispare singur, nu rămâne pe pagină.
   useEffect(() => {
@@ -152,7 +154,7 @@ export default function SettingsScreen() {
       p_business_id: businessId,
     });
     if (statusErr) {
-      setError(trKey('gcal.statusFail'));
+      setError(trKey('gcal.statusFail'), { sticky: true });
       return;
     }
     const row = Array.isArray(data) ? data[0] : data;
@@ -207,7 +209,9 @@ export default function SettingsScreen() {
       errors?: string[];
     } | null;
     if (err || !payload) {
-      setError(trKey('gcal.syncFail'));
+      // 409 needs_reconnect: Google nu mai dă acces la calendar — mesajul spune ce e de făcut.
+      const code = err ? await functionErrorCode(err) : null;
+      setError(trKey(code === 'needs_reconnect' ? 'gcal.needsReconnect' : 'gcal.syncFail'));
       return;
     }
     const failedCount =
@@ -1196,12 +1200,12 @@ export default function SettingsScreen() {
       footer={
         <View style={styles.footer}>
           {error ? (
-            <Callout tone="danger" title={tr('common.errorTitle')}>
+            <Callout onClose={() => setError(null)} tone="danger" title={tr('common.errorTitle')}>
               {error}
             </Callout>
           ) : null}
           {message ? (
-            <Callout tone="success" title={tr('common.done')}>
+            <Callout onClose={() => setMessage(null)} tone="success" title={tr('common.done')}>
               {message}
             </Callout>
           ) : null}
@@ -1794,8 +1798,8 @@ export default function SettingsScreen() {
                     ) : null}
                     {gcalStatus?.status === 'needs_reconnect' ? (
                       <>
-                        <Text style={[styles.panelText, { color: t.colors.danger }]}>{tr('gcal.ret_auth')}</Text>
-                        <Button label={tr('gcal.connect')} icon="logo-google" loading={gcalBusy} onPress={() => void handleGoogleConnect()} />
+                        <Text style={[styles.panelText, { color: t.colors.danger }]}>{tr('gcal.needsReconnect')}</Text>
+                        <Button label={tr('gcal.reconnect')} icon="logo-google" loading={gcalBusy} onPress={() => void handleGoogleConnect()} />
                       </>
                     ) : (
                       <Button label={tr('gcal.syncNow')} variant="secondary" icon="sync-outline" loading={gcalSyncing} onPress={() => void handleGoogleSync()} />

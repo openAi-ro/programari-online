@@ -20,6 +20,7 @@ import { filterWaitlistByDate, waitlistDates } from '@/lib/waitlistFilter';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { WaitlistEntry } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Row = WaitlistEntry & {
   services?: { name: string | null } | null;
@@ -32,8 +33,8 @@ export default function BusinessWaitlistScreen() {
   const tr = useT();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [success, setSuccess] = useTransientMessage();
   const [bizCode, setBizCode] = useState('');
   const [notifyBusyId, setNotifyBusyId] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState<string | null>(null);
@@ -65,7 +66,7 @@ export default function BusinessWaitlistScreen() {
         .eq('business_id', biz.id)
         .in('status', ['active', 'notified'])
         .order('desired_date', { ascending: true });
-      if (plain.error) setError(plain.error.message);
+      if (plain.error) setError(plain.error.message, { sticky: true });
       else setRows((plain.data ?? []) as Row[]);
     } else {
       setRows((data ?? []) as Row[]);
@@ -129,8 +130,8 @@ export default function BusinessWaitlistScreen() {
 
   return (
     <Screen title={tr('wl.title')} subtitle={tr('wl.subtitle')} onBack={back}>
-      {error ? <Callout tone="danger">{error}</Callout> : null}
-      {success ? <Callout tone="success">{success}</Callout> : null}
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+      {success ? <Callout onClose={() => setSuccess(null)} tone="success">{success}</Callout> : null}
       {rows.length > 0 ? (
         <View style={styles.chips}>
           {[null, ...waitlistDates(rows)].map((d) => {

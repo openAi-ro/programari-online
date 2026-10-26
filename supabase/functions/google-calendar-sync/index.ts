@@ -9,8 +9,8 @@
  *   incrementală (syncToken) pentru toate conexiunile active sau doar { business_id }.
  * - JWT proprietar (butonul „Sincronizează acum”): sincronizare completă { business_id }.
  *
- * Tokenul de acces Google se refolosește până expiră; invalid_grant marchează
- * conexiunea „needs_reconnect” în loc de eroare generică.
+ * Tokenul de acces Google se refolosește până expiră; invalid_grant sau un 403 fără
+ * permisiunea de calendar marchează conexiunea „needs_reconnect” (409) în loc de eroare generică.
  */
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
@@ -101,16 +101,9 @@ class GoogleSession {
     const r = await refreshAccessToken(this.env, this.conn.refresh_token);
     if (!r.ok) {
       if (r.invalidGrant) {
-        await this.admin
-          .from('google_calendar_connections')
-          .update({
-            status: 'needs_reconnect',
-            last_error: 'invalid_grant: accesul Google a fost revocat sau a expirat; reconectați Google Calendar',
-            access_token: null,
-            access_token_expires_at: null,
-          })
-          .eq('business_id', this.conn.business_id);
-        throw new NeedsReconnectError();
+        return await this.markNeedsReconnect(
+          'invalid_grant: accesul Google a fost revocat sau a expirat; reconectați Google Calendar',
+        );
       }
       throw new Error(`google_token_failed_${r.error}`);
     }
@@ -124,16 +117,32 @@ class GoogleSession {
     return r.accessToken;
   }
 
-  /** Rulează un apel Google; la 401 (token revocat/expirat) reîmprospătează și reîncearcă o dată. */
+  /** Conexiunea nu mai poate sincroniza fără o nouă autorizare Google: aplicația cere reconectarea. */
+  private async markNeedsReconnect(lastError: string): Promise<never> {
+    console.warn('gcal needs_reconnect', this.conn.business_id, lastError);
+    await this.admin
+      .from('google_calendar_connections')
+      .update({ status: 'needs_reconnect', last_error: lastError, access_token: null, access_token_expires_at: null })
+      .eq('business_id', this.conn.business_id);
+    throw new NeedsReconnectError();
+  }
+
+  /**
+   * Rulează un apel Google; la 401 (token revocat/expirat) reîmprospătează și reîncearcă o dată.
+   * 403 fără permisiunea de calendar → needs_reconnect (reîncercarea n-ar ajuta).
+   */
   async call<T>(fn: (token: string) => Promise<T>): Promise<T> {
-    const token = this.token ?? (await this.refresh());
     try {
-      return await fn(token);
-    } catch (e) {
-      if (e instanceof GoogleApiError && e.status === 401) {
+      const token = this.token ?? (await this.refresh());
+      try {
+        return await fn(token);
+      } catch (e) {
+        if (!(e instanceof GoogleApiError && e.status === 401)) throw e;
         this.token = null;
         return await fn(await this.refresh());
       }
+    } catch (e) {
+      if (e instanceof GoogleApiError && e.insufficientScope) return await this.markNeedsReconnect('insufficient_scope');
       throw e;
     }
   }

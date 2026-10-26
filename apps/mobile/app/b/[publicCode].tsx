@@ -98,6 +98,7 @@ import { localDayBoundsUtc } from '@/lib/timezone';
 import { fireAndForget } from '@/lib/fireAndForget';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, DayKey, FreeSlot, Service, Staff } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 const TEAM_SELECTED = '#2dd4bf';
 const TEAM_SELECTED_BG = 'rgba(45, 212, 191, 0.14)';
@@ -148,8 +149,8 @@ export default function PublicBookScreen() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
   const [waitlistBusy, setWaitlistBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [message, setMessage] = useTransientMessage();
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
@@ -203,7 +204,7 @@ export default function PublicBookScreen() {
     (async () => {
       setError(null);
       if (!code) {
-        setError(trKey('book.badCode'));
+        setError(trKey('book.badCode'), { sticky: true });
         setLoading(false);
         return;
       }
@@ -213,12 +214,12 @@ export default function PublicBookScreen() {
         .eq('public_code', code)
         .maybeSingle();
       if (err) {
-        setError(err.message);
+        setError(err.message, { sticky: true });
         setLoading(false);
         return;
       }
       if (!data) {
-        setError(trKey('book.notFound'));
+        setError(trKey('book.notFound'), { sticky: true });
         setLoading(false);
         return;
       }
@@ -815,8 +816,8 @@ export default function PublicBookScreen() {
       onBack={goBack}
       footer={
         <>
-          {error ? <Callout tone="danger">{error}</Callout> : null}
-          {message ? <Callout tone="success">{message}</Callout> : null}
+          {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+          {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
           {/* În iframe pe site-ul salonului bara fixă ar acoperi pagina gazdă. */}
           {embedded ? null : (
             <Button

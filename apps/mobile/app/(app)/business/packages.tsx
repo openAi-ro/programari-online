@@ -32,6 +32,7 @@ import type {
   GiftCard,
   PackageTemplate,
 } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type IssuedRow = ClientPackage & {
   packages?: { name: string | null } | null;
@@ -47,8 +48,8 @@ export default function BusinessPackagesScreen() {
   const [issued, setIssued] = useState<IssuedRow[]>([]);
   const [cards, setCards] = useState<GiftCard[]>([]);
   const [clients, setClients] = useState<BusinessClientRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [message, setMessage] = useTransientMessage();
   const [name, setName] = useState('');
   const [sessions, setSessions] = useState('10');
   const [price, setPrice] = useState('');
@@ -84,7 +85,7 @@ export default function BusinessPackagesScreen() {
         .order('created_at', { ascending: false }),
       supabase.rpc('list_business_clients'),
     ]);
-    if (tpl.error) setError(tpl.error.message);
+    if (tpl.error) setError(tpl.error.message, { sticky: true });
     setTemplates((tpl.data ?? []) as PackageTemplate[]);
     setIssued((iss.data ?? []) as IssuedRow[]);
     setCards((gc.data ?? []) as GiftCard[]);
@@ -240,8 +241,8 @@ export default function BusinessPackagesScreen() {
 
   return (
     <Screen title={tr('pkg.title')} subtitle={tr('pkg.subtitle')} onBack={back}>
-      {error ? <Callout tone="danger">{error}</Callout> : null}
-      {message ? <Callout tone="success">{message}</Callout> : null}
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+      {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
 
       <SectionTitle>{tr('pkg.templates')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>

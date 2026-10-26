@@ -470,19 +470,22 @@ export function Body({
   );
 }
 
-/** Notificare inline (info / succes / eroare). */
+/** Notificare inline (info / succes / eroare); cu `onClose` are buton × de închidere. */
 export function Callout({
   tone = 'info',
   title,
   children,
   icon,
+  onClose,
 }: {
   tone?: 'info' | 'success' | 'warning' | 'danger' | 'accent' | 'warm';
   title?: string;
   children?: React.ReactNode;
   icon?: IconName;
+  onClose?: () => void;
 }) {
   const t = useTheme();
+  const tr = useT();
   const map = {
     info: { bg: t.colors.infoSoft, fg: t.colors.infoSoftText, icon: 'information-circle' as IconName },
     success: { bg: t.colors.successSoft, fg: t.colors.successSoftText, icon: 'checkmark-circle' as IconName },
@@ -503,6 +506,17 @@ export function Callout({
           <Text style={[styles.calloutText, { color: map.fg }]}>{children}</Text>
         ) : null}
       </View>
+      {onClose ? (
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={tr('common.close')}
+          style={styles.calloutClose}
+        >
+          <Ionicons name="close" size={18} color={map.fg} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -1335,6 +1349,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   calloutIcon: { marginTop: 1 },
+  calloutClose: { marginLeft: spacing.sm },
   calloutTitle: { fontSize: fontSize.md, fontWeight: '700', marginBottom: 2 },
   calloutText: { fontSize: fontSize.sm, lineHeight: 19 },
 

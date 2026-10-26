@@ -18,6 +18,7 @@ import {
 import { spacing } from '@/constants/theme';
 import { getSession, mapAuthError, updatePassword } from '@/lib/auth';
 import { useT } from '@/lib/i18n';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 export default function ResetPasswordScreen() {
   const tr = useT();
@@ -27,7 +28,7 @@ export default function ResetPasswordScreen() {
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +126,7 @@ export default function ResetPasswordScreen() {
           returnKeyType="go"
         />
 
-        {error ? <Callout tone="danger">{error}</Callout> : null}
+        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
         {done ? (
           <Callout tone="success">{tr('auth.passwordUpdated')}</Callout>
         ) : null}

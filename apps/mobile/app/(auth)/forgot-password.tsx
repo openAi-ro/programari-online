@@ -12,6 +12,7 @@ import { Button, Callout, Field, Screen, useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import { mapAuthError, resetPasswordForEmail } from '@/lib/auth';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 export default function ForgotPasswordScreen() {
   const t = useTheme();
@@ -19,7 +20,7 @@ export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
 
   async function handleSubmit() {
     setError(null);
@@ -66,7 +67,7 @@ export default function ForgotPasswordScreen() {
           returnKeyType="send"
         />
 
-        {error ? <Callout tone="danger">{error}</Callout> : null}
+        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
         {sent ? (
           <Callout tone="success">
             {tr('auth.forgotSent')}

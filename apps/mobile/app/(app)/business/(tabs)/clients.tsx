@@ -30,6 +30,7 @@ import type { ClientIntake, ClientPhoto } from '@/lib/types';
 import { CLIENT_PHOTO_BUCKET, clientPhotoPath, withSignedUrls } from '@/lib/clientPhotos';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 function phoneOf(contact: string): string {
   const c = (contact ?? '').trim();
@@ -51,7 +52,7 @@ export default function BusinessClientsScreen() {
   const router = useRouter();
   const [rows, setRows] = useState<BusinessClientRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [history, setHistory] = useState<Appointment[]>([]);
@@ -73,7 +74,7 @@ export default function BusinessClientsScreen() {
     try {
       const { data, error: err } = await supabase.rpc('list_business_clients');
       if (err) {
-        setError(err.message);
+        setError(err.message, { sticky: true });
         setRows([]);
       } else {
         setRows((data ?? []) as BusinessClientRow[]);
@@ -92,7 +93,7 @@ export default function BusinessClientsScreen() {
         setLoyaltyEvery(biz.loyalty_every);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : String(e), { sticky: true });
     } finally {
       setLoading(false);
     }
@@ -329,7 +330,7 @@ export default function BusinessClientsScreen() {
           </Pressable>
         ))}
       </View>
-      {error ? <Callout tone="danger">{error}</Callout> : null}
+      {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
       {shown.length === 0 ? (
         <EmptyState
           icon="people-outline"

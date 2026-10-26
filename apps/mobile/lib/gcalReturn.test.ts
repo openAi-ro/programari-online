@@ -17,6 +17,7 @@ function assert(cond: boolean, name: string) {
 assert(gcalReturnMessageKey('ok', null) === 'gcal.retOk', 'ok -> mesaj conectat');
 assert(gcalReturnMessageKey('error', 'save') === 'gcal.ret_save', 'eroare salvare');
 assert(gcalReturnMessageKey('error', 'state') === 'gcal.ret_state', 'eroare state');
+assert(gcalReturnMessageKey('error', 'scope') === 'gcal.ret_scope', 'permisiuni calendar debifate');
 assert(gcalReturnMessageKey('error', '<script>') === 'gcal.ret_auth', 'motiv necunoscut -> generic');
 assert(gcalReturnMessageKey(null, null) === 'gcal.ret_auth', 'fara parametri -> generic');
 

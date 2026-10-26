@@ -3,7 +3,10 @@ import {
   appointmentEventId,
   deleteEvent,
   eventToBlock,
+  exchangeCode,
+  GoogleApiError,
   googleFetch,
+  hasCalendarWriteScope,
   isAppointmentEventId,
   isTokenFresh,
   listEvents,
@@ -187,4 +190,63 @@ Deno.test('zonedDayStartUtc across DST (Bucharest)', () => {
   assertEquals(zonedDayStartUtc('2026-03-29', 'Europe/Bucharest').toISOString(), '2026-03-28T22:00:00.000Z');
   assertEquals(zonedDayStartUtc('2026-03-30', 'Europe/Bucharest').toISOString(), '2026-03-29T21:00:00.000Z');
   assertEquals(zonedDayStartUtc('2026-07-01', 'UTC').toISOString(), '2026-07-01T00:00:00.000Z');
+});
+
+const SCOPE_403 = {
+  error: {
+    code: 403,
+    status: 'PERMISSION_DENIED',
+    errors: [{ reason: 'insufficientPermissions' }],
+    details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }],
+  },
+};
+
+Deno.test('listEvents 403 without calendar scope → GoogleApiError.insufficientScope with Google reason', async () => {
+  const err = await assertRejects(
+    () => listEvents('t', 'primary', { timeMin: 'a', timeMax: 'b' }, { fetchImpl: fakeFetch([json(403, SCOPE_403)]), sleep: noSleep }),
+    GoogleApiError,
+  );
+  assert(err.insufficientScope);
+  assertEquals(err.message, 'google_list_failed_403:ACCESS_TOKEN_SCOPE_INSUFFICIENT');
+});
+
+Deno.test('create 403 for another reason is not a scope error; reason still reported', async () => {
+  const body = { error: { code: 403, errors: [{ reason: 'accessNotConfigured' }] } };
+  const err = await assertRejects(
+    () => upsertAppointmentEvent('t', 'primary', '0e1d5765-4741-4685-97aa-50bb2ded3f59', null, {}, {
+      fetchImpl: fakeFetch([json(403, body)]),
+      sleep: noSleep,
+    }),
+    GoogleApiError,
+  );
+  assert(!err.insufficientScope);
+  assertEquals(err.message, 'google_create_failed_403:accessNotConfigured');
+  const plain = await assertRejects(
+    () => deleteEvent('t', 'primary', 'x', { fetchImpl: fakeFetch([new Response('', { status: 500 })]), sleep: noSleep }),
+    GoogleApiError,
+  );
+  assertEquals(plain.message, 'google_delete_failed_500');
+});
+
+Deno.test('hasCalendarWriteScope: readonly alone is not enough', () => {
+  assert(hasCalendarWriteScope('openid https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.events.readonly'));
+  assert(hasCalendarWriteScope('https://www.googleapis.com/auth/calendar'));
+  assert(!hasCalendarWriteScope('https://www.googleapis.com/auth/calendar.events.readonly'));
+  assert(!hasCalendarWriteScope(''));
+  assert(!hasCalendarWriteScope(undefined));
+});
+
+Deno.test('exchangeCode rejects a grant without calendar scope', async () => {
+  const env = { clientId: 'c', clientSecret: 's', redirectUri: 'r' };
+  const token = (scope: string) => json(200, { access_token: 'a', refresh_token: 'r', expires_in: 3600, scope });
+  const denied = await exchangeCode(env, 'code', {
+    fetchImpl: fakeFetch([token('https://www.googleapis.com/auth/calendar.events.readonly')]),
+    sleep: noSleep,
+  });
+  assertEquals(denied, { error: 'insufficient_scope' });
+  const ok = await exchangeCode(env, 'code', {
+    fetchImpl: fakeFetch([token('https://www.googleapis.com/auth/calendar.events')]),
+    sleep: noSleep,
+  });
+  assert('accessToken' in ok && ok.refreshToken === 'r');
 });

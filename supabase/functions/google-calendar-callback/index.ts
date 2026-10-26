@@ -46,7 +46,8 @@ Deno.serve(async (req) => {
   }
 
   const tokens = await exchangeCode(env, code);
-  if ('error' in tokens) return backToApp('error', 'auth');
+  // Fără bifa de calendar nu salvăm o conexiune „activă” care ar eșua la fiecare sincronizare.
+  if ('error' in tokens) return backToApp('error', tokens.error === 'insufficient_scope' ? 'scope' : 'auth');
 
   // Reconectare = conexiune nouă: starea, tokenul de sincronizare și cache-ul se resetează.
   const { error } = await admin.from('google_calendar_connections').upsert({

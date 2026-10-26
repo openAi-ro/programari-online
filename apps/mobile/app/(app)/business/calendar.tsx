@@ -38,6 +38,7 @@ import { getCurrentUser } from '@/lib/currentUser';
 import { createWalkinAppointment } from '@/lib/walkin';
 import { normalizeWalkinContact, validateWalkinInput } from '@/lib/walkinRules';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type CalendarStaff = Pick<Staff, 'id' | 'name' | 'color' | 'working_hours' | 'break_hours'>;
 
@@ -74,7 +75,7 @@ export default function BusinessCalendarScreen() {
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
   const [staffList, setStaffList] = useState<CalendarStaff[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
   const [walkinOpen, setWalkinOpen] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [walkinServiceId, setWalkinServiceId] = useState<string | null>(null);
@@ -86,20 +87,20 @@ export default function BusinessCalendarScreen() {
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinEmail, setWalkinEmail] = useState('');
   const [walkinSaving, setWalkinSaving] = useState(false);
-  const [walkinError, setWalkinError] = useState<string | null>(null);
-  const [walkinOk, setWalkinOk] = useState<string | null>(null);
+  const [walkinError, setWalkinError] = useTransientMessage();
+  const [walkinOk, setWalkinOk] = useTransientMessage();
 
   const load = useCallback(async () => {
     setError(null);
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
-      setError(trKey('req.notAuthed'));
+      setError(trKey('req.notAuthed'), { sticky: true });
       return;
     }
     const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
-      setError(bErr.message);
+      setError(bErr.message, { sticky: true });
       setLoading(false);
       return;
     }
@@ -140,7 +141,7 @@ export default function BusinessCalendarScreen() {
     }
     const { data, error: aErr } = await query;
     if (aErr) {
-      setError(aErr.message);
+      setError(aErr.message, { sticky: true });
     } else {
       setRows((data ?? []) as Appointment[]);
     }
@@ -346,7 +347,7 @@ export default function BusinessCalendarScreen() {
       onBack={back}
       footer={
         <View style={styles.footer}>
-          {error ? <Callout tone="danger">{error}</Callout> : null}
+          {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
           <Button
             label={blocked ? tr('cal.unblockDay') : tr('cal.blockDay')}
             icon={blocked ? 'lock-open-outline' : 'lock-closed-outline'}
@@ -527,8 +528,8 @@ export default function BusinessCalendarScreen() {
               </Pressable>
             </View>
             <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
-              {walkinError ? <Callout tone="danger">{walkinError}</Callout> : null}
-              {walkinOk ? <Callout tone="success">{walkinOk}</Callout> : null}
+              {walkinError ? <Callout onClose={() => setWalkinError(null)} tone="danger">{walkinError}</Callout> : null}
+              {walkinOk ? <Callout onClose={() => setWalkinOk(null)} tone="success">{walkinOk}</Callout> : null}
               {services.length > 0 ? (
                 <>
                   <SectionTitle>{tr('cal.serviceMin', { mins: walkinDuration })}</SectionTitle>

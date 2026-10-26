@@ -77,6 +77,7 @@ import {
   subscribeFavorites,
   toggleFavorite,
 } from '@/lib/favorites';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type WizardStep = 'staff' | 'service' | 'date' | 'slot' | 'confirm';
 
@@ -131,8 +132,8 @@ export default function BookScreen() {
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [message, setMessage] = useTransientMessage();
   const [waitlistBusy, setWaitlistBusy] = useState(false);
   const [onWaitlist, setOnWaitlist] = useState(false);
   const [ownBusinessBlock, setOwnBusinessBlock] = useState(false);
@@ -232,7 +233,7 @@ export default function BookScreen() {
       setStepsReady(false);
       const code = String(publicCode ?? '').trim();
       if (!code) {
-        setError(trKey('book.badCode'));
+        setError(trKey('book.badCode'), { sticky: true });
         setLoading(false);
         return;
       }
@@ -242,12 +243,12 @@ export default function BookScreen() {
         .eq('public_code', code)
         .maybeSingle();
       if (err) {
-        setError(err.message);
+        setError(err.message, { sticky: true });
         setLoading(false);
         return;
       }
       if (!data) {
-        setError(trKey('book.notFound'));
+        setError(trKey('book.notFound'), { sticky: true });
         setLoading(false);
         return;
       }
@@ -394,7 +395,7 @@ export default function BookScreen() {
       setStaffServices(offered);
 
       if (svcErr || staffErr) {
-        setError(trKey('book.errLoadCatalog'));
+        setError(trKey('book.errLoadCatalog'), { sticky: true });
         setLoading(false);
         return;
       }
@@ -409,7 +410,7 @@ export default function BookScreen() {
             biz
           )
         ) {
-          setError(trKey('book.errCannotReschedule'));
+          setError(trKey('book.errCannotReschedule'), { sticky: true });
           setLoading(false);
           return;
         }
@@ -780,8 +781,8 @@ export default function BookScreen() {
   const footer =
     step === 'confirm' ? (
       <>
-        {error ? <Callout tone="danger">{error}</Callout> : null}
-        {message ? <Callout tone="success">{message}</Callout> : null}
+        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+        {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
         <Button
           label={
             booking
@@ -814,7 +815,7 @@ export default function BookScreen() {
       </>
     ) : step === 'slot' && !slotsLoading && slots.length === 0 && !isReschedule ? (
       <>
-        {error ? <Callout tone="danger">{error}</Callout> : null}
+        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
         <Callout tone="accent" title={waitlistJoinTitle()}>
           {onWaitlist ? waitlistOnList() : waitlistJoinBody()}
         </Callout>
@@ -831,7 +832,7 @@ export default function BookScreen() {
       </>
     ) : (
       <>
-        {error ? <Callout tone="danger">{error}</Callout> : null}
+        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
         <Button
           label={step === 'slot' ? tr('book.continueConfirm') : tr('book.continue')}
           icon="arrow-forward"

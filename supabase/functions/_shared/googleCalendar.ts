@@ -17,6 +17,17 @@ export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
 ];
 
+/** Fără una dintre acestea, Google răspunde 403 la listare și la scrierea programărilor. */
+const CALENDAR_WRITE_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar',
+];
+
+/** Permisiunile acordate (câmpul `scope` din răspunsul Google) includ scrierea în calendar? */
+export function hasCalendarWriteScope(granted: string | null | undefined): boolean {
+  return (granted ?? '').split(/\s+/).some((s) => CALENDAR_WRITE_SCOPES.includes(s));
+}
+
 export function buildAuthUrl(clientId: string, redirectUri: string, state: string): string {
   const params = new URLSearchParams({
     client_id: clientId,
@@ -107,11 +118,42 @@ export async function googleFetch(url: string, init: RequestInit, opts: FetchOpt
   }
 }
 
-/** Eroare Google cu status HTTP (401 → token expirat, 410 → syncToken expirat etc.). */
+/** Motivele Google pentru un token fără permisiunea de calendar (bifa debifată la conectare). */
+const SCOPE_REASONS = new Set(['insufficientPermissions', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT']);
+
+/**
+ * Eroare Google cu status HTTP (401 → token expirat, 410 → syncToken expirat etc.)
+ * și motivul din corpul răspunsului (ex. insufficientPermissions), inclus în mesaj pentru jurnal.
+ */
 export class GoogleApiError extends Error {
-  constructor(public status: number, op: string) {
-    super(`google_${op}_failed_${status}`);
+  constructor(public status: number, op: string, public reason: string | null = null) {
+    super(`google_${op}_failed_${status}${reason ? `:${reason}` : ''}`);
   }
+
+  /** Tokenul nu are permisiunea de calendar: doar o reconectare cu bifa acordată repară. */
+  get insufficientScope(): boolean {
+    return this.status === 403 && this.reason !== null && SCOPE_REASONS.has(this.reason);
+  }
+}
+
+type GoogleErrorBody = {
+  error?: {
+    status?: string;
+    errors?: Array<{ reason?: string }>;
+    details?: Array<{ reason?: string }>;
+  };
+};
+
+/** Consumă răspunsul eșuat și întoarce eroarea cu motivul Google (ErrorInfo, apoi errors[0]). */
+async function apiError(res: Response, op: string): Promise<GoogleApiError> {
+  let reason: string | null = null;
+  try {
+    const e = ((await res.json()) as GoogleErrorBody).error;
+    reason = e?.details?.find((d) => d.reason)?.reason ?? e?.errors?.[0]?.reason ?? e?.status ?? null;
+  } catch {
+    // corp gol / non-JSON: rămâne doar statusul
+  }
+  return new GoogleApiError(res.status, op, reason);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +164,7 @@ type TokenResponse = {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
+  scope?: string;
   error?: string;
 };
 
@@ -149,18 +192,24 @@ function expiryFrom(expiresIn: number | undefined): Date {
 
 export async function exchangeCode(
   env: { clientId: string; clientSecret: string; redirectUri: string },
-  code: string
+  code: string,
+  opts: FetchOpts = {}
 ): Promise<{ accessToken: string; refreshToken: string; expiresAt: Date } | { error: string }> {
-  const data = await tokenRequest({
-    code,
-    client_id: env.clientId,
-    client_secret: env.clientSecret,
-    redirect_uri: env.redirectUri,
-    grant_type: 'authorization_code',
-  });
+  const data = await tokenRequest(
+    {
+      code,
+      client_id: env.clientId,
+      client_secret: env.clientSecret,
+      redirect_uri: env.redirectUri,
+      grant_type: 'authorization_code',
+    },
+    opts
+  );
   if (!data.access_token || !data.refresh_token) {
     return { error: data.error ?? 'token_exchange_failed' };
   }
+  // Google lasă utilizatorul să debifeze accesul la calendar; o astfel de conexiune n-ar putea sincroniza.
+  if (!hasCalendarWriteScope(data.scope)) return { error: 'insufficient_scope' };
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
@@ -254,10 +303,7 @@ export async function listEvents(
       await res.body?.cancel().catch(() => {});
       throw new SyncTokenExpiredError();
     }
-    if (!res.ok) {
-      await res.body?.cancel().catch(() => {});
-      throw new GoogleApiError(res.status, 'list');
-    }
+    if (!res.ok) throw await apiError(res, 'list');
     const data = (await res.json()) as {
       items?: GoogleEvent[];
       nextPageToken?: string;
@@ -316,24 +362,30 @@ export async function upsertAppointmentEvent(
   opts: FetchOpts = {}
 ): Promise<string> {
   const patchBody = { ...body, status: 'confirmed' };
-  const patch = async (id: string) => {
-    const res = await send(accessToken, `${calUrl(calendarId)}/${encodeURIComponent(id)}`, 'PATCH', patchBody, opts);
-    await res.body?.cancel().catch(() => {});
-    return res.status;
-  };
+  const patch = (id: string) =>
+    send(accessToken, `${calUrl(calendarId)}/${encodeURIComponent(id)}`, 'PATCH', patchBody, opts);
+  const drop = (res: Response) => res.body?.cancel().catch(() => {});
   if (existingEventId) {
-    const st = await patch(existingEventId);
-    if (st >= 200 && st < 300) return existingEventId;
-    if (st !== 404 && st !== 410) throw new GoogleApiError(st, 'update');
+    const res = await patch(existingEventId);
+    if (res.ok) {
+      await drop(res);
+      return existingEventId;
+    }
+    if (res.status !== 404 && res.status !== 410) throw await apiError(res, 'update');
+    await drop(res);
   }
   const id = appointmentEventId(appointmentId);
-  const res = await send(accessToken, calUrl(calendarId), 'POST', { ...body, id }, opts);
-  await res.body?.cancel().catch(() => {});
-  if (res.ok) return id;
-  if (res.status !== 409) throw new GoogleApiError(res.status, 'create');
-  const st = await patch(id);
-  if (st >= 200 && st < 300) return id;
-  throw new GoogleApiError(st, 'update');
+  const created = await send(accessToken, calUrl(calendarId), 'POST', { ...body, id }, opts);
+  if (created.ok) {
+    await drop(created);
+    return id;
+  }
+  if (created.status !== 409) throw await apiError(created, 'create');
+  await drop(created);
+  const res = await patch(id);
+  if (!res.ok) throw await apiError(res, 'update');
+  await drop(res);
+  return id;
 }
 
 export async function deleteEvent(
@@ -343,11 +395,9 @@ export async function deleteEvent(
   opts: FetchOpts = {}
 ): Promise<void> {
   const res = await send(accessToken, `${calUrl(calendarId)}/${encodeURIComponent(eventId)}`, 'DELETE', undefined, opts);
-  await res.body?.cancel().catch(() => {});
   // 404/410 înseamnă că evenimentul nu mai există — scopul e atins.
-  if (!res.ok && res.status !== 404 && res.status !== 410) {
-    throw new GoogleApiError(res.status, 'delete');
-  }
+  if (!res.ok && res.status !== 404 && res.status !== 410) throw await apiError(res, 'delete');
+  await res.body?.cancel().catch(() => {});
 }
 
 // ---------------------------------------------------------------------------

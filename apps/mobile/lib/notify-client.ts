@@ -31,7 +31,7 @@ export async function invokeDecisionNotify(
 }
 
 /** La non-2xx, supabase-js dă o eroare generică; codul real e în corpul din error.context. */
-async function functionErrorCode(error: unknown): Promise<string | null> {
+export async function functionErrorCode(error: unknown): Promise<string | null> {
   const context = (error as { context?: { clone?: () => Response; json?: () => Promise<unknown> } } | null)
     ?.context;
   if (!context || typeof context.json !== 'function') return null;

@@ -1,8 +1,8 @@
 /** Întoarcerea din Google Calendar (callback-ul redirecționează aici). Fără dependențe de runtime. */
 
-export type GcalReturnReason = 'config' | 'server' | 'state' | 'business' | 'auth' | 'save';
+export type GcalReturnReason = 'config' | 'server' | 'state' | 'business' | 'auth' | 'save' | 'scope';
 
-const REASONS: GcalReturnReason[] = ['config', 'server', 'state', 'business', 'auth', 'save'];
+const REASONS: GcalReturnReason[] = ['config', 'server', 'state', 'business', 'auth', 'save', 'scope'];
 
 export const GCAL_APP_DEEP_LINK = 'programari://business/settings';
 export const GCAL_APP_PATH = '/business/settings';

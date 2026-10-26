@@ -44,6 +44,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
 import { trKey, useT } from '@/lib/i18n';
+import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Row = Appointment & {
   business_profiles?: Pick<
@@ -71,8 +72,8 @@ export default function MyAppointmentsScreen() {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useTransientMessage();
+  const [success, setSuccess] = useTransientMessage();
   const [filter, setFilter] = useState<Filter>('all');
   const [reviewsByApt, setReviewsByApt] = useState<Record<string, Review>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -103,7 +104,7 @@ export default function MyAppointmentsScreen() {
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
-      setError(trKey('auth.notSignedIn'));
+      setError(trKey('auth.notSignedIn'), { sticky: true });
       return;
     }
 
@@ -120,7 +121,7 @@ export default function MyAppointmentsScreen() {
       .order('start_at', { ascending: false });
 
     if (err) {
-      setError(err.message);
+      setError(err.message, { sticky: true });
       setLoading(false);
       return;
     }
@@ -241,7 +242,7 @@ export default function MyAppointmentsScreen() {
     if (refsErr) partialFail = true;
     setMyReferrals((refs ?? []) as typeof myReferrals);
     setReviewsByApt(map);
-    if (partialFail) setError(trKey('my.partialLoadFail'));
+    if (partialFail) setError(trKey('my.partialLoadFail'), { sticky: true });
     setLoading(false);
   }, []);
 
@@ -451,12 +452,12 @@ export default function MyAppointmentsScreen() {
               ]}
             />
             {error ? (
-              <Callout tone="danger" title={tr('chat.errorTitle')}>
+              <Callout onClose={() => setError(null)} tone="danger" title={tr('chat.errorTitle')}>
                 {error}
               </Callout>
             ) : null}
             {success ? (
-              <Callout tone="success">
+              <Callout onClose={() => setSuccess(null)} tone="success">
                 {success}
               </Callout>
             ) : null}
