@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ImageLightbox } from '@/components/ImageLightbox';
 import { useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { normalizePortfolioUrls } from '@/lib/staffPortfolio';
@@ -18,6 +19,7 @@ export function StaffPortfolio({
   const tr = useT();
   const photos = normalizePortfolioUrls(urls);
   const [active, setActive] = useState(0);
+  const [viewing, setViewing] = useState<string | null>(null);
   if (photos.length === 0) return null;
   const current = photos[Math.min(active, photos.length - 1)];
 
@@ -26,11 +28,17 @@ export function StaffPortfolio({
       <Text style={[styles.title, { color: t.colors.textMuted }]}>
         {tr('book.worksOf', { name })}
       </Text>
-      <Image
-        source={{ uri: current }}
-        style={[styles.main, { borderColor: t.colors.border, backgroundColor: t.colors.surface }]}
+      <Pressable
+        onPress={() => setViewing(current)}
+        accessibilityRole="imagebutton"
         accessibilityLabel={tr('book.workPhoto', { name })}
-      />
+      >
+        <Image
+          source={{ uri: current }}
+          style={[styles.main, { borderColor: t.colors.border, backgroundColor: t.colors.surface }]}
+          accessibilityIgnoresInvertColors
+        />
+      </Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {photos.map((uri, i) => (
           <Pressable
@@ -54,6 +62,7 @@ export function StaffPortfolio({
           </Pressable>
         ))}
       </ScrollView>
+      <ImageLightbox uri={viewing} onClose={() => setViewing(null)} />
     </View>
   );
 }

@@ -22,6 +22,7 @@ import { ensureChatConversation } from '@/lib/chatRpc';
 import { locationFromBusiness, formatAddress } from '@/lib/location';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
+import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
 import { supabase } from '@/lib/supabase';
 
 type Message = { from: 'user' | 'bot'; text: string; actions: AssistantAction[] };
@@ -86,7 +87,7 @@ export default function AssistantScreen() {
     setError(null);
     const { data, error: err } = await supabase
       .from('business_profiles')
-      .select('*')
+      .select(ANON_BUSINESS_COLUMNS)
       .eq('public_code', code)
       .maybeSingle();
     if (err || !data) {
@@ -119,7 +120,7 @@ export default function AssistantScreen() {
     const k = buildAssistantKnowledge({
       businessName: name,
       address: formatAddress(locationFromBusiness(data)) ?? '',
-      phone: (data.phone as string | null) ?? '',
+      phone: (data.contact_phone as string | null) ?? '',
       cancelNoticeText:
         typeof data.cancel_notice_minutes === 'number'
           ? `${data.cancel_notice_minutes} min`

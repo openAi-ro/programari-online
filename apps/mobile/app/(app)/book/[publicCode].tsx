@@ -68,6 +68,7 @@ import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
 import { createRequestTracker } from '@/lib/latestRequest';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
+import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
 import {
@@ -237,7 +238,7 @@ export default function BookScreen() {
       }
       const { data, error: err } = await supabase
         .from('business_profiles')
-        .select('*')
+        .select(ANON_BUSINESS_COLUMNS)
         .eq('public_code', code)
         .maybeSingle();
       if (err) {
@@ -261,7 +262,6 @@ export default function BookScreen() {
       // Utilizatorul vine din sesiunea locală (fără rețea); restul cererilor
       // depind doar de business, deci pleacă toate odată, nu una după alta.
       const viewer = await getCurrentUser();
-      const isOwnBusiness = Boolean(viewer && biz.owner_user_id === viewer.id);
       const [
         { data: rate },
         { data: revRows },
@@ -285,10 +285,10 @@ export default function BookScreen() {
           .eq('business_id', biz.id)
           .eq('active', true)
           .order('sort_order', { ascending: true }),
-        viewer && !isOwnBusiness
+        viewer
           ? supabase.from('business_profiles').select('id').eq('owner_user_id', viewer.id).maybeSingle()
           : null,
-        viewer && !isOwnBusiness && !rescheduleId
+        viewer && !rescheduleId
           ? supabase
               .from('appointments')
               .select('id')
@@ -300,7 +300,7 @@ export default function BookScreen() {
               .limit(1)
               .maybeSingle()
           : null,
-        rescheduleId && !isOwnBusiness
+        rescheduleId
           ? supabase
               .from('appointments')
               .select('service_id, service_ids, staff_id, status, start_at, client_user_id')
@@ -345,12 +345,15 @@ export default function BookScreen() {
         }
       }
 
-      if (isOwnBusiness) {
+      // Proprietatea se afla din afacerea utilizatorului logat, nu din owner_user_id-ul afacerii
+      // vizitate (anon nu are acces la coloana).
+      const ownedBizId = (ownedBizRes?.data as { id?: string } | null)?.id ?? null;
+      if (ownedBizId === biz.id) {
         setOwnBusinessBlock(true);
         setLoading(false);
         return;
       }
-      if (ownedBizRes?.data) setBookAsClientHint(true);
+      if (ownedBizId) setBookAsClientHint(true);
       if (upcomingRes?.data?.id) setExistingAptId(upcomingRes.data.id as string);
 
       const list = (svcRows ?? []) as Service[];

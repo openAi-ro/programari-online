@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -33,6 +32,7 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { setPendingAuthRedirect } from '@/lib/auth-redirect';
+import { ImageLightbox } from '@/components/ImageLightbox';
 import { setAppMode } from '@/lib/appMode';
 import { ANON_BUSINESS_COLUMNS, buildPublicPageMeta, jsonLdText } from '@/lib/publicPageMeta';
 import { loadPublicPageMetadata } from '@/lib/publicBusinessServer';
@@ -1056,23 +1056,7 @@ export default function PublicBookScreen() {
         </>
       ) : null}
 
-      <Modal
-        visible={lightbox !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightbox(null)}
-      >
-        <Pressable style={styles.lightbox} onPress={() => setLightbox(null)}>
-          {lightbox ? (
-            <Image
-              source={{ uri: lightbox }}
-              style={styles.lightboxImg}
-              resizeMode="contain"
-              accessibilityIgnoresInvertColors
-            />
-          ) : null}
-        </Pressable>
-      </Modal>
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
 
       {!pageOn ? <LocationCard location={locationFromBusiness(business)} /> : null}
 
@@ -1394,13 +1378,6 @@ const styles = StyleSheet.create({
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   hoursDay: { fontSize: fontSize.sm },
   hoursVal: { fontSize: fontSize.sm },
-  lightbox: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lightboxImg: { width: '100%', height: '100%' },
   guestForm: { gap: 12, marginTop: spacing.lg },
 });
 

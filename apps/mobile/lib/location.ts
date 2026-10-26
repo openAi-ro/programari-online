@@ -73,7 +73,9 @@ export function hasCoordinates(location: BusinessLocation): boolean {
   );
 }
 
-export function locationFromBusiness(biz: BusinessProfile): BusinessLocation {
+export function locationFromBusiness(
+  biz: Pick<BusinessProfile, 'county' | 'city' | 'address' | 'maps_url' | 'latitude' | 'longitude'>,
+): BusinessLocation {
   return {
     county: biz.county ?? null,
     city: biz.city ?? null,
