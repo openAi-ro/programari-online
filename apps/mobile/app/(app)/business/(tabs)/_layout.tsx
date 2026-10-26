@@ -47,7 +47,8 @@ export default function BusinessTabsLayout() {
         .from('appointments')
         .select('id', { count: 'exact', head: true })
         .in('business_id', ids)
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .gt('end_at', new Date().toISOString());
       setRequestBadge(count ?? 0);
     } catch {
       // badge is best-effort

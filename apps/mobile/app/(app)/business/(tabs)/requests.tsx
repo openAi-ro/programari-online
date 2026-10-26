@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
@@ -28,6 +28,7 @@ import {
   moveAppointmentToSlot,
 } from '@/lib/bookingRpc';
 import { isOwnBusyRange, needsDecision, ownBusyKeys } from '@/lib/rescheduleRequest';
+import { pastAppointments, upcomingAppointments } from '@/lib/appointmentTime';
 import { generateFreeSlots } from '@/lib/slots';
 import { validateMoveInput } from '@/lib/moveRules';
 import {
@@ -66,7 +67,8 @@ export default function BusinessRequestsScreen() {
   const [loading, setLoading] = useState(true);
   // Push 'Reprogramare cerută' deschide ecranul cu ?filter=decide&focus=<id>.
   const params = useLocalSearchParams<{ focus?: string; filter?: string }>();
-  const [filter, setFilter] = useState<'decide' | 'all'>(params.filter === 'decide' ? 'decide' : 'all');
+  const [filter, setFilter] = useState<'decide' | 'all' | 'past'>(params.filter === 'decide' ? 'decide' : 'all');
+  const [tickNow, setTickNow] = useState(() => new Date());
   const [rescheduleBusyId, setRescheduleBusyId] = useState<string | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
   const focusDoneRef = useRef<string | null>(null);
@@ -134,29 +136,39 @@ export default function BusinessRequestsScreen() {
     const ids = list.map((b) => b.id);
     setBusinessIds(ids);
     setBusinessList(list);
-    let query = supabase
+    const { data, error: aErr } = await supabase
       .from('appointments')
       .select('*')
-      .in('business_id', ids)
-      .order('created_at', { ascending: false });
-
-    if (filter === 'decide') {
-      // Cereri noi + reprogramari cerute (v87); filtrul exact e needsDecision.
-      query = query.or('status.eq.pending,requested_start_at.not.is.null');
-    }
-
-    const { data, error: aErr } = await query;
+      .in('business_id', ids);
     if (aErr) {
       setError(aErr.message, { sticky: true });
     } else {
-      const all = (data ?? []) as Row[];
-      const list = filter === 'decide' ? all.filter(needsDecision) : all;
+      const list = (data ?? []) as Row[];
       setRows(list);
       // Marchează tot ce există deja ca „văzut" — popup doar pentru ce vine nou.
       for (const r of list) seenIdsRef.current.add(r.id);
     }
     setLoading(false);
-  }, [filter]);
+  }, []);
+
+  // Programările trec în „Trecute" la ora de final, cât ecranul e deschis.
+  useEffect(() => {
+    const timer = setInterval(() => setTickNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // De decis / Toate: doar ce nu s-a terminat (cele mai apropiate primele); Trecute: invers.
+  const upcomingRows = useMemo(() => upcomingAppointments(rows, tickNow), [rows, tickNow]);
+  const pendingRows = useMemo(() => upcomingRows.filter(needsDecision), [upcomingRows]);
+  const shown = useMemo(
+    () =>
+      filter === 'past'
+        ? pastAppointments(rows, tickNow)
+        : filter === 'decide'
+          ? pendingRows
+          : upcomingRows,
+    [filter, rows, tickNow, pendingRows, upcomingRows]
+  );
 
   loadRef.current = load;
 
@@ -167,11 +179,11 @@ export default function BusinessRequestsScreen() {
   useEffect(() => {
     const focus = typeof params.focus === 'string' ? params.focus : null;
     if (!focus || focusDoneRef.current === focus) return;
-    const index = rows.findIndex((r) => r.id === focus);
+    const index = shown.findIndex((r) => r.id === focus);
     if (index < 0) return;
     focusDoneRef.current = focus;
     setTimeout(() => listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 }), 150);
-  }, [params.focus, rows]);
+  }, [params.focus, shown]);
 
   useFocusEffect(
     useCallback(() => {
@@ -565,8 +577,6 @@ export default function BusinessRequestsScreen() {
     return `${start} – ${end}`;
   }
 
-  const pendingRows = rows.filter(needsDecision);
-
   if (loading && rows.length === 0) {
     return (
       <View style={{ flex: 1 }}>
@@ -585,7 +595,7 @@ export default function BusinessRequestsScreen() {
       <Screen title={tr('req.title')} subtitle={tr('req.subtitle')} onBack={back} scroll={false}>
       <FlatList
         ref={listRef}
-        data={rows}
+        data={shown}
         onScrollToIndexFailed={(info) =>
           listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true })
         }
@@ -608,6 +618,7 @@ export default function BusinessRequestsScreen() {
               options={[
                 { value: 'decide', label: tr('req.decide') },
                 { value: 'all', label: tr('req.all') },
+                { value: 'past', label: tr('req.past') },
               ]}
             />
             {pendingRows.length > 0 ? (
@@ -631,14 +642,26 @@ export default function BusinessRequestsScreen() {
         }
         ListEmptyComponent={
           <EmptyState
-            icon={filter === 'decide' ? 'hourglass-outline' : 'calendar-clear-outline'}
+            icon={
+              filter === 'decide'
+                ? 'hourglass-outline'
+                : filter === 'past'
+                  ? 'time-outline'
+                  : 'calendar-clear-outline'
+            }
             title={
-              filter === 'decide' ? tr('req.emptyPending') : tr('req.emptyAll')
+              filter === 'decide'
+                ? tr('req.emptyPending')
+                : filter === 'past'
+                  ? tr('req.emptyPast')
+                  : tr('req.emptyAll')
             }
             description={
               filter === 'decide'
                 ? tr('req.emptyPendingDesc')
-                : tr('req.emptyAllDesc')
+                : filter === 'past'
+                  ? tr('req.emptyPastDesc')
+                  : tr('req.emptyAllDesc')
             }
           />
         }
