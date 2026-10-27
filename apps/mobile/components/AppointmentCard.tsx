@@ -262,6 +262,7 @@ export function AppointmentCard({
             attendanceConfirmed: Boolean(appointment.attendance_confirmed),
             canCancel: Boolean(onCancel && canCancel && (status === 'pending' || status === 'approved')),
             canReschedule: Boolean(canReschedule && onReschedule),
+            tooLate: Boolean(onCancel && !canCancel && new Date(appointment.start_at).getTime() > Date.now()),
           })}
         </Text>
         ) : null}

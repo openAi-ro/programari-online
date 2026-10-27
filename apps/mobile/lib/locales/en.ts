@@ -44,6 +44,7 @@ export const en: typeof ro = {
   'cancelPolicy.instant': 'Cancellation is final — the slot is released immediately.',
 
   'hint.noShow': 'You didn’t show up — you can book again',
+  'hint.tooLateToChange': "It's too close to the start to cancel or reschedule. Call the salon if you can't make it.",
   'hint.pendingCanChange': 'Waiting for confirmation — you can cancel or reschedule',
   'hint.approvedCanChange': 'You can reschedule or cancel',
   'hint.pending': 'Waiting for the salon’s confirmation',
@@ -520,6 +521,8 @@ export const en: typeof ro = {
   'my.past': 'Past',
   'my.review': 'Review',
   'my.reviewSaved': "Thanks for your review! Reviews appear on the salon's public page once it has at least 3.",
+  'my.shareCopied': 'Text copied. Paste it wherever you want to send it.',
+  'my.shareFailed': "Couldn't share. Please try again.",
   'my.pickStars': 'Pick the stars, then save.',
   'my.commentLabel': 'Comment (optional)',
   'my.commentPlaceholder': 'How was the visit?',
@@ -1614,5 +1617,6 @@ export const en: typeof ro = {
   'chat.micStopA11y': 'Stop dictation',
   'chat.micDenied': 'Allow microphone access (in your browser or phone settings) to dictate.',
   'chat.micFailed': 'Dictation did not work. Try again or type the message.',
+  'chat.micUnsupported': 'Dictation is not available in this browser.',
   // __APPEND__
 };

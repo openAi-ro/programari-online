@@ -12,9 +12,14 @@ export function appointmentNextHint(
     attendanceConfirmed?: boolean;
     canCancel?: boolean;
     canReschedule?: boolean;
+    /** Aprobată, încă neîncepută, dar în termenul în care clientul nu mai poate anula/muta. */
+    tooLate?: boolean;
   }
 ): string {
   if (opts?.noShow) return trKey('hint.noShow');
+  if (status === 'approved' && opts?.tooLate && !opts.canCancel && !opts.canReschedule) {
+    return trKey('hint.tooLateToChange');
+  }
 
   if (
     (status === 'pending' || status === 'approved') &&

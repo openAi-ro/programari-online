@@ -42,6 +42,7 @@ export const ro = {
   'cancelPolicy.instant': 'Anularea e definitivă — slotul se eliberează imediat.',
 
   'hint.noShow': 'Nu te-ai prezentat — poți rezerva din nou',
+  'hint.tooLateToChange': "Nu mai poți anula sau muta atât de aproape de oră. Sună salonul dacă nu poți ajunge.",
   'hint.pendingCanChange': 'Așteaptă confirmarea — poți anula sau reprograma',
   'hint.approvedCanChange': 'Poți reprograma sau anula',
   'hint.pending': 'Așteaptă confirmarea salonului',
@@ -518,6 +519,8 @@ export const ro = {
   'my.past': 'Trecute',
   'my.review': 'Recenzie',
   'my.reviewSaved': "Mulțumim pentru recenzie! Recenziile apar pe pagina publică a salonului după ce strânge cel puțin 3.",
+  'my.shareCopied': 'Textul a fost copiat. Lipește-l unde vrei să-l trimiți.',
+  'my.shareFailed': 'Nu am putut partaja. Încearcă din nou.',
   'my.pickStars': 'Alege stelele, apoi salvează.',
   'my.commentLabel': 'Comentariu (opțional)',
   'my.commentPlaceholder': 'Cum a fost vizita?',
@@ -1612,5 +1615,6 @@ export const ro = {
   'chat.micStopA11y': 'Oprește dictarea',
   'chat.micDenied': 'Permite accesul la microfon (din browser sau din setările telefonului) ca să poți dicta.',
   'chat.micFailed': 'Dictarea nu a mers. Încearcă din nou sau scrie mesajul.',
+  'chat.micUnsupported': 'Dictarea nu e disponibilă în acest browser.',
   // __APPEND__
 };

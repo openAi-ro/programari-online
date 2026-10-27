@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Linking, Modal, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Linking, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
@@ -43,6 +43,7 @@ import { invokeRefundDeposit } from '@/lib/payments';
 import { formatRon } from '@/lib/format';
 import { sessionsLeft } from '@/lib/packages';
 import { canCheckIn } from '@/lib/checkin';
+import { shareText } from '@/lib/shareBusiness';
 import { makeReferralCode } from '@/lib/referral';
 import { getPublicWebOrigin } from '@/lib/webBase';
 import { formatInTimeZone } from '@/lib/timezone';
@@ -391,6 +392,15 @@ export default function MyAppointmentsScreen() {
   }
 
 
+  /** Partajare cu fallback pe web: textul e copiat și clientul vede confirmarea (F-14). */
+  async function shareWithFeedback(message: string) {
+    try {
+      if ((await shareText(message)) === 'copied') setSuccess(trKey('my.shareCopied'));
+    } catch {
+      setError(trKey('my.shareFailed'));
+    }
+  }
+
   async function saveReview() {
     if (!reviewingId) return;
     setError(null);
@@ -541,12 +551,12 @@ export default function MyAppointmentsScreen() {
                   label={tr('ref.share')}
                   variant="secondary"
                   onPress={() =>
-                    void Share.share({
-                      message: tr('ref.shareText', {
+                    void shareWithFeedback(
+                      tr('ref.shareText', {
                         code: myReferralCode ?? '',
                         url: getPublicWebOrigin(),
-                      }),
-                    })
+                      })
+                    )
                   }
                 />
                 {myReferrals.length > 0 ? (
@@ -652,13 +662,13 @@ export default function MyAppointmentsScreen() {
             onShare={() => {
               const biz = item.business_profiles?.name ?? tr('my.salonFallback');
               const when = localLabel(item);
-              void Share.share({
-                message: tr('my.shareMsg', {
+              void shareWithFeedback(
+                tr('my.shareMsg', {
                   biz,
                   when,
                   service: item.service_name ? ` · ${item.service_name}` : '',
-                }),
-              });
+                })
+              );
             }}
             onCancel={() => cancelAppointment(item)}
             onCancelSeries={item.recurring_series_id ? () => { setError(null); setSuccess(null); setSeriesTarget(item); } : undefined}

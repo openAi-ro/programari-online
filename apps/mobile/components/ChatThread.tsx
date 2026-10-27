@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -142,6 +143,8 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         <Text style={[styles.micError, { color: t.colors.danger }]}>
           {dictation.error === 'denied' ? tr('chat.micDenied') : tr('chat.micFailed')}
         </Text>
+      ) : !dictation.supported && Platform.OS === 'web' ? (
+        <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
       ) : null}
       <TextInput
         style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
