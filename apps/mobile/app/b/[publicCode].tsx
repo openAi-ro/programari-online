@@ -631,9 +631,17 @@ export default function PublicBookScreen() {
       <Screen title={tr('pub.title')} onBack={goBack}>
         <ErrorState
           title={tr('pub.bizMissing')}
-          description={error ?? tr('pub.badCodeShort')}
+          description={tr('pub.bizMissingDesc')}
           action={
-            <Button label={tr('pub.backToAccount')} onPress={goBack} icon="arrow-back-outline" />
+            session ? (
+              <Button label={tr('pub.backToAccount')} onPress={goBack} icon="arrow-back-outline" />
+            ) : (
+              <Button
+                label={tr('pub.backHome')}
+                onPress={() => router.replace('/' as never)}
+                icon="home-outline"
+              />
+            )
           }
         />
       </Screen>

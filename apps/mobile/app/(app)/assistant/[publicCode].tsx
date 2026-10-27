@@ -14,13 +14,14 @@ import { formatDuration, formatRon } from '@/lib/format';
 import {
   answerAssistantMessage,
   buildAssistantKnowledge,
+  formatWorkingHoursText,
   type AssistantAction,
   type AssistantAnswer,
   type AssistantKnowledge,
 } from '@/lib/assistant';
 import { ensureChatConversation } from '@/lib/chatRpc';
 import { locationFromBusiness, formatAddress } from '@/lib/location';
-import { trKey, useT } from '@/lib/i18n';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
 import { supabase } from '@/lib/supabase';
@@ -38,7 +39,9 @@ function answerText(tr: ReturnType<typeof useT>, answer: AssistantAnswer): strin
     case 'services_list':
       return tr('as.list', { business: p.business ?? '', list: p.list ?? '' });
     case 'hours':
-      return tr('as.hours', { business: p.business ?? '' });
+      return p.hours
+        ? tr('as.hours', { business: p.business ?? '', hours: p.hours })
+        : tr('as.hoursUnknown', { business: p.business ?? '' });
     case 'location':
       return tr('as.location', { address: p.address ?? '' });
     case 'staff':
@@ -61,6 +64,7 @@ export default function AssistantScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
+  const { lang } = useLanguage();
   const router = useRouter();
   const { publicCode } = useLocalSearchParams<{ publicCode?: string | string[] }>();
   const code = String(Array.isArray(publicCode) ? publicCode[0] : publicCode ?? '').trim();
@@ -130,13 +134,14 @@ export default function AssistantScreen() {
         typeof data.deposit_ron === 'number' && data.deposit_ron > 0
           ? formatRon(data.deposit_ron)
           : '0',
+      hoursText: formatWorkingHoursText(data.working_hours, lang === 'en' ? 'en' : 'ro'),
       services,
       staffNames: (staffRes.data ?? []).map((s) => s.name as string),
     });
     setKnowledge(k);
     setMessages([{ from: 'bot', text: tr('as.greeting', { business: name }), actions: [] }]);
     setLoading(false);
-  }, [code, tr]);
+  }, [code, tr, lang]);
 
   useFocusEffect(
     useCallback(() => {

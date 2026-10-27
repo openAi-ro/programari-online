@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
@@ -607,8 +607,15 @@ export default function BookScreen() {
 
     setBooking(false);
     if (err) {
-      setError(mapBookingRpcError(err));
+      const mapped = mapBookingRpcError(err);
+      setError(mapped);
       await loadSlots();
+      // Conflict de cursă: ora dispăruse între încărcare și trimitere. Clientul vede mesajul
+      // explicit și poate alege din lista proaspătă, fără o oră fantomă pe confirmare.
+      if (err.includes('slot_taken')) {
+        setSelected(null);
+        setStep('slot');
+      }
       return;
     }
 
@@ -701,6 +708,33 @@ export default function BookScreen() {
     setError(null);
     setStep(steps[i - 1]);
   }
+
+  // Back de browser (web): rămâne în asistent și merge la pasul anterior, cu selecțiile păstrate.
+  // Marcajul din istoric se re-pune la fiecare pas, ca următorul Back să fie interceptat la fel.
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  const handledInitialPop = useRef(false);
+  const lastPushedStep = useRef<string | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !stepsReady) return;
+    if (lastPushedStep.current !== step) {
+      window.history.pushState({ bookStepGuard: true }, '');
+      lastPushedStep.current = step;
+    }
+    const onPop = () => {
+      const i = steps.indexOf(stepRef.current);
+      if (i > 0) {
+        setError(null);
+        setStep(steps[i - 1]);
+      } else if (!handledInitialPop.current) {
+        handledInitialPop.current = true;
+        goBack();
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepsReady, step, steps.join(',')]);
 
   if (!stepsReady && error && !loading) {
     return (

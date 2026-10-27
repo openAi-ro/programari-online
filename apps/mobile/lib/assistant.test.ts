@@ -2,7 +2,12 @@
  * Run: npx tsx lib/assistant.test.ts
  * from apps/mobile
  */
-import { answerAssistantMessage, buildAssistantKnowledge, type AssistantIntent } from './assistant';
+import {
+  answerAssistantMessage,
+  buildAssistantKnowledge,
+  formatWorkingHoursText,
+  type AssistantIntent,
+} from './assistant';
 import { en } from './locales/en';
 import { ro } from './locales/ro';
 
@@ -42,6 +47,45 @@ assert(price.confidence >= 0.6, 'încredere suficientă', String(price.confidenc
 
 const hours = answerAssistantMessage(knowledge, 'Când sunteți deschiși?');
 assert(hours.intent === 'hours', 'program → hours', hours.intent);
+
+// Programul concret ajunge în răspuns (audit C-74), grupat pe zile cu același interval.
+const everyDay = Object.fromEntries(
+  ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
+    d,
+    { closed: false, start: '08:00', end: '20:00' },
+  ])
+) as never;
+assert(
+  formatWorkingHoursText(everyDay, 'ro') === 'zilnic 08:00–20:00',
+  'program zilnic identic → „zilnic"',
+  formatWorkingHoursText(everyDay, 'ro')
+);
+assert(
+  formatWorkingHoursText(everyDay, 'en') === 'daily 08:00–20:00',
+  'same hours all week → "daily"',
+  formatWorkingHoursText(everyDay, 'en')
+);
+const withSundayClosed = {
+  ...(everyDay as Record<string, unknown>),
+  sun: { closed: true },
+} as never;
+assert(
+  formatWorkingHoursText(withSundayClosed, 'ro') === 'luni–sâmbătă 08:00–20:00; duminică închis',
+  'duminică închisă apare explicit',
+  formatWorkingHoursText(withSundayClosed, 'ro')
+);
+const knowledgeHours = buildAssistantKnowledge({
+  businessName: 'Salon Frumos',
+  address: '',
+  phone: '',
+  cancelNoticeText: '',
+  depositText: '0',
+  hoursText: formatWorkingHoursText(everyDay, 'ro'),
+  services: [],
+  staffNames: [],
+});
+const hoursAnswer = answerAssistantMessage(knowledgeHours, 'Ce program aveți?');
+assert(hoursAnswer.params?.hours === 'zilnic 08:00–20:00', 'orele concrete în parametri');
 
 const where = answerAssistantMessage(knowledge, 'Unde vă găsesc? Parcare aveți?');
 assert(where.intent === 'location', 'adresă/parcare → location', where.intent);

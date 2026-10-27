@@ -20,6 +20,21 @@ export function upcomingAppointments<T extends Timed>(rows: T[], now: Date | num
     .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
 }
 
+type StatusTimed = Timed & { status?: string };
+
+/**
+ * Fila „Viitoare” a clientului: doar programări active (în așteptare sau confirmate).
+ * Anulatele/respinsele viitoare rămân vizibile în „Toate” și trec în „Trecute” la ora lor.
+ */
+export function activeUpcomingAppointments<T extends StatusTimed>(
+  rows: T[],
+  now: Date | number
+): T[] {
+  return upcomingAppointments(rows, now).filter(
+    (r) => r.status === 'pending' || r.status === 'approved'
+  );
+}
+
 /** Ended (any status: completed, no-show, cancelled, rejected), newest first. */
 export function pastAppointments<T extends Timed>(rows: T[], now: Date | number): T[] {
   return rows

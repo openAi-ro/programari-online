@@ -1,4 +1,9 @@
-import { hasEnded, pastAppointments, upcomingAppointments } from './appointmentTime';
+import {
+  activeUpcomingAppointments,
+  hasEnded,
+  pastAppointments,
+  upcomingAppointments,
+} from './appointmentTime';
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -34,5 +39,16 @@ assert(
   'every row is in exactly one list'
 );
 assert(rows[0].id === 'yesterday', 'input not mutated');
+
+// „Viitoare” la client: anulatele/respinsele viitoare lipsesc; pending rămâne (audit C-51).
+const futureCancelled = row('futureCancelled', 120, 150, 'cancelled');
+const futureRejected = row('futureRejected', 180, 210, 'rejected');
+const activeIds = activeUpcomingAppointments(
+  [...rows, futureCancelled, futureRejected],
+  now
+)
+  .map((r) => r.id)
+  .join(',');
+assert(activeIds === 'ongoing,soon,later', `active upcoming only: ${activeIds}`);
 
 console.log('appointmentTime: ok');

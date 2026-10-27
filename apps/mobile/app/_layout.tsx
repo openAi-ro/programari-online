@@ -154,9 +154,12 @@ function useSessionGuard() {
       __DEV__ &&
       ((segments[0] as string) === 'dev-nav-bench' || path.startsWith('/dev-nav-bench'));
     const inAuthCallbackPath = inAuthCallback || path.startsWith('/auth/callback');
+    // Ruta inexistentă ajunge pe ecranul +not-found; garda nu o trimite la login (audit C-09).
+    const inNotFound = segments[0] === '+not-found' || path === '/+not-found';
 
     if (
       !session &&
+      !inNotFound &&
       !inAuthGroup &&
       !inAuthCallbackPath &&
       !inPublicBook &&

@@ -4,7 +4,11 @@ import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
 import { ClientTabBar } from '@/components/ClientTabBar';
-import { hasEnded, pastAppointments, upcomingAppointments } from '@/lib/appointmentTime';
+import {
+  activeUpcomingAppointments,
+  hasEnded,
+  pastAppointments,
+} from '@/lib/appointmentTime';
 import {
   Button,
   ButtonRow,
@@ -401,7 +405,7 @@ export default function MyAppointmentsScreen() {
   }, []);
 
   const shown = useMemo(() => {
-    if (filter === 'upcoming') return upcomingAppointments(rows, tickNow);
+    if (filter === 'upcoming') return activeUpcomingAppointments(rows, tickNow);
     if (filter === 'past') return pastAppointments(rows, tickNow);
     return rows;
   }, [rows, filter, tickNow]);

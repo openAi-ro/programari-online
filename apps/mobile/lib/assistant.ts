@@ -1,4 +1,90 @@
+import type { DayKey, WorkingHours } from './types';
+
 export type AssistantService = { name: string; duration: string; price: string };
+
+const DAY_ORDER: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const DAY_NAMES_RO: Record<DayKey, string> = {
+  mon: 'luni',
+  tue: 'marți',
+  wed: 'miercuri',
+  thu: 'joi',
+  fri: 'vineri',
+  sat: 'sâmbătă',
+  sun: 'duminică',
+};
+const DAY_NAMES_EN: Record<DayKey, string> = {
+  mon: 'Mon',
+  tue: 'Tue',
+  wed: 'Wed',
+  thu: 'Thu',
+  fri: 'Fri',
+  sat: 'Sat',
+  sun: 'Sun',
+};
+
+function runDaily(part: string): boolean {
+  // O singură grupare care acoperă toată săptămâna începe cu prima zi și conține „–” în eticheta de zile.
+  return part.includes('–') && (part.startsWith('luni–') || part.startsWith('Mon–'));
+}
+
+/**
+ * Programul săptămânal ca text scurt pentru asistent: zilele consecutive cu același
+ * interval se grupează („luni–vineri 08:00–20:00”), zilele închise se numesc o singură dată.
+ */
+export function formatWorkingHoursText(
+  hours: WorkingHours | null | undefined,
+  lang: 'ro' | 'en'
+): string {
+  if (!hours || typeof hours !== 'object') return '';
+  const names = lang === 'en' ? DAY_NAMES_EN : DAY_NAMES_RO;
+  const closedLabel = lang === 'en' ? 'closed' : 'închis';
+  const parts: string[] = [];
+  const closed: string[] = [];
+  let runStart: DayKey | null = null;
+  let runEnd: DayKey | null = null;
+  let runRange = '';
+  const flush = () => {
+    if (!runStart || !runEnd) return;
+    parts.push(
+      runStart === runEnd
+        ? `${names[runStart]} ${runRange}`
+        : `${names[runStart]}–${names[runEnd]} ${runRange}`
+    );
+    runStart = null;
+    runEnd = null;
+    runRange = '';
+  };
+  for (const key of DAY_ORDER) {
+    const d = hours[key];
+    if (!d || d.closed) {
+      flush();
+      closed.push(names[key]);
+      continue;
+    }
+    const range = `${d.start}–${d.end}`;
+    if (range === runRange && runEnd) {
+      runEnd = key;
+    } else {
+      flush();
+      runStart = key;
+      runEnd = key;
+      runRange = range;
+    }
+  }
+  flush();
+  // Toată săptămâna cu același interval: „zilnic 08:00–20:00”, mai natural decât „luni–duminică …”.
+  if (parts.length === 1 && closed.length === 0 && runDaily(parts[0])) {
+    const daily = lang === 'en' ? 'daily' : 'zilnic';
+    return `${daily} ${parts[0].split(' ').slice(1).join(' ')}`;
+  }
+  if (closed.length > 0 && parts.length > 0) {
+    parts.push(`${closed.join(', ')} ${closedLabel}`);
+  }
+  if (parts.length === 0 && closed.length === 7) {
+    return closedLabel;
+  }
+  return parts.join('; ');
+}
 
 export type AssistantKnowledge = {
   businessName: string;
@@ -6,6 +92,8 @@ export type AssistantKnowledge = {
   phone: string;
   cancelNoticeText: string;
   depositText: string;
+  /** Programul pe zile, deja formatat (ex. „luni–vineri 09:00–18:00; sâmbătă închis”). Gol = necunoscut. */
+  hoursText: string;
   services: AssistantService[];
   staffNames: string[];
 };
@@ -61,6 +149,7 @@ export function buildAssistantKnowledge(input: {
   phone: string;
   cancelNoticeText: string;
   depositText: string;
+  hoursText?: string;
   services: AssistantService[];
   staffNames: string[];
 }): AssistantKnowledge {
@@ -70,6 +159,7 @@ export function buildAssistantKnowledge(input: {
     phone: input.phone.trim(),
     cancelNoticeText: input.cancelNoticeText.trim(),
     depositText: input.depositText.trim(),
+    hoursText: (input.hoursText ?? '').trim(),
     services: input.services
       .map((s) => ({ name: s.name.trim(), duration: s.duration.trim(), price: s.price.trim() }))
       .filter((s) => s.name.length > 0),
@@ -240,7 +330,7 @@ export function answerAssistantMessage(
     return {
       intent: 'hours',
       confidence: 1,
-      params: { business: knowledge.businessName },
+      params: { business: knowledge.businessName, hours: knowledge.hoursText },
       actions: [{ type: 'book' }],
     };
   }
