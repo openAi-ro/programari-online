@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, router, useFocusEffect, useSegments } from 'expo-router';
@@ -128,6 +127,9 @@ export default function SettingsScreen() {
   const hasStaff = activeStaff.length > 0;
   const [pushDiagOpen, setPushDiagOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  /** Cont cu parolă (nu doar Google): schimbarea cere parola actuală. */
+  const [hasPassword, setHasPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [credBusy, setCredBusy] = useState(false);
@@ -274,13 +276,6 @@ export default function SettingsScreen() {
         setLoading(false);
         return;
       }
-      try {
-        const wa = await AsyncStorage.getItem('settings.whatsappEnabled');
-        if (wa === '0') setWhatsappEnabled(false);
-        else if (wa === '1') setWhatsappEnabled(true);
-      } catch {
-        /* ignore */
-      }
       let profileRes = await supabase
         .from('profiles')
         .select('id, email, phone, display_name, account_kind, notify_reminders, notify_decision, notify_whatsapp, avatar_url')
@@ -303,10 +298,8 @@ export default function SettingsScreen() {
         setPhoneInput(phone ? formatPhoneDisplay(phone) : '');
         setNotifyReminders(data.notify_reminders !== false);
         setNotifyDecision(data.notify_decision !== false);
-        // Preferință WhatsApp din DB (dacă există coloana); altfel rămâne AsyncStorage.
-        if (typeof (data as Profile).notify_whatsapp === 'boolean') {
-          setWhatsappEnabled((data as Profile).notify_whatsapp !== false);
-        }
+        // Preferința WhatsApp ține de cont (profiles.notify_whatsapp), nu de dispozitiv.
+        setWhatsappEnabled((data as Profile).notify_whatsapp !== false);
         setAvatarUrl((data as Profile).avatar_url ?? null);
         setAppModeState(parseAccountKind(data.account_kind));
         setEmailInput(data.email ?? user.email ?? '');
@@ -319,6 +312,10 @@ export default function SettingsScreen() {
         setAppModeState(stored);
       }
       setAuthEmail(user.email ?? null);
+      const providers = (user.app_metadata?.providers as string[] | undefined) ?? [
+        String(user.app_metadata?.provider ?? ''),
+      ];
+      setHasPassword(providers.includes('email'));
 
       // Logo firmă (separat de poza de profil).
       type BizRow = {
@@ -892,11 +889,6 @@ export default function SettingsScreen() {
     setProfile(saved);
     setAvatarUrl(saved.avatar_url ?? null);
     setPhoneInput(saved.phone ? formatPhoneDisplay(saved.phone) : '');
-    try {
-      await AsyncStorage.setItem('settings.whatsappEnabled', whatsappEnabled ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
     setMessage(
       saved.phone
         ? trKey('set.phoneSaved', {
@@ -1124,11 +1116,7 @@ export default function SettingsScreen() {
         setError(mapAuthError(updErr) ?? updErr.message);
         return;
       }
-      // Mirror pe profiles (best-effort).
-      if (profile?.id) {
-        await supabase.from('profiles').update({ email: next }).eq('id', profile.id);
-      }
-      setAuthEmail(next);
+      // profiles.email se actualizează abia după confirmare (trigger v92 pe auth.users).
       setMessage(trKey('set.emailSent'));
     } catch (e) {
       setError(e instanceof Error ? e.message : trKey('set.emailFail'));
@@ -1146,15 +1134,30 @@ export default function SettingsScreen() {
       setError(trKey('set.passMismatch'));
       return;
     }
+    if (hasPassword && !currentPassword) {
+      setError(trKey('set.currentPassNeeded'));
+      return;
+    }
     setCredBusy(true);
     setError(null);
     setMessage(null);
     try {
+      if (hasPassword) {
+        const { error: reauthErr } = await supabase.auth.signInWithPassword({
+          email: authEmail ?? '',
+          password: currentPassword,
+        });
+        if (reauthErr) {
+          setError(trKey('set.currentPassWrong'));
+          return;
+        }
+      }
       const { error: updErr } = await updatePassword(newPassword);
       if (updErr) {
         setError(mapAuthError(updErr) ?? updErr.message);
         return;
       }
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setMessage(trKey('set.passUp'));
@@ -1482,28 +1485,14 @@ export default function SettingsScreen() {
                       const prev = whatsappEnabled;
                       setWhatsappEnabled(next);
                       setError(null);
-                      try {
-                        await AsyncStorage.setItem('settings.whatsappEnabled', next ? '1' : '0');
-                      } catch {
-                        // Stocarea locala a esuat: revenim la starea anterioara.
+                      if (!profile?.id) return;
+                      const { error: waErr } = await supabase
+                        .from('profiles')
+                        .update({ notify_whatsapp: next })
+                        .eq('id', profile.id);
+                      if (waErr) {
                         setWhatsappEnabled(prev);
                         setError(trKey('set.waSyncFail'));
-                        return;
-                      }
-                      // Sync DB (v31); ignoră dacă coloana lipsește încă.
-                      if (profile?.id) {
-                        const { error: waErr } = await supabase
-                          .from('profiles')
-                          .update({ notify_whatsapp: next })
-                          .eq('id', profile.id);
-                        if (waErr && !/notify_whatsapp/i.test(waErr.message)) {
-                          setWhatsappEnabled(prev);
-                          await AsyncStorage.setItem(
-                            'settings.whatsappEnabled',
-                            prev ? '1' : '0'
-                          ).catch(() => {});
-                          setError(trKey('set.waSyncFail'));
-                        }
                       }
                     })();
                   }}
@@ -1885,6 +1874,17 @@ export default function SettingsScreen() {
           disabled={credBusy || saving}
           onPress={() => void handleUpdateEmail()}
         />
+        {hasPassword ? (
+          <Field
+            label={tr('set.currentPass')}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry
+            icon="lock-closed-outline"
+            autoCapitalize="none"
+            autoComplete="current-password"
+          />
+        ) : null}
         <Field
           label={tr('set.newPass')}
           value={newPassword}
