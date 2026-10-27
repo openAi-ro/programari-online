@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,7 +36,7 @@ import {
 } from '@/lib/themePreference';
 import { localeTag, trKey, useLanguage, useT } from '@/lib/i18n';
 import { getLanguageSync, setLanguage } from '@/lib/language';
-import { confirmAction } from '@/lib/confirm';
+import { confirmDialog, showDialog, type DialogAction } from '@/lib/dialog';
 import { getPublicWebOrigin } from '@/lib/webBase';
 import { FlagRO, FlagUS } from '@/components/LanguageFlag';
 import { useBack } from '@/lib/nav';
@@ -585,15 +585,9 @@ export default function SettingsScreen() {
   }
 
   function openLogoPicker(): void {
-    // Pe web Alert.alert e no-op (react-native-web): deschidem direct galeria, în gestul utilizatorului.
-    if (Platform.OS === 'web') { void pickLogoFromGallery(); return; }
-    const buttons: {
-      text: string;
-      style?: 'cancel' | 'destructive' | 'default';
-      onPress?: () => void;
-    }[] = [
+    const buttons: DialogAction[] = [
       { text: tr('team.fromGallery'), onPress: () => void pickLogoFromGallery() },
-      { text: tr('set.openCamera'), onPress: () => void takeLogoPhoto() },
+      { text: tr('set.openCamera'), onPress: () => void takeLogoPhoto(), nativeOnly: true },
     ];
     if (logoUrl) {
       buttons.push({
@@ -603,7 +597,7 @@ export default function SettingsScreen() {
       });
     }
     buttons.push({ text: tr('common.cancel'), style: 'cancel' });
-    Alert.alert(tr('set.logoTitle'), tr('set.logoAlertBody'), buttons);
+    showDialog({ title: tr('set.logoTitle'), message: tr('set.logoAlertBody'), actions: buttons });
   }
 
   async function persistVideoUrl(url: string | null): Promise<void> {
@@ -702,14 +696,9 @@ export default function SettingsScreen() {
   }
 
   function openVideoPicker(): void {
-    if (Platform.OS === 'web') { void pickVideoFromGallery(); return; }
-    const buttons: {
-      text: string;
-      style?: 'cancel' | 'destructive' | 'default';
-      onPress?: () => void;
-    }[] = [
+    const buttons: DialogAction[] = [
       { text: tr('team.fromGallery'), onPress: () => void pickVideoFromGallery() },
-      { text: tr('set.recordNow'), onPress: () => void recordVideo() },
+      { text: tr('set.recordNow'), onPress: () => void recordVideo(), nativeOnly: true },
     ];
     if (videoUrl) {
       buttons.push({
@@ -719,16 +708,11 @@ export default function SettingsScreen() {
       });
     }
     buttons.push({ text: tr('common.cancel'), style: 'cancel' });
-    Alert.alert(tr('set.videoTitle'), tr('set.videoAlertBody'), buttons);
+    showDialog({ title: tr('set.videoTitle'), message: tr('set.videoAlertBody'), actions: buttons });
   }
 
   function openAvatarPicker(): void {
-    if (Platform.OS === 'web') { void pickAvatarFromGallery(); return; }
-    const buttons: {
-      text: string;
-      style?: 'cancel' | 'destructive' | 'default';
-      onPress?: () => void;
-    }[] = [
+    const buttons: DialogAction[] = [
       {
         text: tr('team.fromGallery'),
         onPress: () => void pickAvatarFromGallery(),
@@ -736,6 +720,7 @@ export default function SettingsScreen() {
       {
         text: tr('set.openCamera'),
         onPress: () => void takeAvatarPhoto(),
+        nativeOnly: true,
       },
     ];
     if (avatarUrl) {
@@ -746,7 +731,7 @@ export default function SettingsScreen() {
       });
     }
     buttons.push({ text: tr('common.cancel'), style: 'cancel' });
-    Alert.alert(tr('set.avatarTitle'), tr('set.avatarAlertBody'), buttons);
+    showDialog({ title: tr('set.avatarTitle'), message: tr('set.avatarAlertBody'), actions: buttons });
   }
 
   async function handleSave(): Promise<boolean> {
@@ -1042,7 +1027,7 @@ export default function SettingsScreen() {
   }
 
   async function handleDeleteAccount() {
-    const ok = await confirmAction({
+    const ok = await confirmDialog({
       title: trKey('set.deleteAccount'),
       message: trKey('set.deleteAccountBody'),
       confirmText: trKey('set.deleteAccountConfirm'),

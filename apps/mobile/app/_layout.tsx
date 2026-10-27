@@ -8,6 +8,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import 'react-native-reanimated';
 import type { Session } from '@supabase/supabase-js';
 import { useColorScheme } from '@/components/useColorScheme';
+import { DialogHost } from '@/components/DialogHost';
 import { buildTheme, palette } from '@/constants/theme';
 import {
   attachNotificationResponseListener,
@@ -274,6 +275,7 @@ function RootLayoutNav() {
         <Stack.Screen name="install" />
       <Stack.Screen name="gcal-connected" />
       </Stack>
+      <DialogHost />
     </ThemeProvider>
   );
 }

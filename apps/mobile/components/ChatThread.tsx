@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Keyboard,
   Platform,
@@ -31,6 +30,7 @@ import { getCurrentUser } from '@/lib/currentUser';
 import { useFocusEffect } from 'expo-router';
 import type { ChatMessage } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { showDialog } from '@/lib/dialog';
 
 // Unique topic for each subscription: supabase.channel(sameTopic) returns a channel that
 // is still subscribed or leaving, and .on() after subscribe() throws.
@@ -240,14 +240,13 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   }
   function openAttachMenu() {
     if (attaching || sending) return;
-    // Web: the browser's file dialog already offers camera on phones; Alert buttons don't render there.
-    if (Platform.OS === 'web') { void pickAttachment('gallery'); return; }
-    Alert.alert(tr('chat.attachTitle'), tr('chat.attachBody'), [
+    // Web: camera/record are hidden (the browser file dialog covers them), so gallery opens directly.
+    showDialog({ title: tr('chat.attachTitle'), message: tr('chat.attachBody'), actions: [
       { text: tr('chat.attachGallery'), onPress: () => void pickAttachment('gallery') },
-      { text: tr('chat.attachCamera'), onPress: () => void pickAttachment('photo') },
-      { text: tr('chat.attachRecord'), onPress: () => void pickAttachment('video') },
+      { text: tr('chat.attachCamera'), onPress: () => void pickAttachment('photo'), nativeOnly: true },
+      { text: tr('chat.attachRecord'), onPress: () => void pickAttachment('video'), nativeOnly: true },
       { text: tr('common.cancel'), style: 'cancel' },
-    ]);
+    ] });
   }
   if (loading && messages.length === 0) return <ListLoadingScreen title={counterpartyName} subtitle={isClient ? tr('chat.withBusiness') : tr('chat.withClient')} onBack={back} label={tr('chat.loadingConvo')} />;
   const canSend = !sending && !attaching && (!!pending || !!draft.trim());
