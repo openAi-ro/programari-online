@@ -1,7 +1,7 @@
 /** Reguli pure pentru video-ul de prezentare — testabile în node. */
 import { trKey } from './i18n';
 
-export const PROMO_VIDEO_BUCKET = 'business-videos';
+export const PROMO_VIDEO_BUCKET = 'business-videos' as const;
 export const PROMO_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 export const PROMO_VIDEO_MAX_SECONDS = 90;
 

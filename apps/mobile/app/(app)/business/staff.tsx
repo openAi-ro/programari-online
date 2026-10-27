@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
+import { uploadPublicMedia } from '@/lib/mediaUpload';
 
 import { StaffBadge } from '@/components/StaffBadge';
 import { StaffUnavailabilitySection } from '@/components/StaffUnavailabilitySection';
@@ -207,14 +208,7 @@ export default function BusinessStaffScreen() {
   async function uploadStaffPhoto(localUri: string): Promise<string> {
     if (!businessId) throw new Error(trKey('team.bizMissing'));
     const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
-    const path = `${businessId}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from('staff-photos').upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
-    if (upErr) throw upErr;
-    const { data } = supabase.storage.from('staff-photos').getPublicUrl(path);
-    return data.publicUrl;
+    return uploadPublicMedia('staff-photos', businessId, ext, buffer, contentType);
   }
 
   async function handlePhotoResult(

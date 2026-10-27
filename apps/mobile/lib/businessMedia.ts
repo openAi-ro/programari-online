@@ -1,10 +1,10 @@
 import { Platform } from 'react-native';
 
-import { supabase } from '@/lib/supabase';
+import { deletePublicMedia, uploadPublicMedia } from '@/lib/mediaUpload';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 
 /** Bucket public al copertei + galeriei firmei (migrarea v60). */
-export const BUSINESS_MEDIA_BUCKET = 'business-media';
+export const BUSINESS_MEDIA_BUCKET = 'business-media' as const;
 /** Lățimi maxime pe web (canvas): coperta 1600px, galeria 1200px. Pe telefon nu se aplică. */
 export const COVER_MAX_WIDTH = 1600;
 export const GALLERY_MAX_WIDTH = 1200;
@@ -25,13 +25,7 @@ export async function uploadBusinessMediaImage(
     Platform.OS === 'web'
       ? await resizeImageOnWeb(localUri, opts.maxWidth)
       : (await readLocalImageBytes(localUri)).buffer;
-  const path = `${businessId}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`;
-  const { error: upErr } = await supabase.storage
-    .from(BUSINESS_MEDIA_BUCKET)
-    .upload(path, buffer, { contentType: 'image/jpeg', upsert: true });
-  if (upErr) throw upErr;
-  const { data } = supabase.storage.from(BUSINESS_MEDIA_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  return uploadPublicMedia(BUSINESS_MEDIA_BUCKET, businessId, 'jpg', buffer, 'image/jpeg');
 }
 
 /** Redimensionare pe canvas (doar web): lățime maximă, re-encodare JPEG 80%. */
@@ -70,27 +64,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Calea din bucket pentru un URL public salvat în DB, sau null dacă nu e al nostru. */
-export function businessMediaPathFromUrl(publicUrl: string): string | null {
-  const marker = `/${BUSINESS_MEDIA_BUCKET}/`;
-  const idx = publicUrl.indexOf(marker);
-  if (idx < 0) return null;
-  const raw = publicUrl.slice(idx + marker.length).split('?')[0];
-  if (!raw) return null;
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
-
 /** Șterge fișierul din storage (best-effort: nu aruncă, URL-ul dispărut din DB contează). */
 export async function deleteBusinessMediaImage(publicUrl: string): Promise<void> {
-  const path = businessMediaPathFromUrl(publicUrl);
-  if (!path) return;
-  try {
-    await supabase.storage.from(BUSINESS_MEDIA_BUCKET).remove([path]);
-  } catch {
-    /* best-effort */
-  }
+  await deletePublicMedia(BUSINESS_MEDIA_BUCKET, publicUrl);
 }

@@ -54,6 +54,7 @@ import {
   normalizePhoneE164,
 } from '@/lib/phone';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
+import { uploadPublicMedia } from '@/lib/mediaUpload';
 import { uploadBusinessVideo } from '@/lib/businessVideo';
 import { pickerDurationToMs } from '@/lib/videoRules';
 import { PromoVideo } from '@/components/PromoVideo';
@@ -406,14 +407,7 @@ export default function SettingsScreen() {
 
   async function uploadProfileAvatar(localUri: string, userId: string): Promise<string> {
     const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
-    const path = `${userId}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from('profile-avatars').upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
-    if (upErr) throw upErr;
-    const { data } = supabase.storage.from('profile-avatars').getPublicUrl(path);
-    return data.publicUrl;
+    return uploadPublicMedia('profile-avatars', userId, ext, buffer, contentType);
   }
 
   async function persistAvatarUrl(url: string | null): Promise<void> {
@@ -514,14 +508,7 @@ export default function SettingsScreen() {
 
   async function uploadBusinessLogo(localUri: string, bizId: string): Promise<string> {
     const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
-    const path = `${bizId}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from('business-logos').upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
-    if (upErr) throw upErr;
-    const { data } = supabase.storage.from('business-logos').getPublicUrl(path);
-    return data.publicUrl;
+    return uploadPublicMedia('business-logos', bizId, ext, buffer, contentType);
   }
 
   async function persistLogoUrl(url: string | null): Promise<void> {

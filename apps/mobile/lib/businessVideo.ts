@@ -1,7 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
-import { supabase } from '@/lib/supabase';
 import { trKey } from '@/lib/i18n';
+import { readLocalFileBytes, uploadPublicMedia } from '@/lib/mediaUpload';
 import {
   PROMO_VIDEO_BUCKET,
   resolveVideoExtension,
@@ -9,16 +10,14 @@ import {
   videoContentType,
 } from '@/lib/videoRules';
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+async function localFileSize(localUri: string): Promise<number | null> {
+  if (Platform.OS === 'web') return null;
+  const info = await FileSystem.getInfoAsync(localUri);
+  return info.exists && 'size' in info && typeof info.size === 'number' ? info.size : null;
 }
 
 /**
- * Încarcă video-ul de prezentare în storage și întoarce URL-ul public.
+ * Încarcă video-ul de prezentare (R2, prin Worker) și întoarce URL-ul public.
  * Aruncă Error cu mesaj localizat (afișabil direct în UI).
  */
 export async function uploadBusinessVideo(
@@ -26,56 +25,19 @@ export async function uploadBusinessVideo(
   businessId: string,
   opts?: { durationMs?: number | null; mimeType?: string | null }
 ): Promise<string> {
-  const cacheRoot = FileSystem.cacheDirectory;
-  if (!cacheRoot) throw new Error(trKey('media.cacheUnavailable'));
-
-  const info = await FileSystem.getInfoAsync(localUri);
   // MIME-ul raportat de picker e mai sigur decât extensia din URI:
   // filmările vin uneori ca content:// fără extensie.
   const { extension: ext } = resolveVideoExtension({ mimeType: opts?.mimeType, uri: localUri });
   const err = validatePromoVideoAsset({
-    sizeBytes:
-      info.exists && 'size' in info && typeof info.size === 'number' ? info.size : null,
+    sizeBytes: await localFileSize(localUri),
     durationMs: opts?.durationMs ?? null,
     extension: ext,
   });
   if (err) throw new Error(err);
   if (!ext) throw new Error(trKey('media.videoFormat'));
 
-  const dest = `${cacheRoot}promo-${Date.now()}.${ext}`;
-  try {
-    await FileSystem.copyAsync({ from: localUri, to: dest });
-  } catch {
-    /* unele URI-uri din picker se citesc direct */
-  }
-  let base64: string;
-  try {
-    base64 = await FileSystem.readAsStringAsync(dest, { encoding: 'base64' }).catch(() =>
-      FileSystem.readAsStringAsync(localUri, { encoding: 'base64' })
-    );
-  } catch {
-    throw new Error(trKey('media.videoUnreadable'));
-  } finally {
-    try {
-      await FileSystem.deleteAsync(dest, { idempotent: true });
-    } catch {
-      /* ignore */
-    }
-  }
-  const buffer = base64ToArrayBuffer(base64);
-  if (buffer.byteLength < 100) {
-    throw new Error(trKey('media.videoEmpty'));
-  }
-  const path = `${businessId}/${Date.now()}.${ext}`;
-  const { error: upErr } = await supabase.storage
-    .from(PROMO_VIDEO_BUCKET)
-    .upload(path, buffer, { contentType: videoContentType(ext), upsert: true });
-  if (upErr) {
-    if (/bucket|not found|does not exist/i.test(upErr.message)) {
-      throw new Error(trKey('media.videoBucket'));
-    }
-    throw upErr;
-  }
-  const { data } = supabase.storage.from(PROMO_VIDEO_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  const buffer = await readLocalFileBytes(localUri, ext);
+  const sizeErr = validatePromoVideoAsset({ sizeBytes: buffer.byteLength, durationMs: null, extension: ext });
+  if (sizeErr) throw new Error(sizeErr);
+  return uploadPublicMedia(PROMO_VIDEO_BUCKET, businessId, ext, buffer, videoContentType(ext));
 }
