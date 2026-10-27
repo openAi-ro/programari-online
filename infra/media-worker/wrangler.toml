@@ -1,0 +1,18 @@
+# Deployed via the Cloudflare API on 2026-10-27; this file mirrors that config.
+name = "programari-media"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+SUPABASE_URL = "https://tucujqpgshrmljkmqvnl.supabase.co"
+
+[[r2_buckets]]
+binding = "PUBLIC_MEDIA"
+bucket_name = "programari-media"
+
+[[r2_buckets]]
+binding = "CHAT_FILES"
+bucket_name = "programari-chat"
+
+# Secret (not in git): SIGNING_KEY — HMAC key for signed chat URLs.
