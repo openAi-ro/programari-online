@@ -36,6 +36,15 @@ import { useTransientMessage } from '@/lib/useTransientMessage';
 // is still subscribed or leaving, and .on() after subscribe() throws.
 let chatChannelSeq = 0;
 
+type PendingAttachment = {
+  uri: string;
+  pickerType: ImagePicker.ImagePickerAsset['type'];
+  durationMs: number | null;
+  kind: ChatAttachmentKind;
+  mime: string;
+  ext: string;
+};
+
 function shortPreview(message: ChatMessage): string {
   const clean = chatMessagePreview(message, { image: trKey('chat.photoLabel'), video: trKey('chat.videoLabel') });
   return clean.length > 80 ? `${clean.slice(0, 80).trim()}…` : clean;
@@ -90,6 +99,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [pending, setPending] = useState<PendingAttachment | null>(null);
   // Signed read URLs for chat files (1 h); refreshed on every focus/load.
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [viewer, setViewer] = useState<{ kind: ChatAttachmentKind; url: string } | null>(null);
@@ -175,6 +185,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     return () => { void supabase.removeChannel(channel); };
   }, [conversationId, isClient, scrollToBottom]);
   async function onSend() {
+    if (pending) { await sendPending(pending); return; }
     const body = draft.trim(); if (!body || sending) return;
     setSending(true); setError(null);
     const { message, error: err } = await sendMessage(conversationId, body);
@@ -182,7 +193,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     else if (message?.id) { seenIdsRef.current.add(message.id); setMessages((prev) => mergeMessages(prev, [message])); setDraft(''); scrollToBottom(true); }
     setSending(false); Keyboard.dismiss();
   }
-  async function sendPicked(result: ImagePicker.ImagePickerResult) {
+  function stagePicked(result: ImagePicker.ImagePickerResult) {
     if (result.canceled || result.assets.length === 0) return;
     const asset = result.assets[0];
     const durationMs = pickerDurationToMs(asset.duration, Platform.OS);
@@ -191,33 +202,38 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       setError(plan.error === 'too_big' ? trKey('chat.attachTooBig') : plan.error === 'too_long' ? trKey('chat.attachTooLong') : trKey('chat.attachBadType'));
       return;
     }
+    setError(null);
+    setPending({ uri: asset.uri, pickerType: asset.type, durationMs, kind: plan.kind, mime: plan.mime, ext: plan.ext });
+  }
+  async function sendPending(att: PendingAttachment) {
+    if (attaching || sending) return;
     setAttaching(true); setError(null);
     try {
-      const buffer = await readLocalFileBytes(asset.uri, plan.ext);
-      const sized = planChatAttachment({ pickerType: asset.type, mimeType: plan.mime, sizeBytes: buffer.byteLength, durationMs });
+      const buffer = await readLocalFileBytes(att.uri, att.ext);
+      const sized = planChatAttachment({ pickerType: att.pickerType, mimeType: att.mime, sizeBytes: buffer.byteLength, durationMs: att.durationMs });
       if (!sized.ok) throw new Error(trKey('chat.attachTooBig'));
-      const uploaded = await uploadChatFile(conversationId, plan.ext, buffer, plan.mime);
+      const uploaded = await uploadChatFile(conversationId, att.ext, buffer, att.mime);
       const { message, error: err } = await sendAttachment(
         conversationId,
-        { key: uploaded.key, kind: plan.kind, mime: plan.mime, bytes: uploaded.bytes },
+        { key: uploaded.key, kind: att.kind, mime: att.mime, bytes: uploaded.bytes },
         draft
       );
       if (err) setError(err === 'message_too_long' ? trKey('chat.msgTooLong') : trKey('chat.sendError', { err }));
-      else if (message?.id) { seenIdsRef.current.add(message.id); setMessages((prev) => mergeMessages(prev, [message])); setDraft(''); scrollToBottom(true); }
+      else if (message?.id) { seenIdsRef.current.add(message.id); setMessages((prev) => mergeMessages(prev, [message])); setDraft(''); setPending(null); scrollToBottom(true); }
     } catch (e) {
       setError(e instanceof Error ? e.message : trKey('chat.sendError', { err: '' }));
     }
-    setAttaching(false);
+    setAttaching(false); Keyboard.dismiss();
   }
   async function pickAttachment(source: 'gallery' | 'photo' | 'video') {
     try {
       if (source === 'gallery') {
-        await sendPicked(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: CHAT_VIDEO_MAX_SECONDS }));
+        stagePicked(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: CHAT_VIDEO_MAX_SECONDS }));
         return;
       }
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) { setError(trKey('chat.attachPermission')); return; }
-      await sendPicked(await ImagePicker.launchCameraAsync({ mediaTypes: source === 'photo' ? ['images'] : ['videos'], quality: 0.8, videoMaxDuration: CHAT_VIDEO_MAX_SECONDS }));
+      stagePicked(await ImagePicker.launchCameraAsync({ mediaTypes: source === 'photo' ? ['images'] : ['videos'], quality: 0.8, videoMaxDuration: CHAT_VIDEO_MAX_SECONDS }));
     } catch {
       setError(trKey('chat.attachPermission'));
     }
@@ -234,17 +250,36 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     ]);
   }
   if (loading && messages.length === 0) return <ListLoadingScreen title={counterpartyName} subtitle={isClient ? tr('chat.withBusiness') : tr('chat.withClient')} onBack={back} label={tr('chat.loadingConvo')} />;
+  const canSend = !sending && !attaching && (!!pending || !!draft.trim());
   const composer = (
-    <View style={[styles.inputRow, { borderTopWidth: 1, borderTopColor: t.colors.border }]}>
+    <View style={{ borderTopWidth: 1, borderTopColor: t.colors.border, gap: spacing.sm }}>
+    {pending ? (
+      <View style={styles.pendingRow}>
+        <View>
+          <ChatAttachmentThumb compact kind={pending.kind} url={pending.uri} onOpen={() => setViewer({ kind: pending.kind, url: pending.uri })} />
+          <Pressable
+            style={[styles.pendingRemove, { backgroundColor: t.colors.text }]}
+            onPress={() => setPending(null)}
+            disabled={attaching}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={tr('chat.attachRemoveA11y')}
+          >
+            <Ionicons name="close" size={14} color={t.colors.bg} />
+          </Pressable>
+        </View>
+        <Text style={[styles.pendingHint, { color: t.colors.textMuted }]}>
+          {attaching ? tr('chat.attachSending') : tr('chat.attachCaptionHint')}
+        </Text>
+      </View>
+    ) : null}
+    <View style={styles.inputRow}>
       {dictation.error ? (
         <Text style={[styles.micError, { color: t.colors.danger }]}>
           {dictation.error === 'denied' ? tr('chat.micDenied') : tr('chat.micFailed')}
         </Text>
       ) : !dictation.supported && Platform.OS === 'web' ? (
         <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
-      ) : null}
-      {attaching ? (
-        <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.attachSending')}</Text>
       ) : null}
       <Pressable
         style={[styles.sendBtn, { backgroundColor: t.colors.bgElevated, opacity: attaching || sending ? 0.6 : 1 }]}
@@ -257,7 +292,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       </Pressable>
       <TextInput
         style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
-        placeholder={tr('chat.writeMessage')}
+        placeholder={pending ? tr('chat.captionPlaceholder') : tr('chat.writeMessage')}
         placeholderTextColor={t.colors.textMuted}
         value={draft}
         onChangeText={setDraft}
@@ -283,20 +318,21 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         style={[
           styles.sendBtn,
           {
-            backgroundColor: sending || !draft.trim() ? t.colors.bgElevated : t.colors.accent,
-            opacity: sending || !draft.trim() ? 0.6 : 1,
+            backgroundColor: canSend ? t.colors.accent : t.colors.bgElevated,
+            opacity: canSend ? 1 : 0.6,
           },
         ]}
         onPress={onSend}
-        disabled={sending || !draft.trim()}
+        disabled={!canSend}
         accessibilityLabel={tr('chat.sendMessageA11y')}
       >
         <Ionicons
           name="send-outline"
           size={16}
-          color={sending || !draft.trim() ? t.colors.textMuted : '#fff'}
+          color={canSend ? '#fff' : t.colors.textMuted}
         />
       </Pressable>
+    </View>
     </View>
   );
 
@@ -371,6 +407,9 @@ const styles = StyleSheet.create({
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
   centerRow: { marginTop: spacing.lg },
   olderSpinner: { paddingVertical: spacing.sm },
+  pendingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.sm },
+  pendingRemove: { position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  pendingHint: { flex: 1, fontSize: 13 },
   inputRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
   micError: { width: '100%', fontSize: 12 },
   input: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, maxHeight: 76 },

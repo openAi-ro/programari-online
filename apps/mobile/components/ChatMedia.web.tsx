@@ -12,10 +12,13 @@ export function ChatAttachmentThumb({
   kind,
   url,
   onOpen,
+  compact = false,
 }: {
   kind: ChatAttachmentKind;
   url: string | null;
   onOpen: () => void;
+  /** Small square for the pre-send preview above the composer. */
+  compact?: boolean;
 }) {
   const tr = useT();
   return (
@@ -24,7 +27,7 @@ export function ChatAttachmentThumb({
       accessibilityLabel={kind === 'video' ? tr('chat.openVideoA11y') : tr('chat.openPhotoA11y')}
       onPress={onOpen}
       disabled={!url}
-      style={styles.thumb}
+      style={[styles.thumb, compact && styles.thumbCompact]}
     >
       {!url ? (
         <ActivityIndicator color="#fff" />
@@ -40,7 +43,7 @@ export function ChatAttachmentThumb({
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
           />
           <View style={styles.playBadge} pointerEvents="none">
-            <Ionicons name="play-circle" size={48} color="#fff" />
+            <Ionicons name="play-circle" size={compact ? 28 : 48} color="#fff" />
           </View>
         </>
       )}
@@ -84,6 +87,7 @@ export function ChatMediaViewer({
 }
 
 const styles = StyleSheet.create({
+  thumbCompact: { width: 72, height: 72, borderRadius: 10 },
   thumb: {
     width: 200,
     height: 200,
