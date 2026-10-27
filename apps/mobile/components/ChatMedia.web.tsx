@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playBadge: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  playBadge: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, justifyContent: 'center', alignItems: 'center' },
   backdrop: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   close: {
     position: 'absolute',
