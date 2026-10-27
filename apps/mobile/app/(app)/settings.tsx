@@ -585,6 +585,8 @@ export default function SettingsScreen() {
   }
 
   function openLogoPicker(): void {
+    // Pe web Alert.alert e no-op (react-native-web): deschidem direct galeria, în gestul utilizatorului.
+    if (Platform.OS === 'web') { void pickLogoFromGallery(); return; }
     const buttons: {
       text: string;
       style?: 'cancel' | 'destructive' | 'default';
@@ -700,6 +702,7 @@ export default function SettingsScreen() {
   }
 
   function openVideoPicker(): void {
+    if (Platform.OS === 'web') { void pickVideoFromGallery(); return; }
     const buttons: {
       text: string;
       style?: 'cancel' | 'destructive' | 'default';
@@ -720,6 +723,7 @@ export default function SettingsScreen() {
   }
 
   function openAvatarPicker(): void {
+    if (Platform.OS === 'web') { void pickAvatarFromGallery(); return; }
     const buttons: {
       text: string;
       style?: 'cancel' | 'destructive' | 'default';
