@@ -17,6 +17,7 @@ import { getWebBookingUrl } from '@/lib/bookingLink';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { filterWaitlistByDate, waitlistDates } from '@/lib/waitlistFilter';
+import { mapBookingRpcError, toYmd } from '@/lib/bookingRules';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { WaitlistEntry } from '@/lib/types';
@@ -53,11 +54,14 @@ export default function BusinessWaitlistScreen() {
       setLoading(false);
       return;
     }
+    // Cererile pentru zile trecute au expirat și nu mai apar (F-9).
+    const today = toYmd(new Date());
     const { data, error: err } = await supabase
       .from('waitlist')
       .select('*, services(name), staff(name)')
       .eq('business_id', biz.id)
       .in('status', ['active', 'notified'])
+      .gte('desired_date', today)
       .order('desired_date', { ascending: true });
     if (err) {
       const plain = await supabase
@@ -65,6 +69,7 @@ export default function BusinessWaitlistScreen() {
         .select('*')
         .eq('business_id', biz.id)
         .in('status', ['active', 'notified'])
+        .gte('desired_date', today)
         .order('desired_date', { ascending: true });
       if (plain.error) setError(plain.error.message, { sticky: true });
       else setRows((plain.data ?? []) as Row[]);
@@ -111,7 +116,7 @@ export default function BusinessWaitlistScreen() {
     setError(null);
     const { error: err } = await supabase.rpc('leave_waitlist', { p_waitlist_id: id });
     if (err) {
-      setError(err.message);
+      setError(mapBookingRpcError(err.message));
       return;
     }
     await load();

@@ -95,7 +95,7 @@ Deno.test('waitlist template has 3 vars (business, date, link)', async () => {
     const c = messageWaitlistSpot('Salon X', '2026-10-20', 'https://programari.expo.app/b/ABC', 'ro');
     await sendWhatsApp('0712345900', c.text, { template: c.wa });
     const t = m.calls[0].body.template as { components: { parameters: { text: string }[] }[] };
-    assertEquals(t.components[0].parameters.map((p) => p.text), ['Salon X', '2026-10-20', 'https://programari.expo.app/b/ABC']);
+    assertEquals(t.components[0].parameters.map((p) => p.text), ['Salon X', '20 octombrie 2026', 'https://programari.expo.app/b/ABC']);
   } finally { m.restore(); }
 });
 

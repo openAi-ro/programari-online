@@ -831,13 +831,26 @@ export function messageAuthOtp(code: string, lang: NotifyLang = 'ro'): {
   return { subject: 'Cod autentificare Programari', text };
 }
 
-/** Notify a waitlisted client that a slot freed up. */
+const RO_MONTHS = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
+const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** 'YYYY-MM-DD' → „10 noiembrie 2026” / “10 November 2026”; any other input is returned unchanged. */
+export function formatLongDate(ymd: string, lang: NotifyLang = 'ro'): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return ymd;
+  const month = (lang === 'en' ? EN_MONTHS : RO_MONTHS)[Number(m[2]) - 1];
+  if (!month) return ymd;
+  return `${Number(m[3])} ${month} ${m[1]}`;
+}
+
+/** Notify a waitlisted client that a slot freed up. `desiredDate` is 'YYYY-MM-DD'. */
 export function messageWaitlistSpot(
   businessName: string,
-  dateLabel: string,
+  desiredDate: string,
   bookingUrl: string,
   lang: NotifyLang = 'ro'
 ): { subject: string; text: string; wa: WaTemplateRef } {
+  const dateLabel = formatLongDate(desiredDate, lang);
   const wa: WaTemplateRef = { key: 'WAITLIST', vars: [businessName, dateLabel, bookingUrl] };
   if (lang === 'en') {
     return {

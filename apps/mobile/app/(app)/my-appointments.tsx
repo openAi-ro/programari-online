@@ -27,6 +27,7 @@ import {
   canConfirmAttendance,
   canReview,
   mapBookingRpcError,
+  toYmd,
 } from '@/lib/bookingRules';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { addAppointmentToCalendar } from '@/lib/ics';
@@ -48,8 +49,16 @@ import { formatInTimeZone } from '@/lib/timezone';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Appointment, BusinessProfile, Review } from '@/lib/types';
-import { trKey, useT } from '@/lib/i18n';
+import { localeTag, trKey, useT } from '@/lib/i18n';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+
+type WaitlistItem = {
+  id: string;
+  desired_date: string;
+  status: string;
+  business_id: string;
+  business_profiles: { name: string } | null;
+};
 
 type Row = Appointment & {
   business_profiles?: Pick<
@@ -84,7 +93,7 @@ export default function MyAppointmentsScreen() {
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
-  const [myWaitlist, setMyWaitlist] = useState<Array<{ id: string; desired_date: string; status: string; business_id: string }>>([]);
+  const [myWaitlist, setMyWaitlist] = useState<WaitlistItem[]>([]);
   const [myPackages, setMyPackages] = useState<
     Array<{
       id: string;
@@ -210,12 +219,13 @@ export default function MyAppointmentsScreen() {
     }
     const { data: wl, error: wlErr } = await supabase
       .from('waitlist')
-      .select('id, desired_date, status, business_id')
+      .select('id, desired_date, status, business_id, business_profiles(name)')
       .eq('client_user_id', user.id)
       .in('status', ['active', 'notified'])
+      .gte('desired_date', toYmd(new Date()))
       .order('desired_date', { ascending: true });
     if (wlErr) partialFail = true;
-    setMyWaitlist((wl ?? []) as Array<{ id: string; desired_date: string; status: string; business_id: string }>);
+    setMyWaitlist((wl ?? []) as unknown as WaitlistItem[]);
     const { data: pkgs, error: pkgErr } = await supabase
       .from('client_packages')
       .select('id, sessions_total, sessions_used, packages(name), business_profiles(name)')
@@ -395,6 +405,7 @@ export default function MyAppointmentsScreen() {
     }
     setReviewingId(null);
     setReviewComment('');
+    setSuccess(trKey('my.reviewSaved'));
     await load();
   }
 
@@ -478,18 +489,24 @@ export default function MyAppointmentsScreen() {
                       backgroundColor: t.colors.surface,
                     }}
                   >
-                    <Text style={{ flex: 1, color: t.colors.text }}>
-                      {rows.find((r) => r.business_id === w.business_id)?.business_profiles?.name ?? ''}
+                    <Text style={{ flex: 1, minWidth: 0, color: t.colors.text }}>
+                      {w.business_profiles?.name ?? ''}
                       {' · '}
-                      {w.desired_date}
+                      {new Date(`${w.desired_date}T12:00:00`).toLocaleDateString(localeTag(), {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
                       {w.status === 'notified' ? ` · ${tr('wl.statusNotified')}` : ''}
                     </Text>
-                    <Button
-                      label={tr('wl.leave')}
-                      size="sm"
-                      variant="secondary"
-                      onPress={() => void leaveMyWaitlist(w.id)}
-                    />
+                    <View style={{ flexShrink: 0 }}>
+                      <Button
+                        label={tr('wl.leave')}
+                        size="sm"
+                        variant="secondary"
+                        onPress={() => void leaveMyWaitlist(w.id)}
+                      />
+                    </View>
                   </View>
                 ))}
               </View>
@@ -675,7 +692,12 @@ export default function MyAppointmentsScreen() {
             checkInLoading={checkInBusyId === item.id}
             onCheckIn={
               canCheckIn(
-                { status: item.status, startAt: item.start_at, checkedInAt: item.checked_in_at ?? null },
+                {
+                  status: item.status,
+                  startAt: item.start_at,
+                  endAt: item.end_at,
+                  checkedInAt: item.checked_in_at ?? null,
+                },
                 tickNow
               )
                 ? () => void handleCheckIn(item)

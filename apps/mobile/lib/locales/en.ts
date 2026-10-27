@@ -27,6 +27,8 @@ export const en: typeof ro = {
   'status.approved': 'Confirmed',
   'status.rejected': 'Declined',
   'status.cancelled': 'Cancelled',
+  'status.ended': 'Completed',
+  'status.expired': 'Expired',
 
   'price.onSite': 'On-site price',
 
@@ -517,6 +519,7 @@ export const en: typeof ro = {
   'my.upcoming': 'Upcoming',
   'my.past': 'Past',
   'my.review': 'Review',
+  'my.reviewSaved': "Thanks for your review! Reviews appear on the salon's public page once it has at least 3.",
   'my.pickStars': 'Pick the stars, then save.',
   'my.commentLabel': 'Comment (optional)',
   'my.commentPlaceholder': 'How was the visit?',

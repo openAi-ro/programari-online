@@ -25,6 +25,8 @@ export const ro = {
   'status.approved': 'Confirmată',
   'status.rejected': 'Respinsă',
   'status.cancelled': 'Anulată',
+  'status.ended': 'Încheiată',
+  'status.expired': 'Expirată',
 
   'price.onSite': 'Preț la fața locului',
 
@@ -515,6 +517,7 @@ export const ro = {
   'my.upcoming': 'Viitoare',
   'my.past': 'Trecute',
   'my.review': 'Recenzie',
+  'my.reviewSaved': "Mulțumim pentru recenzie! Recenziile apar pe pagina publică a salonului după ce strânge cel puțin 3.",
   'my.pickStars': 'Alege stelele, apoi salvează.',
   'my.commentLabel': 'Comentariu (opțional)',
   'my.commentPlaceholder': 'Cum a fost vizita?',

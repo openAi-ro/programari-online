@@ -115,7 +115,11 @@ export default function PublicBookScreen() {
   const goBack = useBack();
   const tr = useT();
   const { lang } = useLanguage();
-  const { publicCode, embed } = useLocalSearchParams<{ publicCode: string; embed?: string }>();
+  const { publicCode, embed, date: requestedDate } = useLocalSearchParams<{
+    publicCode: string;
+    embed?: string;
+    date?: string;
+  }>();
   // ?embed=1: pagina e într-un iframe pe site-ul salonului (ecranul „Butonul tău de programare”).
   const embedded = isEmbedParam(embed);
   const { width: windowWidth } = useWindowDimensions();
@@ -190,10 +194,15 @@ export default function PublicBookScreen() {
   // prima zi în care lucrează măcar un specialist eligibil pentru serviciile alese.
   useEffect(() => {
     if (!business || loading) return;
-    setDateLocal(
-      firstBookableDateForStaff(business, selectedStaff ? [selectedStaff] : eligibleStaff, durationMinutes)
+    const first = firstBookableDateForStaff(
+      business,
+      selectedStaff ? [selectedStaff] : eligibleStaff,
+      durationMinutes
     );
-  }, [business, loading, selectedStaff, eligibleStaff, durationMinutes]);
+    // Linkul din emailul „Loc eliberat” deschide direct ziua respectivă (?date=YYYY-MM-DD).
+    const wanted = typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : null;
+    setDateLocal(wanted && wanted >= first ? wanted : first);
+  }, [business, loading, selectedStaff, eligibleStaff, durationMinutes, requestedDate]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));

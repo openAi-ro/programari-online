@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Badge, Button, ButtonRow, useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { hasEnded } from '@/lib/appointmentTime';
 import { statusMeta } from '@/lib/status';
 import { appointmentNextHint } from '@/lib/appointmentNextHint';
 import { cancelPolicyLine } from '@/lib/cancelPolicyCopy';
@@ -119,7 +120,13 @@ export function AppointmentCard({
   const t = useTheme();
   const tr = useT();
   const status = appointment.status;
-  const meta = statusMeta(status);
+  // Etichete derivate: programarea aprobată care s-a terminat și cererea expirată (F-13, F-17).
+  const meta =
+    status === 'cancelled' && appointment.cancel_reason === 'request_expired'
+      ? { ...statusMeta(status), label: tr('status.expired'), icon: 'time-outline' as const }
+      : status === 'approved' && hasEnded(appointment, Date.now())
+        ? { ...statusMeta(status), label: tr('status.ended'), tone: 'neutral' as const }
+        : statusMeta(status);
 
   const fallbackLabel = `${new Date(appointment.start_at).toLocaleString(localeTag())} – ${new Date(
     appointment.end_at

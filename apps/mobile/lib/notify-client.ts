@@ -246,8 +246,12 @@ export async function invokeWaitlistNotify(opts: {
   booking_url: string;
   waitlist_id?: string;
 }): Promise<InvokeResult> {
+  // Linkul din mesaj deschide direct ziua eliberată pe pagina publică.
+  const booking_url = opts.booking_url
+    ? `${opts.booking_url}${opts.booking_url.includes('?') ? '&' : '?'}date=${opts.desired_date}`
+    : '';
   const { data, error } = await supabase.functions.invoke('notify-waitlist', {
-    body: { ...opts, lang: getLanguageSync() },
+    body: { ...opts, booking_url, lang: getLanguageSync() },
   });
   if (error) {
     console.warn('notify-waitlist invoke failed', error.message);
