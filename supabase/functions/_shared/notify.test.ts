@@ -1,6 +1,7 @@
 // Run: deno test --allow-env --allow-net supabase/functions/_shared/
 import { assert, assertEquals, assertStringIncludes } from 'jsr:@std/assert@1';
 import {
+  chatPushBody,
   logNotification,
   messageNewPendingRequest,
   sendEmail,
@@ -244,4 +245,13 @@ Deno.test('reschedule copy: RO/EN, MOVED template only on accept', async () => {
   assertStringIncludes(messageRescheduleExpired('Salon X', 'Nov 3', 'en').text, 'stays on Nov 3');
   const c = messageCancelledByBusiness('Salon X', '3 nov.', 'Boală', 'https://x/b/C', 'ro');
   assertStringIncludes(c.text, 'Motiv: Boală');
+});
+
+Deno.test('chat push body labels attachments and keeps the caption', () => {
+  assertEquals(chatPushBody({ body: 'Salut', attachment_kind: null }), 'Salut');
+  assertEquals(chatPushBody({ body: '', attachment_kind: 'image' }), '📷 Foto');
+  assertEquals(chatPushBody({ body: 'Uite tunsoarea', attachment_kind: 'image' }), '📷 Foto · Uite tunsoarea');
+  assertEquals(chatPushBody({ body: null, attachment_kind: 'video' }, 'en'), '🎬 Video');
+  assertEquals(chatPushBody({ body: 'x', attachment_kind: 'image' }, 'en'), '📷 Photo · x');
+  assertEquals(chatPushBody({ body: 'a'.repeat(200) }).length, 120);
 });

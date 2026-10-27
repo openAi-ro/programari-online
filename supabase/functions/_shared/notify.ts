@@ -1002,3 +1002,15 @@ export function messageCancelledByBusiness(
 export function appWebBase(): string {
   return (Deno.env.get('PUBLIC_WEB_BASE_URL') ?? 'https://programari.expo.app').replace(/\/$/, '');
 }
+
+/** Push text for a chat message: the text, or „📷 Foto” / „🎬 Video” (· caption) for an attachment. */
+export function chatPushBody(
+  record: { body?: string | null; attachment_kind?: string | null },
+  lang: NotifyLang = 'ro'
+): string {
+  const text = String(record.body ?? '').replace(/\s+/g, ' ').trim();
+  const kind = record.attachment_kind;
+  const label = kind === 'image' ? (lang === 'en' ? '📷 Photo' : '📷 Foto') : kind === 'video' ? '🎬 Video' : '';
+  const out = label ? (text ? `${label} · ${text}` : label) : text;
+  return out.slice(0, 120);
+}

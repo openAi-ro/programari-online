@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
-import { parseNotifyLang } from '../_shared/notify.ts';
+import { chatPushBody, parseNotifyLang } from '../_shared/notify.ts';
 import { checkWebhookSecret, isServiceRole } from '../_shared/secret-auth.ts';
 const EXPO='https://exp.host/--/api/v2/push/send';
 Deno.serve(async (req)=>{
@@ -24,7 +24,7 @@ Deno.serve(async (req)=>{
   const { data: recipientProfile } = await admin.from('profiles').select('language').eq('id', recipient).maybeSingle();
   const lang = parseNotifyLang((recipientProfile as { language?: string } | null)?.language ?? body.lang);
   const title = lang === 'en' ? 'New message' : 'Mesaj nou';
-  const msgs = toks.map((t:any)=>({ to:t.expo_push_token, title, body: String(record.body||'').slice(0,120), channelId:'chat_heads', data:{ screen:'chat', conversationId: record.conversation_id, businessId: conv.business_id, isClient }}));
+  const msgs = toks.map((t:any)=>({ to:t.expo_push_token, title, body: chatPushBody(record, lang), channelId:'chat_heads', data:{ screen:'chat', conversationId: record.conversation_id, businessId: conv.business_id, isClient }}));
   await fetch(EXPO,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(msgs)});
   return jsonResponse({ok:true, sent: msgs.length});
 });
