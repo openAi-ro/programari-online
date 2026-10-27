@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Callout, EmptyState, ListLoadingScreen, Screen, useTheme } from '@/components/ui';
 import { spacing } from '@/constants/theme';
 import { fetchLatestMessages, fetchUnreadCounts, listConversations } from '@/lib/chatRpc';
+import { chatMessagePreview } from '@/lib/mediaKeys';
 import { useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
@@ -59,7 +60,7 @@ export default function ClientChatListScreen() {
             <Pressable onPress={() => router.push('/(app)/chat/' + item.id as never)} style={[styles.row, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
               <View style={styles.flex}>
                 <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>{names[item.business_id] ?? tr('chat.business')}</Text>
-                <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id]?.body ?? tr('chat.openConvo')}</Text>
+                <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id] ? chatMessagePreview(latest[item.id]!, { image: tr('chat.photoLabel'), video: tr('chat.videoLabel') }) : tr('chat.openConvo')}</Text>
                 {(unread[item.id] ?? 0) > 0 ? (<View style={[styles.unreadBadge, { backgroundColor: t.colors.danger }]}><Text style={styles.unreadText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{formatBadgeCount(unread[item.id] ?? 0)}</Text></View>) : null}
               </View>
             </Pressable>

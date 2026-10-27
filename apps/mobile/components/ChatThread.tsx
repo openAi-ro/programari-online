@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Keyboard,
   Platform,
@@ -16,7 +17,12 @@ import { trKey, useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { presentLocalChatNotification } from '@/lib/notifications';
 import { formatLocalTime } from '@/lib/timezone';
-import { listMessages, markConversationRead, sendMessage } from '@/lib/chatRpc';
+import * as ImagePicker from 'expo-image-picker';
+import { listMessages, markConversationRead, sendAttachment, sendMessage } from '@/lib/chatRpc';
+import { ChatAttachmentThumb, ChatMediaViewer } from '@/components/ChatMedia';
+import { CHAT_VIDEO_MAX_SECONDS, chatMessagePreview, planChatAttachment, type ChatAttachmentKind } from '@/lib/mediaKeys';
+import { readLocalFileBytes, signChatFiles, uploadChatFile } from '@/lib/mediaUpload';
+import { pickerDurationToMs } from '@/lib/videoRules';
 import { mergeMessages } from '@/lib/chatPaging';
 import { useDictation } from '@/lib/useDictation';
 import { useBack } from '@/lib/nav';
@@ -30,18 +36,42 @@ import { useTransientMessage } from '@/lib/useTransientMessage';
 // is still subscribed or leaving, and .on() after subscribe() throws.
 let chatChannelSeq = 0;
 
-function shortPreview(body: string): string {
-  const clean = body.replace(/\s+/g, ' ').trim();
+function shortPreview(message: ChatMessage): string {
+  const clean = chatMessagePreview(message, { image: trKey('chat.photoLabel'), video: trKey('chat.videoLabel') });
   return clean.length > 80 ? `${clean.slice(0, 80).trim()}…` : clean;
 }
-function Bubble({ message, isMe, timezone }: { message: ChatMessage; isMe: boolean; timezone: string }) {
+function Bubble({
+  message,
+  isMe,
+  timezone,
+  attachmentUrl,
+  onOpen,
+}: {
+  message: ChatMessage;
+  isMe: boolean;
+  timezone: string;
+  attachmentUrl: string | null;
+  onOpen: (kind: ChatAttachmentKind, url: string) => void;
+}) {
   const t = useTheme();
   const time = formatLocalTime(new Date(message.created_at), timezone);
+  const kind = message.attachment_key ? message.attachment_kind ?? null : null;
   return (
     <View style={[styles.bubbleWrap, { alignSelf: isMe ? 'flex-end' : 'flex-start' }]}>
-      <View style={[styles.bubble, { backgroundColor: isMe ? t.colors.accent : t.colors.bgElevated }]}>
-        <Text style={[styles.bubbleText, { color: isMe ? '#fff' : t.colors.text }]}>{message.body}</Text>
-      </View>
+      {kind ? (
+        <ChatAttachmentThumb
+          kind={kind}
+          url={attachmentUrl}
+          onOpen={() => {
+            if (attachmentUrl) onOpen(kind, attachmentUrl);
+          }}
+        />
+      ) : null}
+      {message.body ? (
+        <View style={[styles.bubble, { backgroundColor: isMe ? t.colors.accent : t.colors.bgElevated }]}>
+          <Text style={[styles.bubbleText, { color: isMe ? '#fff' : t.colors.text }]}>{message.body}</Text>
+        </View>
+      ) : null}
       <Text style={[styles.bubbleTime, { color: t.colors.textMuted, textAlign: isMe ? 'right' : 'left' }]}>{time}</Text>
     </View>
   );
@@ -59,6 +89,10 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const [sending, setSending] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  // Signed read URLs for chat files (1 h); refreshed on every focus/load.
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [viewer, setViewer] = useState<{ kind: ChatAttachmentKind; url: string } | null>(null);
   // Microfon (doar web): dictarea completează câmpul, trimiterea rămâne manuală.
   const dictation = useDictation(draft, setDraft);
   const userIdRef = useRef<string | null>(null);
@@ -96,6 +130,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     setCounterpartyName(name); counterpartyNameRef.current = name; setCounterpartyTz(tz);
     const { messages: fetched, hasMore, error: msgErr } = await listMessages(conversationId);
     if (msgErr) { setLoading(false); setError(msgErr, { sticky: true }); return; }
+    setSignedUrls({});
     setMessages(fetched);
     setHasOlder(hasMore);
     void markConversationRead(conversationId);
@@ -117,6 +152,17 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   }, [conversationId, hasOlder, messages]);
   useFocusEffect(useCallback(() => { setLoading(true); void load(); }, [load]));
   useEffect(() => {
+    const missing = Array.from(
+      new Set(messages.map((m) => m.attachment_key).filter((k): k is string => !!k && !signedUrls[k]))
+    ).slice(0, 100);
+    if (missing.length === 0) return;
+    let alive = true;
+    void signChatFiles(missing).then((urls) => {
+      if (alive && Object.keys(urls).length > 0) setSignedUrls((prev) => ({ ...prev, ...urls }));
+    });
+    return () => { alive = false; };
+  }, [messages, signedUrls]);
+  useEffect(() => {
     if (!conversationId) return;
     chatChannelSeq += 1;
     const channel = supabase.channel(`chat-${conversationId}-${chatChannelSeq}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
@@ -124,7 +170,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       if (!row || row.sender_user_id === userIdRef.current || seenIdsRef.current.has(row.id)) return;
       seenIdsRef.current.add(row.id); setMessages((prev) => mergeMessages(prev, [row]));
       scrollToBottom(true);
-      void presentLocalChatNotification({ title: counterpartyNameRef.current, body: shortPreview(row.body), conversationId, isClient });
+      void presentLocalChatNotification({ title: counterpartyNameRef.current, body: shortPreview(row), conversationId, isClient });
     }).subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [conversationId, isClient, scrollToBottom]);
@@ -136,6 +182,57 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     else if (message?.id) { seenIdsRef.current.add(message.id); setMessages((prev) => mergeMessages(prev, [message])); setDraft(''); scrollToBottom(true); }
     setSending(false); Keyboard.dismiss();
   }
+  async function sendPicked(result: ImagePicker.ImagePickerResult) {
+    if (result.canceled || result.assets.length === 0) return;
+    const asset = result.assets[0];
+    const durationMs = pickerDurationToMs(asset.duration, Platform.OS);
+    const plan = planChatAttachment({ pickerType: asset.type, mimeType: asset.mimeType, sizeBytes: asset.fileSize, durationMs });
+    if (!plan.ok) {
+      setError(plan.error === 'too_big' ? trKey('chat.attachTooBig') : plan.error === 'too_long' ? trKey('chat.attachTooLong') : trKey('chat.attachBadType'));
+      return;
+    }
+    setAttaching(true); setError(null);
+    try {
+      const buffer = await readLocalFileBytes(asset.uri, plan.ext);
+      const sized = planChatAttachment({ pickerType: asset.type, mimeType: plan.mime, sizeBytes: buffer.byteLength, durationMs });
+      if (!sized.ok) throw new Error(trKey('chat.attachTooBig'));
+      const uploaded = await uploadChatFile(conversationId, plan.ext, buffer, plan.mime);
+      const { message, error: err } = await sendAttachment(
+        conversationId,
+        { key: uploaded.key, kind: plan.kind, mime: plan.mime, bytes: uploaded.bytes },
+        draft
+      );
+      if (err) setError(err === 'message_too_long' ? trKey('chat.msgTooLong') : trKey('chat.sendError', { err }));
+      else if (message?.id) { seenIdsRef.current.add(message.id); setMessages((prev) => mergeMessages(prev, [message])); setDraft(''); scrollToBottom(true); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : trKey('chat.sendError', { err: '' }));
+    }
+    setAttaching(false);
+  }
+  async function pickAttachment(source: 'gallery' | 'photo' | 'video') {
+    try {
+      if (source === 'gallery') {
+        await sendPicked(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8, videoMaxDuration: CHAT_VIDEO_MAX_SECONDS }));
+        return;
+      }
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { setError(trKey('chat.attachPermission')); return; }
+      await sendPicked(await ImagePicker.launchCameraAsync({ mediaTypes: source === 'photo' ? ['images'] : ['videos'], quality: 0.8, videoMaxDuration: CHAT_VIDEO_MAX_SECONDS }));
+    } catch {
+      setError(trKey('chat.attachPermission'));
+    }
+  }
+  function openAttachMenu() {
+    if (attaching || sending) return;
+    // Web: the browser's file dialog already offers camera on phones; Alert buttons don't render there.
+    if (Platform.OS === 'web') { void pickAttachment('gallery'); return; }
+    Alert.alert(tr('chat.attachTitle'), tr('chat.attachBody'), [
+      { text: tr('chat.attachGallery'), onPress: () => void pickAttachment('gallery') },
+      { text: tr('chat.attachCamera'), onPress: () => void pickAttachment('photo') },
+      { text: tr('chat.attachRecord'), onPress: () => void pickAttachment('video') },
+      { text: tr('common.cancel'), style: 'cancel' },
+    ]);
+  }
   if (loading && messages.length === 0) return <ListLoadingScreen title={counterpartyName} subtitle={isClient ? tr('chat.withBusiness') : tr('chat.withClient')} onBack={back} label={tr('chat.loadingConvo')} />;
   const composer = (
     <View style={[styles.inputRow, { borderTopWidth: 1, borderTopColor: t.colors.border }]}>
@@ -146,6 +243,18 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       ) : !dictation.supported && Platform.OS === 'web' ? (
         <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
       ) : null}
+      {attaching ? (
+        <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.attachSending')}</Text>
+      ) : null}
+      <Pressable
+        style={[styles.sendBtn, { backgroundColor: t.colors.bgElevated, opacity: attaching || sending ? 0.6 : 1 }]}
+        onPress={openAttachMenu}
+        disabled={attaching || sending}
+        accessibilityRole="button"
+        accessibilityLabel={tr('chat.attachA11y')}
+      >
+        {attaching ? <ActivityIndicator color={t.colors.textMuted} /> : <Ionicons name="attach-outline" size={20} color={t.colors.text} />}
+      </Pressable>
       <TextInput
         style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
         placeholder={tr('chat.writeMessage')}
@@ -225,12 +334,15 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
             ref={listRef}
             inverted
             data={newestFirst}
+            extraData={signedUrls}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <Bubble
                 message={item}
                 isMe={item.sender_user_id === userIdRef.current}
                 timezone={counterpartyTz}
+                attachmentUrl={item.attachment_key ? signedUrls[item.attachment_key] ?? null : null}
+                onOpen={(kind, url) => setViewer({ kind, url })}
               />
             )}
             contentContainerStyle={styles.messages}
@@ -243,6 +355,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
           />
         )}
       </View>
+      <ChatMediaViewer media={viewer} onClose={() => setViewer(null)} />
     </Screen>
   );
 }

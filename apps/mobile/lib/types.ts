@@ -268,6 +268,12 @@ export type ChatMessage = {
   id: string;
   conversation_id: string;
   sender_user_id: string;
+  /** Text, or the optional caption of an attachment ('' when none). */
   body: string;
   created_at: string;
+  /** Chat photo/video (v95): key in the private R2 bucket, read through signed URLs. */
+  attachment_key?: string | null;
+  attachment_kind?: 'image' | 'video' | null;
+  attachment_mime?: string | null;
+  attachment_bytes?: number | null;
 };

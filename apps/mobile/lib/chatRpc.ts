@@ -145,6 +145,37 @@ export async function sendMessage(
 }
 
 /**
+ * Send a photo/video already uploaded to the conversation folder (uploadChatFile),
+ * with an optional caption. The RPC re-checks participation and the key's folder.
+ */
+export async function sendAttachment(
+  conversationId: string,
+  file: { key: string; kind: 'image' | 'video'; mime: string; bytes: number },
+  caption: string
+): Promise<{ message: ChatMessage | null; error: string | null }> {
+  const trimmed = caption.trim();
+  if (trimmed.length > 4000) {
+    return { message: null, error: 'message_too_long' };
+  }
+  const { data, error } = await supabase.rpc('insert_chat_attachment', {
+    p_conversation: conversationId,
+    p_key: file.key,
+    p_kind: file.kind,
+    p_mime: file.mime,
+    p_bytes: file.bytes,
+    p_caption: trimmed,
+  });
+  if (error) {
+    return { message: null, error: rpcErrorText(error) };
+  }
+  const message = (Array.isArray(data) ? data[0] : data) as ChatMessage | null;
+  if (!message?.id) {
+    return { message: null, error: 'message_not_created' };
+  }
+  return { message, error: null };
+}
+
+/**
  * List all chat conversations the current user participates in.
  * RLS select policy (participant) filters to the user's rows.
  */
@@ -180,7 +211,7 @@ export async function fetchLatestMessages(
     conversationIds.map(async (conversationId) => {
       const { data, error } = await supabase
         .from('chat_messages')
-        .select('id,body,conversation_id,created_at')
+        .select('id,body,conversation_id,created_at,attachment_kind')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
