@@ -109,13 +109,17 @@ export default function AssistantScreen() {
         .select('name, duration_minutes, price')
         .eq('business_id', data.id)
         .eq('active', true)
-        .order('sort_order'),
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }),
       supabase
         .from('staff')
         .select('name')
         .eq('business_id', data.id)
         .eq('active', true)
-        .order('sort_order'),
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }),
     ]);
     const services = (svcRes.data ?? []).map((s) => ({
       name: s.name as string,

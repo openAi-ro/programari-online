@@ -1267,6 +1267,7 @@ export const ro = {
   'inst.ios4': '4. Deschide iconița nouă de pe Home — trebuie să apară login/acasa, nu această pagină.',
   'inst.openLogin': 'Deschide login în Safari',
   'pub.title': 'Programare',
+  'pub.catalogFail': 'Nu am putut încărca serviciile sau echipa salonului. Verifică conexiunea și reîncearcă.',
   'pub.loading': 'Se încarcă agenda…',
   'pub.online': 'Programare online',
   'pub.bizMissing': 'Nu am găsit business-ul',

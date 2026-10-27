@@ -130,7 +130,9 @@ export default function BusinessStaffScreen() {
         .select('id, name')
         .eq('business_id', biz.id)
         .eq('active', true)
-        .order('sort_order', { ascending: true }),
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }),
     ]);
     if (sErr || svcErr) {
       setError((sErr ?? svcErr)?.message ?? trKey('team.saveFail'), { sticky: true });
@@ -339,7 +341,7 @@ export default function BusinessStaffScreen() {
           specialty,
           photo_url: photoUrl,
           color: STAFF_COLORS[rows.length % STAFF_COLORS.length],
-          sort_order: rows.length,
+          sort_order: rows.reduce((max, r) => Math.max(max, r.sort_order ?? 0), -1) + 1,
           active: true,
           ...hours,
         })

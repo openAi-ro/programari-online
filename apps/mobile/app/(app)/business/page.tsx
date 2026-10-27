@@ -88,7 +88,9 @@ export default function BusinessPageSettingsScreen() {
           .select('name')
           .eq('business_id', biz.id)
           .eq('active', true)
-          .order('sort_order', { ascending: true });
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
         setServiceNames(
           (svcRows ?? []).map((s) => String((s as { name?: unknown })?.name ?? '')).filter(Boolean)
         );

@@ -133,7 +133,9 @@ export default function BusinessCalendarScreen() {
       .select('id, name, color, working_hours, break_hours')
       .eq('business_id', profile.id)
       .eq('active', true)
-      .order('sort_order', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
     setStaffList((team ?? []) as CalendarStaff[]);
     const rangeStart = viewMode === 'week' ? mondayOfYmd(dateLocal) : dateLocal;
     const rangeEnd = viewMode === 'week' ? addDaysYmd(rangeStart, 6) : dateLocal;
@@ -238,7 +240,9 @@ export default function BusinessCalendarScreen() {
         .select('*')
         .eq('business_id', business.id)
         .eq('active', true)
-        .order('sort_order', { ascending: true }),
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }),
       staffList.length > 0
         ? supabase
             .from('staff_services')

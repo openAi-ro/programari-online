@@ -367,13 +367,17 @@ export default function SettingsScreen() {
             .from('services')
             .select('name, active')
             .eq('business_id', biz.id)
-            .order('sort_order', { ascending: true }),
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true }),
           supabase
             .from('staff')
             .select('id, name')
             .eq('business_id', biz.id)
             .eq('active', true)
-            .order('sort_order', { ascending: true }),
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true }),
         ]);
         const svcState = serviceChecklistState(
           (svcRows ?? []) as { name: string; active: boolean }[],

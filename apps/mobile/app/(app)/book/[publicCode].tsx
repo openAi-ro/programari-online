@@ -183,12 +183,18 @@ export default function BookScreen() {
   const durationMinutes =
     combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
 
+  /** Data aleasă de client; schimbarea specialistului/serviciului nu o mai resetează (F-28). */
+  const pickedDate = useRef<string | null>(null);
   // Data implicită urmează specialistul și serviciile alese (nu primul din echipă).
   useEffect(() => {
     if (!business || !stepsReady) return;
-    setDateLocal(
-      firstBookableDateForStaff(business, selectedStaff ? [selectedStaff] : [], durationMinutes)
+    const first = firstBookableDateForStaff(
+      business,
+      selectedStaff ? [selectedStaff] : [],
+      durationMinutes
     );
+    const kept = pickedDate.current;
+    setDateLocal(kept && kept >= first ? kept : first);
   }, [business, stepsReady, selectedStaff, durationMinutes]);
 
   const hasStaffChoice = staffList.length > 1;
@@ -281,13 +287,17 @@ export default function BookScreen() {
           .select('*')
           .eq('business_id', biz.id)
           .eq('active', true)
-          .order('sort_order', { ascending: true }),
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true }),
         supabase
           .from('staff')
           .select('*')
           .eq('business_id', biz.id)
           .eq('active', true)
-          .order('sort_order', { ascending: true }),
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true }),
         viewer
           ? supabase.from('business_profiles').select('id').eq('owner_user_id', viewer.id).maybeSingle()
           : null,
@@ -1133,6 +1143,7 @@ export default function BookScreen() {
             label={tr('book.dateLabel')}
             value={dateLocal}
             onChange={(ymd) => {
+              pickedDate.current = ymd;
               setDateLocal(ymd);
               setSelected(null);
             }}

@@ -146,6 +146,9 @@ export default function PublicBookScreen() {
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Serviciile / echipa nu s-au putut citi: arătăm eroare + Reîncearcă, nu un catalog gol. */
+  const [catalogFailed, setCatalogFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
   const [waitlistBusy, setWaitlistBusy] = useState(false);
@@ -229,8 +232,8 @@ export default function PublicBookScreen() {
 
       // Restul depinde doar de business → toate cererile pleacă odată.
       const [
-        { data: svcRows },
-        { data: staffRows },
+        { data: svcRows, error: svcErr },
+        { data: staffRows, error: staffErr },
         { data: rate },
         { data: revRows },
         { data: phoneRows },
@@ -241,17 +244,26 @@ export default function PublicBookScreen() {
             .select('*')
             .eq('business_id', biz.id)
             .eq('active', true)
-            .order('sort_order', { ascending: true }),
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true }),
           supabase
             .from('staff')
             .select('*')
             .eq('business_id', biz.id)
             .eq('active', true)
-            .order('sort_order', { ascending: true }),
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true }),
           supabase.rpc('business_rating', { p_business_id: biz.id }),
           supabase.rpc('list_public_reviews', { p_business_id: biz.id, p_limit: 5 }),
           supabase.rpc('get_public_staff_phones', { p_business_id: biz.id }),
         ]);
+      if (svcErr || staffErr) {
+        setCatalogFailed(true);
+        setLoading(false);
+        return;
+      }
       const list = (svcRows ?? []) as Service[];
       setServices(list);
       if (list.length > 0) setServiceIds([list[0].id]);
@@ -260,11 +272,15 @@ export default function PublicBookScreen() {
       setStaffList(team);
       let offered: Record<string, string[]> = {};
       if (team.length > 0) {
-        // Eroare de citire -> hartă goală = toți fac tot (comportamentul vechi).
-        const { data: offeredRows } = await supabase
+        const { data: offeredRows, error: offeredErr } = await supabase
           .from('staff_services')
           .select('staff_id, service_id')
           .in('staff_id', team.map((m) => m.id));
+        if (offeredErr) {
+          setCatalogFailed(true);
+          setLoading(false);
+          return;
+        }
         offered = staffServicesMap(offeredRows as StaffServiceRow[] | null);
       }
       setStaffServices(offered);
@@ -291,9 +307,10 @@ export default function PublicBookScreen() {
           }))
         );
       }
+      setCatalogFailed(false);
       setLoading(false);
     })();
-  }, [code]);
+  }, [code, loadAttempt]);
 
   // Doar ultima încărcare de sloturi are voie să scrie starea (tastarea datei cifră cu cifră
   // pornește câte o cerere pe dată intermediară; un răspuns vechi nu suprascrie unul nou).
@@ -824,6 +841,20 @@ export default function PublicBookScreen() {
       onBack={goBack}
       footer={
         <>
+          {catalogFailed ? (
+            <>
+              <Callout tone="danger">{tr('pub.catalogFail')}</Callout>
+              <Button
+                label={tr('common.retry')}
+                icon="refresh-outline"
+                variant="secondary"
+                onPress={() => {
+                  setLoading(true);
+                  setLoadAttempt((n) => n + 1);
+                }}
+              />
+            </>
+          ) : null}
           {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
           {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
           {/* În iframe pe site-ul salonului bara fixă ar acoperi pagina gazdă. */}

@@ -1269,6 +1269,7 @@ export const en: typeof ro = {
   'inst.ios4': '4. Open the new Home icon — login/home should appear, not this page.',
   'inst.openLogin': 'Open login in Safari',
   'pub.title': 'Booking',
+  'pub.catalogFail': 'We couldn\'t load this salon\'s services or team. Check your connection and try again.',
   'pub.loading': 'Loading agenda…',
   'pub.online': 'Online booking',
   'pub.bizMissing': 'Business not found',

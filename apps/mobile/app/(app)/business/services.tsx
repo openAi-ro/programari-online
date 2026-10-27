@@ -143,7 +143,7 @@ export default function BusinessServicesScreen() {
         duration_minutes: duration,
         rebook_interval_days: rebookInterval,
         price,
-        sort_order: rows.length,
+        sort_order: rows.reduce((max, r) => Math.max(max, r.sort_order ?? 0), -1) + 1,
         active: true,
       });
       setSaving(false);
