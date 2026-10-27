@@ -4,31 +4,27 @@ import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from './currentUser';
 
-const KEY = 'programari.favoriteBusinessIds';
-
+/**
+ * Favoritele trăiesc doar în baza de date (client_favorites, RLS per user).
+ * Memoria de mai jos e doar cache-ul contului curent (`ownerId`); la schimbarea
+ * contului sau la deconectare se golește, deci nu se pot scurge între conturi.
+ */
 type Listener = (ids: string[]) => void;
 const listeners = new Set<Listener>();
 let memory: string[] = [];
-let hydrated = false;
-let syncing = false;
+let ownerId: string | null = null;
+let loading: Promise<string[]> | null = null;
 
-function webStore(): Storage | null {
-  try {
-    if (typeof window === 'undefined') return null;
-    return window.localStorage;
-  } catch {
-    return null;
+// Vechea cheie locală comună tuturor conturilor (sursa scurgerii F-1) — o ștergem o dată.
+const LEGACY_KEY = 'programari.favoriteBusinessIds';
+try {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.localStorage?.removeItem(LEGACY_KEY);
+  } else {
+    void AsyncStorage.removeItem(LEGACY_KEY);
   }
-}
-
-function parseIds(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const v = JSON.parse(raw);
-    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
+} catch {
+  /* ignore */
 }
 
 function emit(ids: string[]) {
@@ -42,18 +38,14 @@ function emit(ids: string[]) {
   }
 }
 
-async function persistLocal(ids: string[]): Promise<void> {
-  try {
-    const raw = JSON.stringify(ids);
-    if (Platform.OS === 'web') {
-      webStore()?.setItem(KEY, raw);
-    } else {
-      await AsyncStorage.setItem(KEY, raw);
-    }
-  } catch {
-    /* best-effort */
+supabase.auth.onAuthStateChange((_event, session) => {
+  const uid = session?.user?.id ?? null;
+  if (uid !== ownerId) {
+    ownerId = null;
+    loading = null;
+    emit([]);
   }
-}
+});
 
 export function subscribeFavorites(listener: Listener): () => void {
   listeners.add(listener);
@@ -67,117 +59,69 @@ export function getFavoriteIdsSync(): string[] {
   return memory;
 }
 
-export async function getFavoriteIds(): Promise<string[]> {
-  if (!hydrated) {
-    try {
-      let raw: string | null = null;
-      if (Platform.OS === 'web') {
-        raw = webStore()?.getItem(KEY) ?? null;
-      } else {
-        raw = await AsyncStorage.getItem(KEY);
-      }
-      emit(parseIds(raw));
-    } catch {
-      emit([]);
-    }
-    hydrated = true;
-  }
-  // Sync cloud în background (nu blochează UI)
-  void syncFavoritesFromCloud();
-  return memory;
-}
-
-/**
- * Încarcă favoritele din Supabase (dacă e logat) și le unește cu cache-ul local.
- * Dacă tabela v27 nu e încă pe proiect, rămânem pe local.
- */
+/** Recitește favoritele contului curent din baza de date. */
 export async function syncFavoritesFromCloud(): Promise<string[]> {
-  if (syncing) return memory;
-  syncing = true;
-  try {
+  if (loading) return loading;
+  loading = (async () => {
     const user = await getCurrentUser();
     if (!user) {
-      return memory;
+      ownerId = null;
+      emit([]);
+      return [];
     }
-
     const { data, error } = await supabase
       .from('client_favorites')
       .select('business_id')
-      .eq('user_id', user.id);
-
-    if (error) {
-      // Tabelă lipsă / RLS — păstrăm local
-      return memory;
-    }
-
-    const cloudIds = (data ?? [])
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    if (error) return ownerId === user.id ? memory : [];
+    const ids = (data ?? [])
       .map((r) => (typeof r.business_id === 'string' ? r.business_id : null))
       .filter((x): x is string => Boolean(x));
-
-    // Merge: cloud ∪ local, apoi împinge diferențele locale spre cloud
-    const localOnly = memory.filter((id) => !cloudIds.includes(id));
-    const merged = [...new Set([...cloudIds, ...memory])];
-
-    if (localOnly.length > 0) {
-      const rows = localOnly.map((business_id) => ({
-        user_id: user.id,
-        business_id,
-      }));
-      await supabase.from('client_favorites').upsert(rows, {
-        onConflict: 'user_id,business_id',
-        ignoreDuplicates: true,
-      });
-    }
-
-    hydrated = true;
-    emit(merged);
-    await persistLocal(merged);
-    return merged;
-  } catch {
-    return memory;
+    ownerId = user.id;
+    emit(ids);
+    return ids;
+  })();
+  try {
+    return await loading;
   } finally {
-    syncing = false;
+    loading = null;
   }
 }
 
-export async function setFavoriteIds(ids: string[]): Promise<void> {
-  const unique = [...new Set(ids)];
-  const prev = new Set(memory);
-  hydrated = true;
-  emit(unique);
-  await persistLocal(unique);
+/** Favoritele contului curent (din cache dacă sunt deja încărcate pentru acest cont). */
+export async function getFavoriteIds(): Promise<string[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    if (memory.length) emit([]);
+    ownerId = null;
+    return [];
+  }
+  if (ownerId === user.id) return memory;
+  return syncFavoritesFromCloud();
+}
 
-  try {
-    const user = await getCurrentUser();
-    if (!user) return;
-
-    const next = new Set(unique);
-    const toAdd = unique.filter((id) => !prev.has(id));
-    const toRemove = [...prev].filter((id) => !next.has(id));
-
-    if (toAdd.length > 0) {
-      await supabase.from('client_favorites').upsert(
-        toAdd.map((business_id) => ({ user_id: user.id, business_id })),
-        { onConflict: 'user_id,business_id', ignoreDuplicates: true }
-      );
-    }
-    if (toRemove.length > 0) {
-      await supabase
+/** Adaugă/scoate un salon; starea se schimbă doar după ce baza de date confirmă. */
+export async function toggleFavorite(businessId: string): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  const ids = await getFavoriteIds();
+  const has = ids.includes(businessId);
+  const { error } = has
+    ? await supabase
         .from('client_favorites')
         .delete()
         .eq('user_id', user.id)
-        .in('business_id', toRemove);
-    }
-  } catch {
-    /* best-effort cloud */
-  }
-}
-
-export async function toggleFavorite(businessId: string): Promise<boolean> {
-  const ids = await getFavoriteIds();
-  const has = ids.includes(businessId);
-  const next = has ? ids.filter((id) => id !== businessId) : [...ids, businessId];
-  await setFavoriteIds(next);
+        .eq('business_id', businessId)
+    : await supabase
+        .from('client_favorites')
+        .upsert(
+          { user_id: user.id, business_id: businessId },
+          { onConflict: 'user_id,business_id', ignoreDuplicates: true }
+        );
+  if (error) return has;
+  ownerId = user.id;
+  emit(has ? memory.filter((id) => id !== businessId) : [...memory, businessId]);
   return !has;
 }
 

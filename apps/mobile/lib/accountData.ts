@@ -12,7 +12,7 @@ export async function collectMyData(): Promise<Record<string, unknown> | null> {
   const [profile, appointments, favorites, reviews, waitlist, businesses] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
     supabase.from('appointments').select('*').eq('client_user_id', user.id),
-    supabase.from('client_favorites').select('*').eq('client_user_id', user.id),
+    supabase.from('client_favorites').select('*').eq('user_id', user.id),
     supabase.from('reviews').select('*').eq('client_user_id', user.id),
     supabase.from('waitlist').select('*').eq('client_user_id', user.id),
     supabase.from('business_profiles').select('*').eq('owner_user_id', user.id),
@@ -28,6 +28,8 @@ export async function collectMyData(): Promise<Record<string, unknown> | null> {
     waitlist: waitlist.data ?? [],
     businesses: businesses.data ?? [],
   };
+  const firstError = [profile, appointments, favorites, reviews, waitlist, businesses].find((r) => r.error)?.error;
+  if (firstError) throw new Error(firstError.message);
 
   const bizIds = ((businesses.data ?? []) as Array<{ id: string }>).map((b) => b.id);
   if (bizIds.length) {
@@ -39,6 +41,8 @@ export async function collectMyData(): Promise<Record<string, unknown> | null> {
     out.services = services.data ?? [];
     out.staff = staff.data ?? [];
     out.appointments_as_business = bizAppointments.data ?? [];
+    const bizError = [services, staff, bizAppointments].find((r) => r.error)?.error;
+    if (bizError) throw new Error(bizError.message);
   }
 
   return out;
@@ -46,7 +50,12 @@ export async function collectMyData(): Promise<Record<string, unknown> | null> {
 
 /** Descarca (web) sau partajeaza (native) exportul JSON al contului. */
 export async function exportMyData(): Promise<{ ok: boolean; error?: string }> {
-  const data = await collectMyData();
+  let data: Record<string, unknown> | null;
+  try {
+    data = await collectMyData();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
   if (!data) return { ok: false, error: 'not_authenticated' };
   const json = JSON.stringify(data, null, 2);
 

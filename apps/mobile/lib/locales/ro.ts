@@ -540,7 +540,7 @@ export const ro = {
   'fav.loading': 'Se încarcă favoritele…',
   'fav.savedSub': 'Saloane salvate pentru rebook rapid',
   'fav.empty': 'Niciun salon favorit',
-  'fav.emptyDesc': 'Adaugă saloane din Acasă, Caută sau după o rezervare — apar aici și în cloud.',
+  'fav.emptyDesc': 'Apasă inimioara de pe un salon (în Acasă, la „Saloane recente”, sau pe pagina de programare) ca să-l salvezi aici.',
   'fav.searchBiz': 'Caută business',
   'fav.code': 'Cod {code}',
   'cat.coafura': 'Coafură',

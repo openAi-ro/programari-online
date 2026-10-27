@@ -542,7 +542,7 @@ export const en: typeof ro = {
   'fav.loading': 'Loading favorites…',
   'fav.savedSub': 'Saved salons for quick rebooking',
   'fav.empty': 'No favorite salons',
-  'fav.emptyDesc': 'Add salons from Home, Search or after a booking — they show up here and in the cloud.',
+  'fav.emptyDesc': 'Tap the heart on a salon (on Home under recent salons, or on its booking page) to save it here.',
   'fav.searchBiz': 'Search businesses',
   'fav.code': 'Code {code}',
   'cat.coafura': 'Hairstyling',
