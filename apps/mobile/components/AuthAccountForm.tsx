@@ -1,21 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import { GoogleLogo } from '@/components/GoogleLogo';
 import { router } from 'expo-router';
 
 import { Button, Callout, Screen, Segmented, useTheme } from '@/components/ui';
-import { trKey, useT } from '@/lib/i18n';
+import { useT } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import {
   LoginButton,
-  LoginButtonHalf,
-  LoginButtonRow,
   LoginCard,
   LoginField,
 } from '@/components/LoginCard';
-import { assertAccountKind, persistAccountKind } from '@/lib/accountKind';
+import { assertAccountKind } from '@/lib/accountKind';
 import type { AppMode } from '@/lib/appMode';
 import {
   completeGoogleSignIn,
@@ -30,81 +28,20 @@ import {
   stashReferralCode,
   claimReferralCode,
 } from '@/lib/auth';
-import {
-  applyWhatsAppOtpSession,
-  requestWhatsAppOtp,
-  verifyWhatsAppOtp,
-} from '@/lib/auth-whatsapp';
 import { getAppVersionLabel } from '@/lib/appVersion';
 import { peekPendingAuthRedirect } from '@/lib/auth-redirect';
-import { isValidRoMobile, normalizePhoneE164 } from '@/lib/phone';
 import {
   clearRememberedCredentials,
   loadRememberedCredentials,
+  REMEMBER_PASSWORD_SUPPORTED,
   saveRememberedCredentials,
 } from '@/lib/rememberCredentials';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 
-type Channel = 'email' | 'phone';
 type Mode = 'login' | 'register';
 
-const CHANNEL_VALUES: Channel[] = [
-  'email',
-  'phone',
-];
+const MODE_VALUES: Mode[] = ['login', 'register'];
 
-const RESEND_COOLDOWN_SEC = 60;
-
-function mapWhatsAppError(raw: string | null | undefined): string {
-  if (!raw?.trim()) return trKey('auth.waGeneric');
-  const m = raw.toLowerCase();
-
-  if (m.includes('wrong_account_kind') || m.includes('cont e de') || m.includes('business account') || m.includes('client account')) {
-    return raw;
-  }
-  if (
-    m.includes('invalid_phone') ||
-    m.includes('folosește un număr valid') ||
-    m.includes('foloseste un numar valid') ||
-    m.includes('use a valid number')
-  ) {
-    return trKey('auth.validNumber');
-  }
-  if (m.includes('invalid_code') || m.includes('cod greșit') || m.includes('cod gresit') || m.includes('wrong code')) {
-    return m.includes('6 cifre') || m.includes('6 digits')
-      ? trKey('auth.waCode6')
-      : trKey('auth.waWrongCode');
-  }
-  if (m.includes('otp_expired') || m.includes('codul a expirat') || m.includes('cod expirat') || m.includes('code expired')) {
-    return trKey('auth.waExpired');
-  }
-  if (m.includes('otp_already_used') || m.includes('deja folosit') || m.includes('already used')) {
-    return trKey('auth.waUsed');
-  }
-  if (m.includes('otp_not_found')) {
-    return trKey('auth.waNotFound');
-  }
-  if (
-    m.includes('rate_limited') ||
-    m.includes('too_many') ||
-    m.includes('prea multe') ||
-    m.includes('cooldown') ||
-    m.includes('așteaptă') ||
-    m.includes('asteapta') ||
-    m.includes('too many') ||
-    m.includes('wait 60 seconds')
-  ) {
-    return trKey('auth.waRateLimit');
-  }
-  if (m.includes('non-2xx') || m.includes('edge function')) {
-    return trKey('auth.waServerError');
-  }
-  if (/[ăâîșțĂÂÎȘȚ]/.test(raw) || raw.includes('WhatsApp') || raw.includes('Twilio')) {
-    return raw;
-  }
-  if (raw.includes(' ')) return raw;
-  return trKey('auth.waFailed');
-}
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -112,20 +49,11 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const t = useTheme();
   const tr = useT();
   const isBusiness = kind === 'business';
-  const [channel, setChannel] = useState<Channel>('email');
   const [mode, setMode] = useState<Mode>('register');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberPassword, setRememberPassword] = useState(false);
-
-  const [phone, setPhone] = useState('');
-  const [whatsappConsent, setWhatsappConsent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const otpPhoneRef = useRef<string | null>(null);
-  const otpLock = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useTransientMessage();
@@ -136,15 +64,6 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
   const [googleBusy, setGoogleBusy] = useState(false);
 
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const id = setInterval(() => {
-      setCooldown((c) => (c <= 1 ? 0 : c - 1));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [cooldown]);
-
-
-  useEffect(() => {
     let cancelled = false;
     (async () => {
       const saved = await loadRememberedCredentials();
@@ -153,7 +72,6 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       if (saved.password) setPassword(saved.password);
       setRememberPassword(true);
       setMode('login');
-      setChannel('email');
     })();
     return () => {
       cancelled = true;
@@ -292,84 +210,6 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
     }
   }
 
-  async function handleSendWhatsAppOtp() {
-    if (otpLock.current) return;
-    clearFeedback();
-    if (!whatsappConsent) {
-      setError(tr('auth.waConsentNeeded'));
-      return;
-    }
-    const normalized = normalizePhoneE164(phone);
-    if (!normalized || !isValidRoMobile(normalized)) {
-      setError(tr('auth.validNumber'));
-      return;
-    }
-
-    otpLock.current = true;
-    setLoading(true);
-    const { data, error: err } = await requestWhatsAppOtp(phone);
-    setLoading(false);
-    otpLock.current = false;
-    if (err) {
-      setError(mapWhatsAppError(err));
-      return;
-    }
-
-    setOtpSent(true);
-    otpPhoneRef.current = normalized;
-    setCooldown(RESEND_COOLDOWN_SEC);
-    setMessage(
-      data?.stub
-        ? tr('auth.waNotConfigured')
-        : tr('auth.waCodeSent')
-    );
-  }
-
-  async function handleVerifyWhatsAppOtp() {
-    if (otpLock.current) return;
-    clearFeedback();
-    const code = otpCode.replace(/\D/g, '');
-    if (!/^\d{6}$/.test(code)) {
-      setError(tr('auth.waCode6'));
-      return;
-    }
-
-    otpLock.current = true;
-    setLoading(true);
-    const phoneToUse = otpPhoneRef.current || phone;
-    const { data, error: err } = await verifyWhatsAppOtp(phoneToUse, code, kind);
-    if (err || !data) {
-      otpLock.current = false;
-      setLoading(false);
-      setError(mapWhatsAppError(err));
-      return;
-    }
-
-    const { error: sessionErr } = await applyWhatsAppOtpSession(data);
-    if (sessionErr) {
-      otpLock.current = false;
-      setLoading(false);
-      setError(mapWhatsAppError(sessionErr.message));
-      return;
-    }
-
-    if (data.created) {
-      await persistAccountKind(kind);
-      await claimReferralCode();
-    } else {
-      const check = await assertAccountKind(kind);
-      if (!check.ok) {
-        otpLock.current = false;
-        setLoading(false);
-        setError(check.error);
-        return;
-      }
-    }
-    otpLock.current = false;
-    setLoading(false);
-    setMessage(tr('auth.signedIn'));
-  }
-
   return (
     <Screen scroll bottomInset={spacing['3xl']}>
       <Button
@@ -393,17 +233,19 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       />
 
       <Segmented
-        value={channel}
-        onChange={setChannel}
-        options={CHANNEL_VALUES.map((value) => ({
+        value={mode}
+        onChange={(m) => {
+          setMode(m);
+          clearFeedback();
+        }}
+        options={MODE_VALUES.map((value) => ({
           value,
-          label: value === 'phone' ? tr('auth.channelPhone') : 'Email',
+          label: value === 'login' ? tr('auth.signIn') : tr('auth.createAccount'),
         }))}
       />
 
       <LoginCard heading={isBusiness ? tr('auth.businessAccountTitle') : tr('auth.clientAccountTitle')}>
-        {channel === 'email' ? (
-          <>
+        <>
             <LoginField
               icon="mail-outline"
               autoCapitalize="none"
@@ -439,6 +281,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
             ) : null}
 
 
+            {REMEMBER_PASSWORD_SUPPORTED ? (
             <Pressable
               onPress={() => setRememberPassword((v) => !v)}
               style={[
@@ -471,28 +314,17 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                 {tr('auth.rememberPassword')}
               </Text>
             </Pressable>
+            ) : null}
 
             {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
             {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
 
-            <LoginButtonRow>
-              <LoginButtonHalf>
-                <LoginButton
-                  label={tr('auth.signIn')}
-                  onPress={() => void handleEmailSubmit('login')}
-                  disabled={loading}
-                  loading={loading && mode === 'login'}
-                />
-              </LoginButtonHalf>
-              <LoginButtonHalf>
-                <LoginButton
-                  label={tr('auth.createAccount')}
-                  onPress={() => void handleEmailSubmit('register')}
-                  disabled={loading}
-                  loading={loading && mode === 'register'}
-                />
-              </LoginButtonHalf>
-            </LoginButtonRow>
+            <LoginButton
+              label={mode === 'login' ? tr('auth.signIn') : tr('auth.createAccount')}
+              onPress={() => void handleEmailSubmit(mode)}
+              disabled={loading}
+              loading={loading}
+            />
             <LoginButton
               label={tr('auth.googleContinue')}
               leading={<GoogleLogo size={18} />}
@@ -513,93 +345,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
                 disabled={loading || resendBusy}
               />
             ) : null}
-          </>
-        ) : (
-          <>
-            <LoginField
-              icon="logo-whatsapp"
-              keyboardType="phone-pad"
-              autoComplete="tel"
-              autoCorrect={false}
-              placeholder={tr('auth.channelPhone')}
-              value={phone}
-              onChangeText={setPhone}
-              onBlur={() => {
-                if (!otpSent || !otpPhoneRef.current) return;
-                const n = normalizePhoneE164(phone);
-                if (n !== otpPhoneRef.current) {
-                  setOtpSent(false);
-                  setOtpCode('');
-                  otpPhoneRef.current = null;
-                }
-              }}
-              editable={!loading}
-            />
-
-            {!otpSent ? (
-              <>
-                <Pressable
-                  onPress={() => setWhatsappConsent((v) => !v)}
-                  style={[styles.consentRow, { borderColor: whatsappConsent ? t.colors.accent : t.colors.border, backgroundColor: whatsappConsent ? t.colors.accentSoft ?? t.colors.surfaceMuted : t.colors.surface }]}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: whatsappConsent }}
-                >
-                  <View style={[styles.checkbox, { borderColor: t.colors.border, backgroundColor: whatsappConsent ? t.colors.accent : 'transparent' }]}>
-                    {whatsappConsent ? <Ionicons name="checkmark" size={14} color={t.colors.onAccent} /> : null}
-                  </View>
-                  <Text style={[styles.consentText, { color: t.colors.text }]}>
-                    {tr('auth.waConsentText')}{' '}
-                    <Text onPress={() => Linking.openURL('https://programari.expo.app/privacy')} style={[styles.consentLink, { color: t.colors.accent }]}>
-                      {tr('auth.privacyPolicy')}
-                    </Text>
-                  </Text>
-                </Pressable>
-                {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
-                {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
-                <LoginButton
-                  label={tr('auth.sendWaCode')}
-                  onPress={() => void handleSendWhatsAppOtp()}
-                  disabled={loading}
-                  loading={loading}
-                />
-              </>
-            ) : (
-              <>
-                <LoginField
-                  icon="keypad-outline"
-                  keyboardType="number-pad"
-                  autoComplete="one-time-code"
-                  autoCorrect={false}
-                  placeholder={tr('auth.code')}
-                  maxLength={6}
-                  value={otpCode}
-                  onChangeText={setOtpCode}
-                  editable={!loading}
-                  onSubmitEditing={() => void handleVerifyWhatsAppOtp()}
-                  returnKeyType="go"
-                />
-
-                {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
-                {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
-
-                <LoginButton
-                  label={tr('auth.signIn')}
-                  onPress={() => void handleVerifyWhatsAppOtp()}
-                  disabled={loading}
-                  loading={loading}
-                />
-
-                <LoginButton
-                  label={
-                    cooldown > 0 ? tr('auth.resendCodeIn', { s: cooldown }) : tr('auth.resendWaCode')
-                  }
-                  onPress={() => void handleSendWhatsAppOtp()}
-                  disabled={loading || cooldown > 0}
-                />
-              </>
-            )}
-          </>
-        )}
+        </>
       </LoginCard>
 
       <Text style={[styles.version, { color: t.colors.textMuted }]}>
@@ -622,5 +368,4 @@ const styles = StyleSheet.create({
   consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderWidth: 1, borderRadius: 12, marginTop: 8 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   consentText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18 },
-  consentLink: { textDecorationLine: 'underline', fontWeight: '600' },
 });

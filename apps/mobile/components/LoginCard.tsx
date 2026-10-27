@@ -154,15 +154,6 @@ export function LoginButton({ label, onPress, disabled, loading, tone = 'default
   );
 }
 
-/** Rând cu două butoane alăturate (Intră în cont / Creează cont). */
-export function LoginButtonRow({ children }: { children: React.ReactNode }) {
-  return <View style={styles.btnRow}>{children}</View>;
-}
-
-export function LoginButtonHalf({ children }: { children: React.ReactNode }) {
-  return <View style={styles.btnHalf}>{children}</View>;
-}
-
 const styles = StyleSheet.create({
   card: {
     borderRadius: 25,
@@ -196,12 +187,6 @@ const styles = StyleSheet.create({
   eyeBtn: {
     padding: 4,
   },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
-  },
-  btnHalf: { flex: 1, minWidth: 0 },
   button: {
     borderRadius: 5,
     paddingVertical: 10,

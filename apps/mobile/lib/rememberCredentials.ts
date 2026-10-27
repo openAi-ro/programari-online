@@ -5,6 +5,9 @@ const FLAG_KEY = 'programari.rememberPassword.enabled';
 const EMAIL_KEY = 'programari.rememberPassword.email';
 const PASSWORD_KEY = 'programari.rememberPassword.password';
 
+/** Doar pe native cu Keychain/Keystore; pe web opțiunea nu se oferă. */
+export const REMEMBER_PASSWORD_SUPPORTED = Platform.OS !== 'web';
+
 export type RememberedCredentials = {
   email: string;
   password: string;
@@ -95,8 +98,9 @@ export async function setRememberPasswordEnabled(enabled: boolean): Promise<void
 }
 
 /**
- * Salvează email + parolă când „Reține parola” e bifat.
- * Parola: expo-secure-store pe native; pe web — localStorage (fallback documentat).
+ * Salvează email + parolă când „Reține parola” e bifat — doar unde există stocare
+ * securizată (expo-secure-store pe native). Pe web parola nu se salvează niciodată
+ * (rămâne în grija managerului de parole al browserului).
  */
 export async function saveRememberedCredentials(
   email: string,
@@ -104,10 +108,10 @@ export async function saveRememberedCredentials(
 ): Promise<void> {
   const e = email.trim();
   if (!e || !password) return;
-  const secure = await secureAvailable();
+  if (!(await secureAvailable())) return;
   await setRememberPasswordEnabled(true);
   await setItem(EMAIL_KEY, e, false);
-  await setItem(PASSWORD_KEY, password, secure);
+  await setItem(PASSWORD_KEY, password, true);
 }
 
 /** Șterge credențialele salvate (când debifezi sau la logout opțional). */
@@ -130,15 +134,24 @@ export async function loadRememberedCredentials(): Promise<RememberedCredentials
     if (!enabled) return null;
     const email = (await getItem(EMAIL_KEY, false))?.trim() || '';
     if (!email) return null;
-    const secure = await secureAvailable();
-    let password = (await getItem(PASSWORD_KEY, secure)) ?? '';
-    if (!password && secure) {
-      // migrație / web→native: încearcă și AsyncStorage
-      password = (await getItem(PASSWORD_KEY, false)) ?? '';
-    }
+    if (!(await secureAvailable())) return null;
+    const password = (await getItem(PASSWORD_KEY, true)) ?? '';
     if (!password) return { email, password: '' };
     return { email, password };
   } catch {
     return null;
   }
+}
+
+// Versiunile vechi țineau parola în clar (localStorage pe web / AsyncStorage) — o ștergem.
+try {
+  if (Platform.OS === 'web') {
+    webStore()?.removeItem(PASSWORD_KEY);
+    webStore()?.removeItem(EMAIL_KEY);
+    webStore()?.removeItem(FLAG_KEY);
+  } else {
+    void AsyncStorage.removeItem(PASSWORD_KEY);
+  }
+} catch {
+  /* ignore */
 }

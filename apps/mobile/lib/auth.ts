@@ -241,47 +241,6 @@ export async function signInWithPassword(email: string, password: string) {
   return result;
 }
 
-/**
- * Magic link / OTP email.
- * Implicit Supabase trimite DOAR link „Sign in” (nu cod), dacă template-ul nu are {{ .Token }}.
- */
-export async function sendEmailOtp(email: string) {
-  return supabase.auth.signInWithOtp({
-    email: email.trim(),
-    options: {
-      shouldCreateUser: true,
-      emailRedirectTo: getEmailRedirectTo(),
-    },
-  });
-}
-
-export async function sendPhoneOtp(phone: string) {
-  return supabase.auth.signInWithOtp({
-    phone: phone.trim(),
-    options: { shouldCreateUser: true },
-  });
-}
-
-export async function verifyOtp(params: {
-  email?: string;
-  phone?: string;
-  token: string;
-  type: 'email' | 'sms';
-}) {
-  if (params.type === 'email') {
-    return supabase.auth.verifyOtp({
-      email: params.email!.trim(),
-      token: params.token.trim(),
-      type: 'email',
-    });
-  }
-  return supabase.auth.verifyOtp({
-    phone: params.phone!.trim(),
-    token: params.token.trim(),
-    type: 'sms',
-  });
-}
-
 /** Trimite email cu link de resetare a parolei (nu divulgă dacă emailul există). */
 export async function resetPasswordForEmail(email: string) {
   return supabase.auth.resetPasswordForEmail(email.trim(), {
