@@ -1054,6 +1054,12 @@ export default function PublicBookScreen() {
                   {formatAddress(location)}
                 </Text>
               ) : null}
+              {minPrice > 0 ? (
+                <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
+                  <Ionicons name="pricetag-outline" size={14} color={t.colors.textMuted} />{' '}
+                  {tr('page.priceFrom', { price: formatRon(minPrice) })}
+                </Text>
+              ) : null}
 
               <View style={styles.contactRow}>
                   <ContactChip
