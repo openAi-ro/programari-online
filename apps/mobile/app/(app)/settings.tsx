@@ -26,9 +26,9 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { deleteMyAccount, exportMyData } from '@/lib/accountData';
 import { mapAuthError, signOut, updatePassword } from '@/lib/auth';
 import { getAppVersionLabel } from '@/lib/appVersion';
-import { parseAccountKind } from '@/lib/accountKind';
 import { functionErrorCode } from '@/lib/notify-client';
-import { getAppMode, type AppMode } from '@/lib/appMode';
+import { resolveAppMode, type AppMode } from '@/lib/appMode';
+import { AppModeSwitch } from '@/components/AppModeSwitch';
 import {
   getThemePreference,
   setThemePreference,
@@ -62,7 +62,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import { scheduleMessageDismiss } from '@/lib/transientMessage';
 import { isGoogleConnected } from '@/lib/googleCalendar';
-import { getSelectedBusinessId } from '@/lib/myBusiness';
+import { fetchMyBusiness } from '@/lib/myBusiness';
 import {
   serviceChecklistState,
   type ServiceChecklistState,
@@ -91,6 +91,7 @@ export default function SettingsScreen() {
   const [phoneInput, setPhoneInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [appMode, setAppModeState] = useState<AppMode | null>(null);
+  const [canSwitch, setCanSwitch] = useState(false);
   const { role: bizRole } = useBusinessRole();
   // Angajatul nu editează profilul salonului (logo, video, servicii, echipă, Google Calendar).
   const bizManager = appMode === 'business' && bizRole !== 'staff';
@@ -306,15 +307,12 @@ export default function SettingsScreen() {
         // Preferința WhatsApp ține de cont (profiles.notify_whatsapp), nu de dispozitiv.
         setWhatsappEnabled((data as Profile).notify_whatsapp !== false);
         setAvatarUrl((data as Profile).avatar_url ?? null);
-        setAppModeState(parseAccountKind(data.account_kind));
         setEmailInput(data.email ?? user.email ?? '');
       } else {
         // Cont fără rând în profiles — totuși arătăm telefonul din auth (ex. login WhatsApp).
         setDisplayName(user.user_metadata?.display_name ?? '');
         setPhoneInput(authPhone ? formatPhoneDisplay(authPhone) : '');
         setEmailInput(user.email ?? '');
-        const stored = await getAppMode();
-        setAppModeState(stored);
       }
       setAuthEmail(user.email ?? null);
       const providers = (user.app_metadata?.providers as string[] | undefined) ?? [
@@ -335,30 +333,13 @@ export default function SettingsScreen() {
         latitude?: number | null;
         longitude?: number | null;
       };
-      let biz: BizRow | null = null;
-      {
-        const full = await supabase
-          .from('business_profiles')
-          .select('id, name, public_code, logo_url, promo_video_url, county, city, address, latitude, longitude')
-          .eq('owner_user_id', user.id)
-          .order('created_at', { ascending: true });
-        if (!full.error) {
-          const rows = (full.data ?? []) as BizRow[];
-          const selectedId = await getSelectedBusinessId();
-          biz = rows.find((r) => r.id === selectedId) ?? rows[0] ?? null;
-        } else if (/promo_video_url/i.test(full.error.message)) {
-          const base = await supabase
-            .from('business_profiles')
-            .select('id, name, public_code, logo_url, county, city, address, latitude, longitude')
-            .eq('owner_user_id', user.id)
-            .order('created_at', { ascending: true });
-          const baseRows = (base.data ?? []) as BizRow[];
-          const baseSelectedId = await getSelectedBusinessId();
-          biz = baseRows.find((r) => r.id === baseSelectedId) ?? baseRows[0] ?? null;
-        } else {
-          console.warn('business load failed', full.error.message);
-        }
-      }
+      // Business-ul activ: propriu sau din echipă; zona din aceeași regulă ca Acasă și layout-ul business.
+      const [biz, modeState] = await Promise.all([
+        fetchMyBusiness(user.id) as Promise<BizRow | null>,
+        resolveAppMode(user.id),
+      ]);
+      setAppModeState(modeState.mode);
+      setCanSwitch(modeState.canSwitch);
       if (biz?.id) {
         setBusinessId(biz.id);
         setBizName(biz.name ?? '');
@@ -1177,6 +1158,11 @@ export default function SettingsScreen() {
     return <Redirect href="/(app)/business/(tabs)/settings" />;
   }
 
+  // Setările de client au bara lor de meniu: nu se randează în interiorul tab-urilor business.
+  if (appMode === 'client' && inBusinessTabs) {
+    return <Redirect href="/(app)/settings" />;
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <Screen
@@ -1678,6 +1664,9 @@ export default function SettingsScreen() {
             {tr('set.accountLoading')}
           </Text>
         )}
+        {canSwitch && appMode ? (
+          <AppModeSwitch target={appMode === 'business' ? 'client' : 'business'} />
+        ) : null}
       </View>
 
       {appMode === 'business' ? (

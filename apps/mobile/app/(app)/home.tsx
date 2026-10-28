@@ -9,6 +9,7 @@ import { ClientTabBar } from '@/components/ClientTabBar';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import { BizCardRow } from '@/components/BizCardRow';
+import { AppModeSwitch } from '@/components/AppModeSwitch';
 import { InvitationAcceptCard } from '@/components/InvitationAcceptCard';
 import {
   Avatar,
@@ -26,7 +27,9 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { appModeFrom, setAppMode, type AppMode } from '@/lib/appMode';
+import { getAppMode, setAppMode, type AppMode } from '@/lib/appMode';
+import { fetchMyBusiness } from '@/lib/myBusiness';
+import { appModeFrom, canSwitchAppMode } from '@/lib/teamAccess';
 import { canConfirmAttendance, mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { extractPublicCode } from '@/lib/bookingLink';
 import {
@@ -117,6 +120,7 @@ export default function HomeScreen() {
   const inBusinessTabs = (segments as readonly string[]).includes('(tabs)');
   const [loading, setLoading] = useState(true);
   const [mode, setModeState] = useState<AppMode>('client');
+  const [canSwitch, setCanSwitch] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [business, setBusiness] = useState<Biz | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -170,22 +174,19 @@ export default function HomeScreen() {
           display_name: string | null;
           avatar_url: string | null;
         };
-        // Profilul (cu account_kind) și business-ul propriu depind doar de user.id:
-        // o singură rundă de cereri, fără citirea dublă a profilului din resolveAppMode.
-        const [{ data: existingProf }, bizResult] = await Promise.all([
+        // Profilul (cu account_kind), business-ul activ (propriu sau din echipă) și zona aleasă
+        // depind doar de user.id: o singură rundă de cereri; zona vine din regula comună appModeFrom.
+        const [{ data: existingProf }, data, storedMode] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, email, phone, display_name, avatar_url, account_kind')
             .eq('id', user.id)
             .maybeSingle(),
-          supabase
-            .from('business_profiles')
-            .select('id, name, public_code, logo_url')
-            .eq('owner_user_id', user.id)
-            .maybeSingle(),
+          fetchMyBusiness(user.id),
+          getAppMode(),
         ]);
-        const data = bizResult.data;
-        const appMode = appModeFrom(existingProf?.account_kind, Boolean(data));
+        const appMode = appModeFrom(existingProf?.account_kind, Boolean(data), storedMode);
+        const switchable = canSwitchAppMode(existingProf?.account_kind, Boolean(data));
         void setAppMode(appMode);
 
         let profileRow: ProfRow | null = null;
@@ -468,6 +469,7 @@ export default function HomeScreen() {
 
         if (!cancelled) {
           setModeState(appMode);
+          setCanSwitch(switchable);
           setBusiness(data as Biz | null);
           setPendingCount(pending);
           hasLoadedOnceRef.current = true;
@@ -547,9 +549,15 @@ export default function HomeScreen() {
     return <Redirect href="/(app)/business/(tabs)" />;
   }
 
+  // Zona client are bara ei de meniu: nu se randează niciodată în interiorul tab-urilor business.
+  if (mode === 'client' && inBusinessTabs) {
+    return <Redirect href="/(app)/home" />;
+  }
+
   if (mode === 'client') {
     return (
       <ClientHome
+        canSwitch={canSwitch}
         next={nextApt}
         loyalty={loyalty}
         recentBusinesses={recentBusinesses}
@@ -571,6 +579,7 @@ export default function HomeScreen() {
     <BusinessHome
       email={email}
       business={business}
+      canSwitch={canSwitch}
       pendingCount={pendingCount}
       bottomInset={inBusinessTabs ? spacing['3xl'] : insets.bottom + spacing['3xl'] + 56}
     />
@@ -590,6 +599,7 @@ function openBook(biz: {
 }
 
 function ClientHome({
+  canSwitch,
   next,
   loyalty,
   recentBusinesses,
@@ -600,6 +610,7 @@ function ClientHome({
   onToggleFavorite,
   onAttendanceConfirmed,
 }: {
+  canSwitch: boolean;
   next: NextAppointment | null;
   loyalty: LoyaltyCard[];
   recentBusinesses: RecentBusiness[];
@@ -669,6 +680,8 @@ function ClientHome({
       <UpdateBanner />
 
       <InvitationAcceptCard compact />
+
+      {canSwitch ? <AppModeSwitch target="business" /> : null}
 
       {loadError ? <Callout tone="danger" title={loadError} /> : null}
 
@@ -890,11 +903,13 @@ function ClientHome({
 function BusinessHome({
   email,
   business,
+  canSwitch,
   pendingCount,
   bottomInset,
 }: {
   email: string | null;
   business: Biz | null;
+  canSwitch: boolean;
   pendingCount: number;
   bottomInset: number;
 }) {
@@ -956,6 +971,7 @@ function BusinessHome({
       ) : (
         <>
           {isStaff ? <Callout tone="info">{tr('members.staffNote')}</Callout> : null}
+          {canSwitch ? <AppModeSwitch target="client" /> : null}
           {pendingCount > 0 ? (
             <Banner
               tone="warm"

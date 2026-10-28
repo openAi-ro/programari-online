@@ -1,15 +1,14 @@
-import { router, Stack, usePathname } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, Stack, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { AppModeSwitch } from '@/components/AppModeSwitch';
 import { Button, Callout, Screen, SkeletonScreen } from '@/components/ui';
 import { InvitationAcceptCard } from '@/components/InvitationAcceptCard';
 import { useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
-import { resolveAppMode, type AppMode } from '@/lib/appMode';
+import { resolveAppMode, type ModeState } from '@/lib/appMode';
 import { getCurrentUser } from '@/lib/currentUser';
-import { isBusinessPathBlocked } from '@/lib/teamAccess';
-import { useBusinessRole } from '@/lib/useBusinessRole';
 
 /**
  * Ecranele de business sunt doar pentru conturile de business.
@@ -25,27 +24,30 @@ export const unstable_settings = {
 
 export default function BusinessLayout() {
   const tr = useT();
-  const [mode, setMode] = useState<AppMode | null>(null);
-  const pathname = usePathname();
-  const { role } = useBusinessRole();
-  const blocked = mode === 'business' && isBusinessPathBlocked(role, pathname ?? '');
+  const [state, setState] = useState<ModeState | null>(null);
+  const mode = state?.mode ?? null;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const user = await getCurrentUser();
-      if (cancelled) return;
-      if (!user) {
-        router.replace('/(auth)/login');
-        return;
-      }
-      const resolved = await resolveAppMode(user.id);
-      if (!cancelled) setMode(resolved);
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async (isCancelled: () => boolean = () => false) => {
+    const user = await getCurrentUser();
+    if (isCancelled()) return;
+    if (!user) {
+      router.replace('/(auth)/login');
+      return;
+    }
+    const resolved = await resolveAppMode(user.id);
+    if (!isCancelled()) setState(resolved);
   }, []);
+
+  // La fiecare intrare în zona business (accept invitație, comutare client/business) zona se recalculează.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void load(() => cancelled);
+      return () => {
+        cancelled = true;
+      };
+    }, [load]),
+  );
 
   if (!mode) {
     return <SkeletonScreen blocks={3} label={tr('biz.checkingAccount')} />;
@@ -57,7 +59,8 @@ export default function BusinessLayout() {
         <Callout tone="danger" title={tr('biz.clientAccount')}>
           {tr('biz.clientOnly')}
         </Callout>
-        <InvitationAcceptCard />
+        <InvitationAcceptCard onEntered={() => void load()} />
+        {state?.canSwitch ? <AppModeSwitch target="business" onSwitched={() => void load()} /> : null}
         <View style={styles.actions}>
           <Button
             label={tr('biz.backToMyBookings')}
@@ -75,27 +78,10 @@ export default function BusinessLayout() {
     );
   }
 
-  // Angajatul nu deschide ecranele owner/admin nici din link direct; datele sunt oricum filtrate de RLS.
-  return (
-    <View style={styles.fill}>
-      <Stack screenOptions={{ headerShown: false }} />
-      {blocked ? (
-        <View style={StyleSheet.absoluteFill}>
-          <Screen>
-            <Callout tone="info">{tr('members.staffNoAccess')}</Callout>
-            <Button
-              label={tr('members.backToAppointments')}
-              icon="arrow-back"
-              onPress={() => router.replace('/(app)/business/(tabs)')}
-            />
-          </Screen>
-        </View>
-      ) : null}
-    </View>
-  );
+  // Ecranele owner/admin se apără singure (managerOnly): angajatul vede doar mesajul, nu și ecranul.
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
 
 const styles = StyleSheet.create({
   actions: { gap: spacing.md },
-  fill: { flex: 1 },
 });

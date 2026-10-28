@@ -31,6 +31,7 @@ import { CLIENT_PHOTO_BUCKET, clientPhotoPath, withSignedUrls } from '@/lib/clie
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessClientRow } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 function phoneOf(contact: string): string {
   const c = (contact ?? '').trim();
@@ -39,7 +40,7 @@ function phoneOf(contact: string): string {
   return digits.length >= 9 ? c : '';
 }
 
-export default function BusinessClientsScreen() {
+function BusinessClientsScreen() {
   useEffect(() => {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       // eslint-disable-next-line no-console
@@ -539,3 +540,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 });
+
+export default managerOnly(BusinessClientsScreen);

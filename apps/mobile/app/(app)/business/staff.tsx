@@ -47,6 +47,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { BreakHours, Staff, WorkingHours } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type Draft = {
   name: string;
@@ -78,7 +79,7 @@ const EMPTY_DRAFT: Draft = {
   breakHours: DEFAULT_BREAK_HOURS,
 };
 
-export default function BusinessStaffScreen() {
+function BusinessStaffScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -844,3 +845,5 @@ const styles = StyleSheet.create({
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowMeta: { fontSize: fontSize.sm },
 });
+
+export default managerOnly(BusinessStaffScreen);

@@ -22,6 +22,7 @@ import { useBack } from '@/lib/nav';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { BusinessProfile } from '@/lib/types';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type CopyKey = 'link' | 'button' | 'iframe';
 
@@ -33,7 +34,7 @@ const GUIDE: { icon: 'logo-instagram' | 'logo-facebook' | 'logo-google' | 'globe
 ];
 
 /** „Butonul tău de programare”: linkul public, cele două coduri HTML și ghidul pentru rețele. */
-export default function BookingButtonScreen() {
+function BookingButtonScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -192,3 +193,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md },
   cell: { flex: 1 },
 });
+
+export default managerOnly(BookingButtonScreen);

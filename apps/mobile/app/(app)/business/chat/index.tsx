@@ -10,10 +10,11 @@ import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { ChatConversation, ChatMessage } from '@/lib/types';
 import { formatBadgeCount } from '@/components/CountBadge';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type ClientInfo = { client_user_id: string; display_name: string | null; contact: string };
 
-export default function BusinessChatListScreen() {
+function BusinessChatListScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -81,3 +82,4 @@ const styles = StyleSheet.create({
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 });
 
+export default managerOnly(BusinessChatListScreen);

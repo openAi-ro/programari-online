@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Service } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type Draft = {
   name: string;
@@ -34,7 +35,7 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { name: '', description: '', duration: '60', price: '0', rebookInterval: '' };
 
-export default function BusinessServicesScreen() {
+function BusinessServicesScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -398,3 +399,5 @@ const styles = StyleSheet.create({
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   confirmBox: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
 });
+
+export default managerOnly(BusinessServicesScreen);

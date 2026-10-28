@@ -3,12 +3,13 @@
  * from apps/mobile
  */
 import {
+  appModeFrom,
   canInviteRole,
   canManageBusinessSettings,
   canManageTeam,
   canSeeClientsAndReports,
+  canSwitchAppMode,
   formatInviteDate,
-  isBusinessPathBlocked,
   isInviteExpired,
   roleRank,
   type BusinessRole,
@@ -40,15 +41,20 @@ assert(!canInviteRole('staff', 'staff'), 'staff nu invita');
 assert(canManageBusinessSettings('owner') && canManageBusinessSettings('admin'), 'owner/admin setari business');
 assert(!canManageBusinessSettings('staff'), 'staff fara setari business');
 
-assert(isBusinessPathBlocked('staff', '/business/services'), 'staff nu deschide servicii');
-assert(isBusinessPathBlocked('staff', '/business/clients'), 'staff nu deschide clienti');
-assert(isBusinessPathBlocked('staff', '/business/chat/abc'), 'staff nu deschide chatul salonului');
-assert(!isBusinessPathBlocked('staff', '/business'), 'staff vede acasa');
-assert(!isBusinessPathBlocked('staff', '/business/calendar'), 'staff vede calendarul');
-assert(!isBusinessPathBlocked('staff', '/business/requests'), 'staff vede cererile');
-assert(!isBusinessPathBlocked('staff', '/business/settings'), 'staff vede setarile contului');
-assert(!isBusinessPathBlocked('admin', '/business/services'), 'adminul deschide servicii');
-assert(!isBusinessPathBlocked(null, '/business/services'), 'rol necunoscut: nu blocam (RLS decide)');
+assert(appModeFrom('business', true) === 'business', 'owner (cont business) intra in business');
+assert(appModeFrom('business', true, 'client') === 'business', 'contul business nu e mutat in client');
+assert(appModeFrom('business', false) === 'business', 'cont business fara salon inca: business (setup)');
+assert(appModeFrom('client', false) === 'client', 'client pur ramane client');
+assert(appModeFrom('client', false, 'business') === 'client', 'client pur: alegerea veche business nu conteaza');
+assert(appModeFrom('client', true) === 'business', 'client membru in echipa: implicit business');
+assert(appModeFrom('client', true, 'client') === 'client', 'client membru care a ales zona client');
+assert(appModeFrom('client', true, 'business') === 'business', 'client membru care a ales business');
+assert(appModeFrom(null, true) === 'business', 'fara account_kind, cu salon: business');
+assert(appModeFrom(null, false) === 'client', 'fara account_kind, fara salon: client');
+assert(canSwitchAppMode('client', true), 'client membru poate comuta');
+assert(!canSwitchAppMode('client', false), 'client pur nu comuta');
+assert(!canSwitchAppMode('business', true), 'contul business nu comuta');
+assert(!canSwitchAppMode(null, true), 'fara account_kind cu salon nu comuta');
 
 assert(formatInviteDate('2026-11-04T10:00:00Z', 'ro').includes('2026'), 'data expirarii are anul');
 assert(formatInviteDate('nu-e-data', 'ro') === 'nu-e-data', 'data invalida ramane textul');

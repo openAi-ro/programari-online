@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
+import { fetchMemberBusinessIds } from './businessMembers';
 import { supabase } from './supabase';
+import { appModeFrom, canSwitchAppMode, type AppMode } from './teamAccess';
 
-export type AppMode = 'client' | 'business';
+export type { AppMode } from './teamAccess';
 
 const KEY = 'programari.appMode';
 
@@ -43,25 +45,18 @@ export async function setAppMode(mode: AppMode): Promise<void> {
   }
 }
 
-/** account_kind din profil are prioritate; altfel cine deține un business e „business”. */
-export function appModeFrom(
-  accountKind: string | null | undefined,
-  ownsBusiness: boolean,
-  isMember = false,
-): AppMode {
-  if (isMember && !ownsBusiness) return 'business';
-  return parseMode(accountKind) ?? (ownsBusiness ? 'business' : 'client');
-}
+export type ModeState = { mode: AppMode; canSwitch: boolean };
 
-/** Stored choice, or the dedicated account_kind on the profile. */
-export async function resolveAppMode(userId: string): Promise<AppMode> {
-  // Ambele citiri depind doar de userId → pleacă odată (un singur drum, nu două).
-  const [{ data }, { data: owned }, { data: member }] = await Promise.all([
+/** Zona curentă din profil + business-urile proprii sau din echipă + alegerea memorată. */
+export async function resolveAppMode(userId: string): Promise<ModeState> {
+  const [{ data }, { data: owned }, memberIds, stored] = await Promise.all([
     supabase.from('profiles').select('account_kind').eq('id', userId).maybeSingle(),
-    supabase.from('business_profiles').select('id').eq('owner_user_id', userId).maybeSingle(),
-    supabase.from('business_members').select('id').eq('user_id', userId).maybeSingle(),
+    supabase.from('business_profiles').select('id').eq('owner_user_id', userId).limit(1),
+    fetchMemberBusinessIds(userId),
+    getAppMode(),
   ]);
-  const mode = appModeFrom(data?.account_kind, Boolean(owned), Boolean(member));
+  const hasBusiness = (owned ?? []).length > 0 || memberIds.length > 0;
+  const mode = appModeFrom(data?.account_kind, hasBusiness, stored);
   await setAppMode(mode);
-  return mode;
+  return { mode, canSwitch: canSwitchAppMode(data?.account_kind, hasBusiness) };
 }

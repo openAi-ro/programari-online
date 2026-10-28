@@ -36,33 +36,6 @@ export function canManageBusinessSettings(role: BusinessRole | string | null | u
   return roleRank(role) >= RANKS.admin;
 }
 
-/** Ecranele din /business pe care angajatul (staff) nu le poate deschide nici din link direct. */
-const OWNER_ADMIN_SCREENS = [
-  'setup',
-  'services',
-  'staff',
-  'packages',
-  'page',
-  'booking-button',
-  'reviews',
-  'waitlist',
-  'chat',
-  'clients',
-  'reports',
-];
-
-/** true dacă rolul nu are voie pe ruta din /business (pathname Expo Router, ex. „/business/services”). */
-export function isBusinessPathBlocked(
-  role: BusinessRole | string | null | undefined,
-  pathname: string,
-): boolean {
-  if (!role || canManageBusinessSettings(role)) return false;
-  const parts = pathname.split('?')[0].split('/').filter(Boolean);
-  const i = parts.indexOf('business');
-  const screen = i >= 0 ? parts[i + 1] : undefined;
-  return screen !== undefined && OWNER_ADMIN_SCREENS.includes(screen);
-}
-
 /** Data de expirare a unei invitații, ex. „4 noiembrie 2026” (ora României). */
 export function formatInviteDate(iso: string, lang: 'ro' | 'en'): string {
   const d = new Date(iso);
@@ -77,4 +50,34 @@ export function formatInviteDate(iso: string, lang: 'ro' | 'en'): string {
 
 export function isInviteExpired(iso: string, now: Date = new Date()): boolean {
   return new Date(iso).getTime() <= now.getTime();
+}
+
+/** Zona aplicației: client sau business. */
+export type AppMode = 'client' | 'business';
+
+function parseMode(value: string | null | undefined): AppMode | null {
+  return value === 'client' || value === 'business' ? value : null;
+}
+
+/**
+ * Singura regulă pentru zona (client / business) în care intră contul:
+ * - account_kind = business (sau, fără account_kind, cine are un business) → business;
+ * - un cont de client care e și membru al unei echipe (business_members) alege zona;
+ *   alegerea e memorată (setAppMode), implicit business;
+ * - restul → client.
+ */
+export function appModeFrom(
+  accountKind: string | null | undefined,
+  hasBusiness: boolean,
+  stored: AppMode | null = null,
+): AppMode {
+  const base = parseMode(accountKind) ?? (hasBusiness ? 'business' : 'client');
+  if (base === 'business' || !hasBusiness) return base;
+  return stored ?? 'business';
+}
+
+/** Contul de client care e și în echipa unui business poate comuta între zone. */
+export function canSwitchAppMode(accountKind: string | null | undefined, hasBusiness: boolean): boolean {
+  const base = parseMode(accountKind) ?? (hasBusiness ? 'business' : 'client');
+  return base === 'client' && hasBusiness;
 }

@@ -19,8 +19,9 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Review } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
-export default function BusinessReviewsScreen() {
+function BusinessReviewsScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -162,3 +163,5 @@ const styles = StyleSheet.create({
   replyBox: { gap: 2, padding: spacing.md, borderRadius: radius.md },
   replyLabel: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
 });
+
+export default managerOnly(BusinessReviewsScreen);

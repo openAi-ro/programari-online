@@ -40,9 +40,10 @@ import { normalizePhoneE164 } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 /** Setări business: pagina publică de prezentare (/b/[publicCode]). */
-export default function BusinessPageSettingsScreen() {
+function BusinessPageSettingsScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -437,3 +438,5 @@ const styles = StyleSheet.create({
   toggleText: { flex: 1, gap: 2 },
   toggleTitle: { fontSize: fontSize.md, fontWeight: '700' },
 });
+
+export default managerOnly(BusinessPageSettingsScreen);

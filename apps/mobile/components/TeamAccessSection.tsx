@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoleLabel } from '@/components/InvitationAcceptCard';
 import { Button, Callout, Field, SectionTitle, useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { confirmDialog } from '@/lib/dialog';
 import { useLanguage, useT } from '@/lib/i18n';
 import {
   fetchBusinessInvitations,
@@ -258,7 +259,16 @@ export function TeamAccessSection({
                     fullWidth={false}
                     loading={rowBusy === m.member_id}
                     onPress={() =>
-                      void runRow(m.member_id, () => removeBusinessMember(m.member_id), tr('members.removed'))
+                      void (async () => {
+                        const ok = await confirmDialog({
+                          title: tr('members.removeConfirmTitle'),
+                          message: tr('members.removeConfirmBody', { name: m.display_name ?? m.email ?? '' }),
+                          confirmText: tr('members.remove'),
+                          cancelText: tr('common.cancel'),
+                          destructive: true,
+                        });
+                        if (ok) await runRow(m.member_id, () => removeBusinessMember(m.member_id), tr('members.removed'));
+                      })()
                     }
                   />
                 ) : null}

@@ -64,6 +64,7 @@ import { getDeviceCoords } from '@/lib/discover';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 function todayYmd(): string {
   const d = new Date();
@@ -105,7 +106,7 @@ function eachYmdInclusive(from: string, to: string): string[] {
 
 const GEO_TIMEOUT_MS = 15000;
 
-export default function BusinessSetupScreen() {
+function BusinessSetupScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -1296,3 +1297,5 @@ const styles = StyleSheet.create({
   },
 
 });
+
+export default managerOnly(BusinessSetupScreen);

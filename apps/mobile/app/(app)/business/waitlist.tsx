@@ -22,13 +22,14 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { WaitlistEntry } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type Row = WaitlistEntry & {
   services?: { name: string | null } | null;
   staff?: { name: string | null } | null;
 };
 
-export default function BusinessWaitlistScreen() {
+function BusinessWaitlistScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -233,3 +234,5 @@ const styles = StyleSheet.create({
   date: { fontSize: fontSize.lg, fontWeight: '800' },
   meta: { fontSize: fontSize.sm },
 });
+
+export default managerOnly(BusinessWaitlistScreen);

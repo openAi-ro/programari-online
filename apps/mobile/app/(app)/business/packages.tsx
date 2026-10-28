@@ -33,12 +33,13 @@ import type {
   PackageTemplate,
 } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type IssuedRow = ClientPackage & {
   packages?: { name: string | null } | null;
 };
 
-export default function BusinessPackagesScreen() {
+function BusinessPackagesScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
@@ -379,3 +380,5 @@ const styles = StyleSheet.create({
   issuedRow: { gap: spacing.xs, paddingVertical: spacing.sm },
   btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });
+
+export default managerOnly(BusinessPackagesScreen);

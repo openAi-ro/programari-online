@@ -1,11 +1,10 @@
-import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { switchAppMode } from '@/components/AppModeSwitch';
 import { Button, Callout, Field, useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { setAppMode } from '@/lib/appMode';
 import {
   acceptBusinessInvitation,
   fetchMyBusinessInvitations,
@@ -16,14 +15,11 @@ import { useLanguage, useT } from '@/lib/i18n';
 import { setSelectedBusinessId } from '@/lib/myBusiness';
 import { formatInviteDate } from '@/lib/teamAccess';
 import { teamErrorKey } from '@/lib/teamErrors';
-import { invalidateBusinessRole } from '@/lib/useBusinessRole';
 
 /** După acceptare: business-ul nou devine cel activ și utilizatorul ajunge direct în zona salonului. */
 export async function enterAcceptedBusiness(businessId: string | null) {
   if (businessId) await setSelectedBusinessId(businessId);
-  await setAppMode('business');
-  invalidateBusinessRole();
-  router.replace('/(app)/business/(tabs)');
+  await switchAppMode('business');
 }
 
 export function useRoleLabel() {
@@ -36,7 +32,14 @@ export function useRoleLabel() {
  * Invitațiile de echipă pentru emailul contului. `compact`: doar cardurile, nimic dacă nu există
  * (ecranul principal); altfel și câmpul pentru cod.
  */
-export function InvitationAcceptCard({ compact = false }: { compact?: boolean }) {
+export function InvitationAcceptCard({
+  compact = false,
+  onEntered,
+}: {
+  compact?: boolean;
+  /** Ecranul rămâne montat după intrarea în business (layout-ul business): recitește zona. */
+  onEntered?: () => void;
+}) {
   const t = useTheme();
   const tr = useT();
   const { lang } = useLanguage();
@@ -65,6 +68,7 @@ export function InvitationAcceptCard({ compact = false }: { compact?: boolean })
       return;
     }
     await enterAcceptedBusiness(businessId);
+    onEntered?.();
   }
 
   if (compact && invitations.length === 0 && !error) return null;

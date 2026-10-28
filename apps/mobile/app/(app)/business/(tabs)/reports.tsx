@@ -20,6 +20,7 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatLei } from '@/lib/format';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
+import { managerOnly } from '@/components/ManagerOnly';
 
 type Report = {
   days: number;
@@ -37,7 +38,7 @@ type Report = {
   staff: { name: string; approved: number; no_show: number; revenue_ron: number }[];
 };
 
-export default function BusinessReportsScreen() {
+function BusinessReportsScreen() {
   useEffect(() => {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       // eslint-disable-next-line no-console
@@ -205,3 +206,5 @@ const styles = StyleSheet.create({
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowMeta: { fontSize: fontSize.sm },
 });
+
+export default managerOnly(BusinessReportsScreen);
