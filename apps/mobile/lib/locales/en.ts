@@ -19,6 +19,7 @@ export const en: typeof ro = {
   'tabs.home': 'Home',
   'tabs.search': 'Search',
   'tabs.appointments': 'Bookings',
+  'tabs.chat': 'Messages',
   'tabs.favorites': 'Favorites',
   'tabs.account': 'Account',
 
@@ -1312,7 +1313,6 @@ export const en: typeof ro = {
   'set.confirmPass': 'Confirm password',
   'set.confirmPassPh': 'Retype the password',
   'set.changePass': 'Change password',
-  'set.chatDesc': 'Chat with your businesses',
   'set.logout': 'Sign out',
   'set.logoutHint': 'You can come back anytime with the same credentials.',
   'set.version': 'Version {v}',

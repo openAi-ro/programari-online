@@ -17,6 +17,7 @@ export const ro = {
   'tabs.home': 'Acasă',
   'tabs.search': 'Caută',
   'tabs.appointments': 'Programări',
+  'tabs.chat': 'Mesaje',
   'tabs.favorites': 'Favorite',
   'tabs.account': 'Cont',
 
@@ -1310,7 +1311,6 @@ export const ro = {
   'set.confirmPass': 'Confirmă parola',
   'set.confirmPassPh': 'Rescrie parola',
   'set.changePass': 'Schimbă parola',
-  'set.chatDesc': 'Chat cu business-urile tale',
   'set.logout': 'Deconectare',
   'set.logoutHint': 'Te poți întoarce oricând cu aceleași date de autentificare.',
   'set.version': 'Versiune {v}',

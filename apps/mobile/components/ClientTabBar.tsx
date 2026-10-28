@@ -11,7 +11,7 @@ import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import { TabCountBadge } from '@/components/CountBadge';
 
-type TabKey = 'home' | 'search' | 'appointments' | 'favorites' | 'account';
+type TabKey = 'home' | 'search' | 'appointments' | 'chat' | 'favorites' | 'account';
 
 const TABS: {
   key: TabKey;
@@ -44,6 +44,13 @@ const TABS: {
     match: (p) => p.includes('my-appointments'),
   },
   {
+    key: 'chat',
+    labelKey: 'tabs.chat',
+    icon: 'chatbubbles-outline',
+    href: '/(app)/chat',
+    match: (p) => p.includes('/chat') && !p.includes('/business/'),
+  },
+  {
     key: 'favorites',
     labelKey: 'tabs.favorites',
     icon: 'heart-outline',
@@ -60,7 +67,7 @@ const TABS: {
 ];
 
 /**
- * Client-only bottom bar (5 tabs). Render inside client screens only —
+ * Client-only bottom bar (6 tabs). Render inside client screens only —
  * do NOT mount on business routes.
  */
 export function ClientTabBar({
@@ -98,7 +105,7 @@ export function ClientTabBar({
     >
       {TABS.map((tab) => {
         const active = tab.match(pathname);
-        const count = (badges?.[tab.key] ?? 0) + (tab.key === 'account' ? chatUnread : 0);
+        const count = (badges?.[tab.key] ?? 0) + (tab.key === 'chat' ? chatUnread : 0);
         const color = active ? t.colors.accent : t.colors.textMuted;
         return (
           <Pressable

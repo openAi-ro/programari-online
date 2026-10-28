@@ -10,12 +10,15 @@ import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import type { ChatConversation, ChatMessage } from '@/lib/types';
 import { formatBadgeCount } from '@/components/CountBadge';
+import { ClientTabBar } from '@/components/ClientTabBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ClientChatListScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [rows, setRows] = useState<ChatConversation[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [latest, setLatest] = useState<Record<string, ChatMessage | null>>({});
@@ -43,10 +46,16 @@ export default function ClientChatListScreen() {
   }, []);
   useFocusEffect(useCallback(() => { setLoading(true); void load(); }, [load]));
   if (loading && rows.length === 0) {
-    return <ListLoadingScreen title={tr('chat.title')} subtitle={tr('chat.subtitle')} onBack={back} label={tr('chat.loading')} />;
+    return (
+      <View style={styles.root}>
+        <ListLoadingScreen title={tr('chat.title')} subtitle={tr('chat.subtitle')} onBack={back} label={tr('chat.loading')} />
+        <ClientTabBar />
+      </View>
+    );
   }
   return (
-    <Screen title={tr('chat.title')} subtitle={tr('chat.subtitle')} onBack={back}>
+    <View style={styles.root}>
+    <Screen title={tr('chat.title')} subtitle={tr('chat.subtitle')} onBack={back} bottomInset={insets.bottom + spacing['3xl'] + 56}>
       {error ? (
         <Callout tone='danger' title={tr('common.errorTitle')}>{error}</Callout>
       ) : rows.length === 0 ? (
@@ -68,10 +77,13 @@ export default function ClientChatListScreen() {
         />
       )}
     </Screen>
+    <ClientTabBar />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   list: { gap: spacing.sm },
   row: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   flex: { flex: 1, gap: 2 },

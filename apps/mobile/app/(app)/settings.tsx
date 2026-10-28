@@ -1904,15 +1904,7 @@ export default function SettingsScreen() {
       </View>
 
       <SectionTitle>{tr('set.account')}</SectionTitle>
-      {!inBusinessTabs && appMode === 'client' ? (
-        <SettingRow
-          icon="chatbubbles-outline"
-          title={tr('chat.title')}
-          description={tr('set.chatDesc')}
-          onPress={() => router.push('/(app)/chat' as never)}
-        />
-      ) : null}
-            <SettingRow
+      <SettingRow
         icon="download-outline"
         title={tr('set.exportData')}
         description={tr('set.accountData')}
