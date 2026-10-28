@@ -121,6 +121,8 @@ declare
   v_email text;
   v_client public.business_clients;
   v_notify boolean := coalesce(p_notify_client, false);
+  v_visits int;
+  v_loyalty boolean := false;
   v_row public.appointments;
 begin
   if v_user is null then
@@ -181,6 +183,8 @@ begin
   if v_found <> cardinality(p_service_ids) then
     raise exception 'service_not_found';
   end if;
+  -- Același preț ca rezervarea clientului (create_appointment_multi_if_free): reducere off-peak.
+  v_price := public.offpeak_price(p_business_id, p_start_at, v_price);
 
   v_end := p_start_at + make_interval(mins => v_duration);
   if v_end <= p_start_at then
@@ -304,6 +308,25 @@ begin
   if v_end < now() then
     v_notify := false;
   end if;
+  -- Doar owner/admin pot anunța clientul; staff → mereu fără mesaje.
+  if v_role not in ('owner', 'admin') then
+    v_notify := false;
+  end if;
+
+  -- Fidelitate, ca la rezervarea clientului: a N-a vizită aprobată e gratuită.
+  if coalesce(v_biz.loyalty_every, 0) >= 2 then
+    select count(*) into v_visits
+      from public.appointments a
+     where a.business_id = p_business_id
+       and a.status = 'approved'
+       and coalesce(a.no_show, false) = false
+       and ((v_client.user_id is not null and a.client_user_id = v_client.user_id)
+            or a.business_client_id = v_client.id);
+    if ((v_visits + 1) % v_biz.loyalty_every) = 0 then
+      v_loyalty := true;
+      v_price := 0;
+    end if;
+  end if;
 
   perform public.assert_slot_free(p_business_id, v_staff_id, p_start_at, v_end,
                                   coalesce(v_biz.buffer_minutes, 0));
@@ -313,7 +336,7 @@ begin
     client_email, client_phone, guest_name,
     service_id, service_ids, service_name, service_duration_minutes, service_price,
     payment_status, deposit_ron,
-    staff_id, staff_name,
+    staff_id, staff_name, loyalty_redeemed,
     decision_notified, reminder_sent, reminder_24h_sent, attendance_confirmed,
     business_client_id, created_by, notify_client, business_note
   ) values (
@@ -321,7 +344,7 @@ begin
     v_email, v_phone, v_name,
     p_service_ids[1], p_service_ids, v_svc_name, v_duration, v_price,
     'none', 0,
-    v_staff_id, v_staff_name,
+    v_staff_id, v_staff_name, v_loyalty,
     -- toggle OFF: marcăm confirmarea și reminderele ca „gata", ca nici send-reminders
     -- 3.02 (încă nemodificat pe server) să nu trimită nimic.
     not v_notify, not v_notify, not v_notify, false,
@@ -463,3 +486,103 @@ update public.appointments a
      or (public.guest_phone_key(a.client_phone) is null and bc.phone_key is null
          and lower(bc.email) = lower(btrim(a.client_email)))
    );
+
+-- 8) Legare automată fișă fără cont → cont, DOAR pe telefon/email verificate.
+--    Rulează la confirmarea telefonului/emailului (trigger pe auth.users) și la login
+--    (link_my_business_clients() din aplicație). Idempotent.
+create or replace function public.link_business_clients_for_user(p_user uuid)
+returns integer
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_phone_key text;
+  v_email text;
+  v_n int := 0;
+  r record;
+begin
+  if p_user is null then
+    return 0;
+  end if;
+  select case when u.phone_confirmed_at is not null then public.guest_phone_key(nullif(u.phone, '')) end,
+         case when u.email_confirmed_at is not null and u.email not ilike '%@phone.programari.local'
+              then lower(nullif(btrim(u.email), '')) end
+    into v_phone_key, v_email
+    from auth.users u
+   where u.id = p_user;
+  if v_phone_key is null and v_email is null then
+    return 0;
+  end if;
+
+  for r in
+    select distinct on (bc.business_id) bc.id
+      from public.business_clients bc
+      join public.business_profiles b on b.id = bc.business_id
+     where bc.user_id is null
+       and (
+         (v_phone_key is not null and bc.phone_key = v_phone_key)
+         or (v_email is not null and lower(bc.email) = v_email
+             and (bc.phone_key is null or v_phone_key is null or bc.phone_key = v_phone_key))
+       )
+       and b.owner_user_id is distinct from p_user
+       and not exists (select 1 from public.business_members m
+                        where m.business_id = bc.business_id and m.user_id = p_user)
+       and not exists (select 1 from public.business_clients x
+                        where x.business_id = bc.business_id and x.user_id = p_user)
+     order by bc.business_id, (bc.phone_key is not null and bc.phone_key = v_phone_key) desc, bc.created_at
+  loop
+    update public.business_clients
+       set user_id = p_user, updated_at = now()
+     where id = r.id and user_id is null;
+    update public.appointments
+       set client_user_id = p_user
+     where business_client_id = r.id and client_user_id is null;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke all on function public.link_business_clients_for_user(uuid) from public, anon, authenticated;
+
+create or replace function public.link_my_business_clients()
+returns integer
+language sql
+security definer
+set search_path to 'public'
+as $$
+  select public.link_business_clients_for_user(auth.uid());
+$$;
+
+revoke all on function public.link_my_business_clients() from public, anon;
+grant execute on function public.link_my_business_clients() to authenticated;
+
+create or replace function public.trg_link_business_clients()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+begin
+  if (new.phone_confirmed_at is not null
+        and (tg_op = 'INSERT' or old.phone_confirmed_at is null or old.phone is distinct from new.phone))
+     or (new.email_confirmed_at is not null
+        and (tg_op = 'INSERT' or old.email_confirmed_at is null or old.email is distinct from new.email)) then
+    begin
+      perform public.link_business_clients_for_user(new.id);
+    exception when others then
+      -- nu blocăm niciodată autentificarea
+      raise warning 'link_business_clients_for_user failed: %', sqlerrm;
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.trg_link_business_clients() from public, anon, authenticated;
+
+drop trigger if exists on_auth_user_verified_link_clients on auth.users;
+create trigger on_auth_user_verified_link_clients
+  after insert or update of phone_confirmed_at, email_confirmed_at, phone, email on auth.users
+  for each row execute function public.trg_link_business_clients();

@@ -82,3 +82,17 @@ export async function listBusinessContactClients(): Promise<{
     error: null,
   };
 }
+
+let lastLinkAt = 0;
+/**
+ * v101: leagă fișele fără cont (create de business) de contul curent, DOAR pe
+ * telefon/email verificate (server). Idempotent; erorile sunt ignorate (ex. înainte de v101).
+ */
+export function linkMyBusinessClients(): void {
+  const now = Date.now();
+  if (now - lastLinkAt < 60_000) return;
+  lastLinkAt = now;
+  void supabase.rpc('link_my_business_clients').then(({ error }) => {
+    if (error) console.warn('link_my_business_clients', error.message);
+  });
+}

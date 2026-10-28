@@ -23,6 +23,7 @@ import { stashAuthCallbackUrl } from '@/lib/auth-link';
 import { getThemePreference } from '@/lib/themePreference';
 import { LanguageProvider, trKey } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
+import { linkMyBusinessClients } from '@/lib/businessBooking';
 import { getLanguage, subscribeLanguage } from '@/lib/language';
 import * as Linking from 'expo-linking';
 
@@ -130,9 +131,11 @@ function useSessionGuard() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      if (data.session) linkMyBusinessClients();
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
+      if (next && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) linkMyBusinessClients();
     });
     return () => sub.subscription.unsubscribe();
   }, []);

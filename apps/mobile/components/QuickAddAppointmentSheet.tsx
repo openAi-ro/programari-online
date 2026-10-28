@@ -251,7 +251,7 @@ export function QuickAddAppointmentSheet({
       staffId: member?.id ?? null,
       payload,
       note,
-      notifyClient: notify && notifyAllowed,
+      notifyClient: notify && notifyAllowed && !isStaffRole,
     });
     if (err) {
       setSaving(false);
@@ -259,7 +259,7 @@ export function QuickAddAppointmentSheet({
       return;
     }
     // Toggle PORNIT: confirmarea către client (email/WhatsApp) pleacă prin notify-decision.
-    if (appointment?.id && notify && notifyAllowed) {
+    if (appointment?.id && notify && notifyAllowed && !isStaffRole) {
       await invokeDecisionNotify(appointment.id);
     }
     setSaving(false);
@@ -465,6 +465,7 @@ export function QuickAddAppointmentSheet({
 
             <Field label={tr('qa.note')} placeholder={tr('qa.notePh')} value={note} onChangeText={setNote} multiline maxLength={500} />
 
+            {isStaffRole ? null : (
             <View style={styles.notifyRow}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: t.colors.text, fontWeight: '700' }}>{tr('qa.notify')}</Text>
@@ -474,6 +475,7 @@ export function QuickAddAppointmentSheet({
               </View>
               <Toggle value={notify} onValueChange={setNotify} disabled={!notifyAllowed} accessibilityLabel={tr('qa.notify')} />
             </View>
+            )}
           </ScrollView>
           <ButtonRow>
             <View style={styles.flex}>

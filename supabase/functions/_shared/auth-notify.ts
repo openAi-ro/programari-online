@@ -2,7 +2,8 @@
  * Verify caller may trigger decision notification:
  * - webhook secret header, OR
  * - service role bearer, OR
- * - authenticated user who owns the business for this appointment.
+ * - authenticated user who owns the business for this appointment
+ *   (or, with opts.allowAdmin, an admin member of that business).
  */
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { bearerToken, checkWebhookSecret, isServiceRole } from './secret-auth.ts';
@@ -10,7 +11,8 @@ import { bearerToken, checkWebhookSecret, isServiceRole } from './secret-auth.ts
 export async function authorizeNotifyRequest(
   req: Request,
   admin: SupabaseClient,
-  appointmentId: string | undefined
+  appointmentId: string | undefined,
+  opts: { allowAdmin?: boolean } = {}
 ): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const webhook = checkWebhookSecret(req);
   if (webhook === 'missing') return { ok: false, status: 500, error: 'server_misconfigured' };
@@ -60,9 +62,17 @@ export async function authorizeNotifyRequest(
     .eq('id', appt.business_id)
     .maybeSingle();
 
-  if (business?.owner_user_id !== user.id) {
-    return { ok: false, status: 403, error: 'forbidden' };
+  if (business?.owner_user_id === user.id) return { ok: true };
+
+  if (opts.allowAdmin) {
+    const { data: member } = await admin
+      .from('business_members')
+      .select('role')
+      .eq('business_id', appt.business_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (member?.role === 'admin') return { ok: true };
   }
 
-  return { ok: true };
+  return { ok: false, status: 403, error: 'forbidden' };
 }

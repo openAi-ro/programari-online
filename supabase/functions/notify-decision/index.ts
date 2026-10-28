@@ -83,7 +83,8 @@ Deno.serve(async (req) => {
   const appointmentId =
     payload.record?.id ?? payload.id ?? payload.appointment_id;
 
-  const authResult = await authorizeNotifyRequest(req, admin, appointmentId);
+  // Owner sau admin (programare rapidă cu „Anunță clientul"); staff → 403.
+  const authResult = await authorizeNotifyRequest(req, admin, appointmentId, { allowAdmin: true });
   if (!authResult.ok) {
     return jsonResponse({ error: authResult.error }, authResult.status);
   }
@@ -126,6 +127,11 @@ Deno.serve(async (req) => {
 
   if (live.status !== 'approved' && live.status !== 'rejected') {
     return jsonResponse({ ok: true, skipped: 'status_not_decision' });
+  }
+
+  // v101: creată de business cu toggle OPRIT → clientul nu primește nimic.
+  if (live.created_by && live.notify_client !== true) {
+    return jsonResponse({ ok: true, skipped: 'business_no_notify' });
   }
 
   const { data: business } = await admin
