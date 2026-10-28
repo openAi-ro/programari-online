@@ -11,8 +11,13 @@ import {
   Field,
   ListLoadingScreen,
   Screen,
+  SectionTitle,
   useTheme,
 } from '@/components/ui';
+import { QuickAddAppointmentSheet } from '@/components/QuickAddAppointmentSheet';
+import { listBusinessContactClients } from '@/lib/businessBooking';
+import { formatPhoneDisplay } from '@/lib/phone';
+import type { BusinessClientContact, ContactClientRow } from '@/lib/quickAddRules';
 import { getCurrentUser } from '@/lib/currentUser';
 import { useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
@@ -29,7 +34,7 @@ import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import type { ClientIntake, ClientPhoto } from '@/lib/types';
 import { CLIENT_PHOTO_BUCKET, clientPhotoPath, withSignedUrls } from '@/lib/clientPhotos';
 import { supabase } from '@/lib/supabase';
-import type { Appointment, BusinessClientRow } from '@/lib/types';
+import type { Appointment, BusinessClientRow, BusinessProfile } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 import { managerOnly } from '@/components/ManagerOnly';
 
@@ -69,21 +74,32 @@ function BusinessClientsScreen() {
   const [records, setRecords] = useState<Record<string, { intake: ClientIntake | null; photos: ClientPhoto[] }>>({});
   const [recordErrors, setRecordErrors] = useState<Record<string, boolean>>({});
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [business, setBusiness] = useState<BusinessProfile | null>(null);
+  const [contactRows, setContactRows] = useState<ContactClientRow[]>([]);
+  const [quickAdd, setQuickAdd] = useState<{ client: BusinessClientContact | null } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const { data, error: err } = await supabase.rpc('list_business_clients');
+      const [{ data, error: err }, contacts] = await Promise.all([
+        supabase.rpc('list_business_clients'),
+        listBusinessContactClients(),
+      ]);
+      setContactRows(contacts.error ? [] : contacts.rows);
       if (err) {
         setError(err.message, { sticky: true });
         setRows([]);
       } else {
-        setRows((data ?? []) as BusinessClientRow[]);
+        // Rândul agregat „fără cont" (client_user_id null) e înlocuit de fișele pe telefon (v101);
+        // fără v101 pe server rămâne vechiul rând, ca să nu dispară clienții walk-in.
+        const all = (data ?? []) as BusinessClientRow[];
+        setRows(contacts.error ? all : all.filter((r) => !!r.client_user_id));
       }
       const me = await getCurrentUser();
       const { data: biz } = me
         ? await fetchMyBusinessResult(me.id)
         : { data: null };
+      if (biz) setBusiness(biz as BusinessProfile);
       if (biz?.name) setBizName(biz.name);
       if (biz?.id) setBizId(biz.id);
       if (biz?.timezone) setBizTimezone(biz.timezone);
@@ -200,15 +216,41 @@ function BusinessClientsScreen() {
     await loadRecord(row);
   }
 
+  const q = query.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, '');
   const shown = rows.filter((r) => {
     if (inactiveOnly && !isWinbackCandidate(r, new Date())) return false;
-    const q = query.trim().toLowerCase();
     if (!q) return true;
     return (
       (r.display_name ?? '').toLowerCase().includes(q) ||
       r.contact.toLowerCase().includes(q)
     );
   });
+
+  const shownContacts = inactiveOnly
+    ? []
+    : contactRows.filter((c) => {
+        if (!q) return true;
+        return (
+          (c.display_name ?? '').toLowerCase().includes(q) ||
+          (c.email ?? '').toLowerCase().includes(q) ||
+          (qDigits.length >= 3 && (c.phone ?? '').replace(/\D/g, '').includes(qDigits))
+        );
+      });
+
+  function bookFor(row: BusinessClientRow) {
+    const phone = phoneOf(row.contact);
+    setQuickAdd({
+      client: {
+        businessClientId: null,
+        clientUserId: row.client_user_id,
+        displayName: row.display_name,
+        phone: phone || null,
+        email: row.contact.includes('@') ? row.contact : null,
+        visitCount: Number(row.visit_count),
+      },
+    });
+  }
 
   async function openClient(row: BusinessClientRow) {
     if (openId === recordKey(row)) {
@@ -311,6 +353,14 @@ function BusinessClientsScreen() {
         placeholder={tr('cli.searchPh')}
         icon="search-outline"
       />
+      {business ? (
+        <Button
+          label={tr('qa.newBooking')}
+          icon="add"
+          size="sm"
+          onPress={() => setQuickAdd({ client: null })}
+        />
+      ) : null}
       <View style={styles.chips}>
         {[
           { key: 'all', label: tr('cli.allClients'), on: !inactiveOnly },
@@ -332,7 +382,7 @@ function BusinessClientsScreen() {
         ))}
       </View>
       {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
-      {shown.length === 0 ? (
+      {shown.length === 0 && shownContacts.length === 0 ? (
         <EmptyState
           icon="people-outline"
           title={tr('cli.empty')}
@@ -403,6 +453,9 @@ function BusinessClientsScreen() {
                     ) : null}
                     <Button label={tr('int.showRecord')} size="sm" variant="secondary" icon="document-text-outline" onPress={() => void toggleRecord(row)} />
                     <Button label={tr('cli.chat')} size="sm" variant="secondary" icon="chatbubble-outline" onPress={() => void openChat(row)} />
+                    {business && row.client_user_id ? (
+                      <Button label={tr('qa.book')} size="sm" icon="calendar-outline" onPress={() => bookFor(row)} />
+                    ) : null}
                   </View>
                   {history.map((a) => (
                     <Text key={a.id} style={[styles.hist, { color: t.colors.textMuted }]}>
@@ -500,7 +553,70 @@ function BusinessClientsScreen() {
           );
         })
       )}
+      {shownContacts.length > 0 ? (
+        <>
+          <SectionTitle>{tr('qa.contactClients')}</SectionTitle>
+          {shownContacts.map((c) => {
+            const last = c.last_start_at
+              ? formatInTimeZone(new Date(c.last_start_at), bizTimezone, 'dd.MM.yyyy')
+              : '—';
+            const phone = c.phone ? formatPhoneDisplay(c.phone) : null;
+            return (
+              <View
+                key={c.business_client_id}
+                style={[styles.card, styles.detail, { backgroundColor: t.colors.surface, borderColor: t.colors.border, paddingTop: spacing.lg }]}
+              >
+                <View style={styles.flex}>
+                  <Text style={[styles.name, { color: t.colors.text }]}>
+                    {c.display_name || phone || c.email}
+                  </Text>
+                  <Text style={[styles.meta, { color: t.colors.textMuted }]}>
+                    {[phone, c.email].filter(Boolean).join(' · ')} · {c.visit_count} {tr(visitCountKey(c.visit_count))} · {tr('cli.last')} {last}
+                    {c.upcoming_count > 0 ? ` · ${c.upcoming_count} ${tr('cli.upcoming')}` : ''}
+                  </Text>
+                </View>
+                <View style={styles.contactRow}>
+                  {c.phone ? (
+                    <>
+                      <Button label={tr('cli.call')} size="sm" variant="secondary" icon="call-outline" onPress={() => void Linking.openURL('tel:' + c.phone)} />
+                      <Button label={tr('cli.whatsapp')} size="sm" variant="secondary" icon="logo-whatsapp" onPress={() => void Linking.openURL('https://wa.me/' + (c.phone ?? '').replace(/\D/g, ''))} />
+                    </>
+                  ) : null}
+                  {business ? (
+                    <Button
+                      label={tr('qa.book')}
+                      size="sm"
+                      icon="calendar-outline"
+                      onPress={() =>
+                        setQuickAdd({
+                          client: {
+                            businessClientId: c.business_client_id,
+                            clientUserId: null,
+                            displayName: c.display_name,
+                            phone: c.phone,
+                            email: c.email,
+                            visitCount: c.visit_count,
+                          },
+                        })
+                      }
+                    />
+                  ) : null}
+                </View>
+              </View>
+            );
+          })}
+        </>
+      ) : null}
     </Screen>
+    {business ? (
+      <QuickAddAppointmentSheet
+        visible={quickAdd !== null}
+        business={business}
+        initialClient={quickAdd?.client ?? null}
+        onClose={() => setQuickAdd(null)}
+        onSaved={() => void load()}
+      />
+    ) : null}
     </View>
   );
 }

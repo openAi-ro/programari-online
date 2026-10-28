@@ -30,6 +30,7 @@
  * with "JWT issued at future". The cron job (pg_cron jobid 1) only calls this
  * function when an appointment is due in one of the windows below.
  */
+import { reminderSkipReason } from '../_shared/businessCreated.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import postgres from 'npm:postgres@3.4.5';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
@@ -82,6 +83,9 @@ type DueRow = {
   profile_phone: string | null;
   business_name: string | null;
   timezone: string | null;
+  created_by: string | null;
+  notify_client: boolean | null;
+  client_is_member: boolean | null;
 };
 
 async function processWindow(
@@ -112,7 +116,11 @@ async function processWindow(
     select a.id, a.business_id, a.client_user_id, a.client_email, a.client_phone,
            to_char(a.start_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as start_at,
            p.notify_reminders, p.notify_whatsapp, p.language, p.phone as profile_phone,
-           b.name as business_name, b.timezone
+           b.name as business_name, b.timezone,
+           a.created_by, a.notify_client,
+           (a.client_user_id is not null and (a.client_user_id = b.owner_user_id or exists (
+              select 1 from public.business_members m
+               where m.business_id = a.business_id and m.user_id = a.client_user_id))) as client_is_member
       from public.appointments a
       left join public.profiles p on p.id = a.client_user_id
       left join public.business_profiles b on b.id = a.business_id
@@ -147,6 +155,11 @@ async function processWindow(
 
   for (const appt of list) {
     if (!(await claim(appt.id))) continue;
+    const skip = reminderSkipReason(appt);
+    if (skip) {
+      outcomes.push({ id: appt.id, ok: true, kind: opts.kind, detail: skip });
+      continue;
+    }
     const wantsReminder = !appt.client_user_id || appt.notify_reminders !== false;
 
     if (!wantsReminder) {

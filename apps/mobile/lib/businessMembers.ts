@@ -2,7 +2,6 @@ import { functionErrorCode } from './notify-client';
 import { supabase } from './supabase';
 import { getPublicWebOrigin } from './webBase';
 import { isBusinessRole, type BusinessRole } from './teamAccess';
-import type { WalkinClientCandidate } from './walkinClientSearch';
 
 export type { BusinessRole };
 
@@ -147,24 +146,4 @@ export async function revokeBusinessInvitation(invitationId: string) {
     p_invitation_id: invitationId,
   });
   return { error: error?.message ?? null };
-}
-
-/** Clienți existenți pentru walk-in; pe server, staff vede doar clienții specialistului propriu. */
-export async function searchBusinessClients(
-  businessId: string,
-  query: string,
-): Promise<{ clients: WalkinClientCandidate[]; error: string | null }> {
-  const { data, error } = await supabase.rpc('search_business_clients', {
-    p_business_id: businessId,
-    p_query: query,
-  });
-  if (error) return { clients: [], error: error.message };
-  const clients = (data ?? []).map((r: Record<string, unknown>) => ({
-    clientUserId: String(r.client_user_id),
-    displayName: (r.display_name as string | null) ?? null,
-    phone: (r.phone as string | null) ?? null,
-    email: (r.email as string | null) ?? null,
-    visitCount: Number(r.visit_count ?? 0),
-  }));
-  return { clients, error: null };
 }

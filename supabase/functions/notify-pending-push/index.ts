@@ -14,6 +14,7 @@
  *   Implemented as SQL trigger public.appointment_insert_push_webhook() (pg_net),
  *   header x-webhook-secret read from Vault secret `webhook_secret` (= WEBHOOK_SECRET).
  */
+import { isBusinessCreatedInsert } from '../_shared/businessCreated.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { bearerToken, checkWebhookSecret, isServiceRole } from '../_shared/secret-auth.ts';
@@ -37,6 +38,7 @@ type AppointmentRow = {
   client_user_id?: string | null;
   start_at?: string;
   requested_start_at?: string | null;
+  created_by?: string | null;
 };
 
 type WebhookPayload = {
@@ -141,6 +143,11 @@ Deno.serve(async (req) => {
 
   if (!record?.id || !record.business_id) {
     return jsonResponse({ error: 'missing_record' }, 400);
+  }
+
+  // v101: business-ul și-a creat singur programarea (rapidă din calendar) → fără push/WhatsApp/email către el.
+  if (isBusinessCreatedInsert(payload.type, record, payload.reason)) {
+    return jsonResponse({ ok: true, skipped: 'business_created', sent_push: 0, sent_whatsapp: false });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
