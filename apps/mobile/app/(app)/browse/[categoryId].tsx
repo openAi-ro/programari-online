@@ -31,6 +31,7 @@ import {
 } from '@/lib/discover';
 import {
   isOpenNow,
+  matchesBusinessQuery,
   sortBusinesses,
   type BusinessSortKey,
 } from '@/lib/browseList';
@@ -123,15 +124,7 @@ export default function CategoryResultsScreen() {
   );
 
   const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    let list = categoryRows;
-    if (qq) {
-      list = list.filter(
-        (r) =>
-          r.name.toLowerCase().includes(qq) ||
-          r.public_code.toLowerCase().includes(qq)
-      );
-    }
+    let list = categoryRows.filter((r) => matchesBusinessQuery(r, q));
     if (selectedCountryCode) {
       list = list.filter((r) => countryCodeOf(r.country) === selectedCountryCode);
     }

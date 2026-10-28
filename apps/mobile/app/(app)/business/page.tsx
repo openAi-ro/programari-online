@@ -18,7 +18,7 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { getWebBookingUrl } from '@/lib/bookingLink';
-import { categoryLabelForKey } from '@/lib/browseCategories';
+import { businessCategoryText } from '@/lib/browseCategories';
 import {
   COVER_MAX_WIDTH,
   GALLERY_MAX_WIDTH,
@@ -172,7 +172,7 @@ function BusinessPageSettingsScreen() {
     setDescription(
       buildAutoDescription({
         name: business.name,
-        categoryLabel: categoryLabelForKey(business.category, lang),
+        categoryLabel: businessCategoryText(business, lang),
         city: business.city,
         county: business.county,
         serviceNames,

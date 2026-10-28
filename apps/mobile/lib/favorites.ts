@@ -129,7 +129,10 @@ export function isFavoriteSync(businessId: string): boolean {
   return memory.includes(businessId);
 }
 
-/** Încarcă profilele publice pentru o listă de favorite (rebook / Acasă). */
+/**
+ * Încarcă profilele pentru o listă de favorite (rebook / Acasă). Un business privat la care
+ * clientul nu (mai) are acces e ascuns de RLS, deci dispare singur din listă.
+ */
 export async function loadFavoriteBusinesses(
   ids: string[]
 ): Promise<
@@ -139,12 +142,13 @@ export async function loadFavoriteBusinesses(
     public_code: string;
     city: string | null;
     logo_url: string | null;
+    is_private: boolean;
   }[]
 > {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('business_profiles')
-    .select('id, name, public_code, city, logo_url')
+    .select('id, name, public_code, city, logo_url, is_private')
     .in('id', ids);
   if (error || !data) return [];
   const byId = new Map(data.map((b) => [b.id as string, b]));
@@ -157,5 +161,6 @@ export async function loadFavoriteBusinesses(
       public_code: b!.public_code as string,
       city: (b!.city as string | null) ?? null,
       logo_url: (b!.logo_url as string | null) ?? null,
+      is_private: b!.is_private === true,
     }));
 }

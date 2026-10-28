@@ -2,9 +2,11 @@ import type { ImageSourcePropType } from 'react-native';
 
 import { translateTo, trKey, type TrKey } from './i18n';
 import type { AppLanguage } from './language';
+import { GENERAL_CATEGORY_KEY } from './specialization';
 
 /**
- * Client browse ("Caută") — 14 business/service categories.
+ * Client browse ("Caută") — 15 business/service categories (ultima: `general`,
+ * unde business-ul își scrie singur specializarea).
  * Preferă `business_profiles.category` (= key). Fallback: searchTerms pe nume/cod.
  */
 export type BrowseCategory = {
@@ -115,7 +117,18 @@ export const BROWSE_CATEGORIES: BrowseCategory[] = [
     searchTerms: ['auto', 'detailing', 'spalatorie', 'service auto', 'vulcanizare'],
     image: require('../assets/images/categories/auto.jpg'),
   },
+  {
+    key: GENERAL_CATEGORY_KEY,
+    label: 'General',
+    labelKey: 'cat.general',
+    // Fără fallback pe nume: „General” se potrivește doar cu category='general'.
+    searchTerms: [],
+    image: require('../assets/images/categories/general.jpg'),
+  },
 ];
+
+/** Imaginea dalei „Top secret” (cod de invitație la un business privat). */
+export const SECRET_TILE_IMAGE: ImageSourcePropType = require('../assets/images/categories/secret.jpg');
 
 export const BROWSE_CATEGORY_LABELS: string[] = BROWSE_CATEGORIES.map((c) => c.label);
 
@@ -130,6 +143,20 @@ export function categoryLabelForKey(key: string | null | undefined, lang?: AppLa
   const cat = BROWSE_CATEGORIES.find((c) => c.key === key);
   if (!cat) return '';
   return lang ? translateTo(lang, cat.labelKey) : categoryLabel(cat);
+}
+
+/**
+ * Textul afișat pentru categoria unui business: specializarea proprie pentru `general`,
+ * altfel eticheta categoriei.
+ */
+export function businessCategoryText(
+  biz: { category?: string | null; specialization?: string | null },
+  lang?: AppLanguage
+): string {
+  if (biz.category === GENERAL_CATEGORY_KEY && biz.specialization?.trim()) {
+    return biz.specialization.trim();
+  }
+  return categoryLabelForKey(biz.category, lang);
 }
 
 export function categoryKeyForLabel(label: string): string | null {

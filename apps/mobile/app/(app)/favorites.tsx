@@ -28,6 +28,7 @@ type FavBiz = {
   public_code: string;
   city: string | null;
   logo_url: string | null;
+  is_private: boolean;
 };
 
 export default function FavoritesScreen() {
@@ -111,7 +112,7 @@ export default function FavoritesScreen() {
                 key={biz.id}
                 title={biz.name}
                 favorited
-                hint={[biz.city, biz.public_code ? tr('fav.code', { code: biz.public_code }) : null]
+                hint={[biz.is_private ? tr('fav.private') : null, biz.city, biz.public_code ? tr('fav.code', { code: biz.public_code }) : null]
                   .filter(Boolean)
                   .join(' · ')}
                 onPress={() =>

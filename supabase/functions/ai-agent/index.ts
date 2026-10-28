@@ -138,6 +138,18 @@ Deno.serve(async (req) => {
   if (bizErr) return jsonResponse({ ok: false, error: bizErr.message }, 500);
   if (!biz) return jsonResponse({ ok: false, error: 'business_not_found' }, 404);
 
+  // Business privat (v99): doar membrii și clienții cu acces. Răspuns identic cu „nu există”.
+  if (caller.kind !== 'service') {
+    const { data: visible, error: visErr } = await admin.rpc('business_visible_for', {
+      p_business_id: biz.id,
+      p_user_id: caller.userId,
+    });
+    if (visErr) console.warn('business_visible_for failed', visErr.message);
+    if (visErr || visible !== true) {
+      return jsonResponse({ ok: false, error: 'business_not_found' }, 404);
+    }
+  }
+
   // Private settings (v58). No row, an error or a missing table = agent off.
   const { data: aiCfg, error: cfgErr } = await admin
     .from('business_ai_settings')

@@ -86,3 +86,20 @@ export function sortBusinesses<T extends SortableBusiness>(
       return list;
   }
 }
+
+/**
+ * Căutare text în descoperire: nume, cod public sau specializare (categoria General).
+ * Aceeași regulă ca p_q din list_public_businesses (v98).
+ */
+export function matchesBusinessQuery(
+  biz: { name: string; public_code: string; specialization?: string | null },
+  query: string
+): boolean {
+  const qq = query.trim().toLowerCase();
+  if (!qq) return true;
+  return (
+    biz.name.toLowerCase().includes(qq) ||
+    biz.public_code.toLowerCase().includes(qq) ||
+    (biz.specialization ?? '').toLowerCase().includes(qq)
+  );
+}

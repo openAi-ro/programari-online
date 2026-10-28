@@ -78,6 +78,8 @@ type Row = Appointment & {
   > | null;
 };
 
+type BizRow = NonNullable<Row['business_profiles']> & { id: string };
+
 type Filter = 'all' | 'upcoming' | 'past';
 
 export default function MyAppointmentsScreen() {
@@ -163,25 +165,23 @@ export default function MyAppointmentsScreen() {
     );
 
     const bizIds = [...new Set(list.map((a) => a.business_id))];
-    let bizById: Record<string, Row['business_profiles']> = {};
+    const bizById: Record<string, Row['business_profiles']> = {};
     if (bizIds.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let bizRes: any = await supabase
-        .from('business_profiles')
-        .select(
-          'id, name, timezone, public_code, cancel_notice_minutes, county, city, address, maps_url, google_review_url, latitude, longitude'
-        )
-        .in('id', bizIds);
-      if (bizRes.error && /google_review_url/i.test(bizRes.error.message)) {
-        bizRes = await supabase
+      // RPC-ul întoarce și business-urile private la care clientul are programări (RLS le-ar ascunde).
+      const { data: own } = await supabase.rpc('my_appointment_businesses');
+      const found = (own ?? []) as BizRow[];
+      const missing = bizIds.filter((id) => !found.some((b) => b.id === id));
+      if (missing.length) {
+        // Programări legate doar prin email/telefon: business-urile publice, citite direct.
+        const { data: more } = await supabase
           .from('business_profiles')
           .select(
-            'id, name, timezone, public_code, cancel_notice_minutes, county, city, address, maps_url, latitude, longitude'
+            'id, name, timezone, public_code, cancel_notice_minutes, county, city, address, maps_url, google_review_url, latitude, longitude'
           )
-          .in('id', bizIds);
+          .in('id', missing);
+        found.push(...((more ?? []) as BizRow[]));
       }
-      const businesses = bizRes.data;
-      for (const b of businesses ?? []) {
+      for (const b of found) {
         bizById[b.id] = {
           name: b.name,
           timezone: b.timezone,

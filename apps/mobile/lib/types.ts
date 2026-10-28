@@ -67,6 +67,10 @@ export type BusinessProfile = {
   promo_video_url?: string | null;
   /** Cheie categorie browse (BROWSE_CATEGORIES.key), ex. coafura. */
   category?: string | null;
+  /** Specializarea proprie — doar pentru category='general' (v98), 2–40 caractere. */
+  specialization?: string | null;
+  /** Business privat („Top secret”, v99/v100): vizibil doar membrilor și clienților cu cod. */
+  is_private?: boolean | null;
   /** Pagina publică de prezentare (v60) — toate opționale până la migrare. */
   description?: string | null;
   cover_url?: string | null;

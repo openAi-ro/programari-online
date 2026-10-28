@@ -14,7 +14,7 @@ const DESCRIPTION_MAX = 160;
 
 /** Doar câmpuri publice (aceleași pe care le afișează pagina). */
 export const PUBLIC_BUSINESS_COLUMNS =
-  'id,name,public_code,description,cover_url,logo_url,gallery_urls,address,city,county,country,latitude,longitude,working_hours,contact_phone,category,website_enabled,instagram_url,facebook_url';
+  'id,name,public_code,description,cover_url,logo_url,gallery_urls,address,city,county,country,latitude,longitude,working_hours,contact_phone,category,specialization,website_enabled,instagram_url,facebook_url';
 
 /**
  * Coloanele business_profiles vizibile pentru anon (pagina publică de rezervare /b/<cod>).
@@ -22,7 +22,7 @@ export const PUBLIC_BUSINESS_COLUMNS =
  * Trebuie să rămână identic cu GRANT SELECT (...) TO anon din migrarea de restrângere.
  */
 export const ANON_BUSINESS_COLUMNS =
-  'id,name,public_code,timezone,session_duration_minutes,working_hours,break_hours,min_notice_minutes,buffer_minutes,max_advance_days,cancel_notice_minutes,blocked_dates,deposit_ron,loyalty_every,address,city,maps_url,latitude,longitude,county,logo_url,promo_video_url,category,country,google_review_url,instagram_url,facebook_url,offpeak_discount_percent,offpeak_start_hour,offpeak_end_hour,referral_enabled,referral_reward_text,description,cover_url,gallery_urls,website_enabled,contact_phone';
+  'id,name,public_code,timezone,session_duration_minutes,working_hours,break_hours,min_notice_minutes,buffer_minutes,max_advance_days,cancel_notice_minutes,blocked_dates,deposit_ron,loyalty_every,address,city,maps_url,latitude,longitude,county,logo_url,promo_video_url,category,country,google_review_url,instagram_url,facebook_url,offpeak_discount_percent,offpeak_start_hour,offpeak_end_hour,referral_enabled,referral_reward_text,description,cover_url,gallery_urls,website_enabled,contact_phone,specialization';
 
 export type PublicBusiness = {
   id?: string;

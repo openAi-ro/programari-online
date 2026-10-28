@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { grantSignal, timeoutAfterGrant } from '@/lib/locateTiming';
 import type { WorkingHours } from '@/lib/types';
+import { GENERAL_CATEGORY_KEY } from './specialization';
 import { localeTag, trKey } from './i18n';
 
 export type PublicBusiness = {
@@ -23,11 +24,13 @@ export type PublicBusiness = {
   avg_rating: number | null;
   review_count: number;
   working_hours: WorkingHours | null;
-  /** Timezone IANA (dupa migrarea v33 pe RPC; mereu pe fallback SELECT). */
+  /** Timezone IANA (RPC v33+). */
   timezone: string | null;
   promo_video_url: string | null;
   /** Cheie categorie browse (BROWSE_CATEGORIES.key). */
   category: string | null;
+  /** Specializarea proprie (doar pentru category='general', v98). */
+  specialization: string | null;
   /** Cod ISO tara; implicit 'RO' pentru randurile vechi. */
   country: string | null;
 };
@@ -82,6 +85,7 @@ function normalizeRow(raw: Record<string, unknown>): PublicBusiness | null {
     timezone: typeof raw.timezone === 'string' && raw.timezone ? raw.timezone : null,
     promo_video_url: typeof raw.promo_video_url === 'string' ? raw.promo_video_url : null,
     category: typeof raw.category === 'string' ? raw.category : null,
+    specialization: typeof raw.specialization === 'string' ? raw.specialization : null,
     country: typeof raw.country === 'string' ? raw.country : null,
     maps_url: typeof raw.maps_url === 'string' ? raw.maps_url : null,
     avg_rating: asNumber(raw.avg_rating),
@@ -95,103 +99,31 @@ function normalizeRow(raw: Record<string, unknown>): PublicBusiness | null {
 }
 
 /**
- * Listă publică pentru descoperire.
- * Prefers RPC list_public_businesses (v26); fallback pe SELECT direct (RLS actual permite).
+ * Listă publică pentru descoperire — doar RPC list_public_businesses (v98/v100:
+ * exclude business-urile private; p_q caută și în specializare).
+ * Nu există fallback pe SELECT direct: ar ocoli filtrul de business privat.
  */
 export async function listPublicBusinesses(
   opts: ListPublicBusinessesOpts = {}
-): Promise<{ rows: PublicBusiness[]; source: 'rpc' | 'select'; error: string | null }> {
+): Promise<{ rows: PublicBusiness[]; error: string | null }> {
   const q = opts.q?.trim() || null;
   const city = opts.city?.trim() || null;
   const county = opts.county?.trim() || null;
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
 
-  // RPC v26: p_q + p_city (city OR county). Trimitem localitatea în p_city;
-  // județul se aplică client-side după RPC (fără migrare nouă).
-  const rpcCity = city || null;
-
+  // RPC: p_q + p_city (city OR county). Județul se aplică client-side după RPC.
   const rpc = await supabase.rpc('list_public_businesses', {
     p_q: q,
-    p_city: rpcCity,
+    p_city: city,
     p_limit: limit,
   });
-
-  if (!rpc.error && Array.isArray(rpc.data)) {
-    let rows = (rpc.data as Record<string, unknown>[])
-      .map(normalizeRow)
-      .filter((r): r is PublicBusiness => r != null);
-    if (county) {
-      const needle = county.toLowerCase();
-      rows = rows.filter((r) => (r.county ?? '').toLowerCase() === needle);
-    }
-    if (city) {
-      const needle = city.toLowerCase();
-      rows = rows.filter((r) => (r.city ?? '').toLowerCase().includes(needle));
-    }
-    return { rows, source: 'rpc', error: null };
+  if (rpc.error || !Array.isArray(rpc.data)) {
+    return { rows: [], error: rpc.error?.message ?? 'list_public_businesses: răspuns invalid' };
   }
 
-  // Fallback: SELECT pe câmpuri publice (merge pe live fără migrarea v26).
-  let query = supabase
-    .from('business_profiles')
-    .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, cover_url, website_enabled, maps_url, working_hours, timezone, promo_video_url, category, country')
-    .order('name', { ascending: true })
-    .limit(limit);
-
-  if (q) {
-    query = query.or(`name.ilike.%${q}%,public_code.ilike.%${q}%`);
-  }
-  if (city) {
-    query = query.ilike('city', `%${city}%`);
-  }
-  if (county) {
-    query = query.ilike('county', county);
-  }
-
-  let selectResult = await query;
-  if (selectResult.error && /category|country|cover_url|website_enabled/i.test(selectResult.error.message)) {
-    let retry = supabase
-      .from('business_profiles')
-      .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, maps_url, working_hours, timezone, promo_video_url, country')
-      .order('name', { ascending: true })
-      .limit(limit);
-    if (q) {
-      retry = retry.or(`name.ilike.%${q}%,public_code.ilike.%${q}%`);
-    }
-    if (city) {
-      retry = retry.ilike('city', `%${city}%`);
-    }
-    if (county) {
-      retry = retry.ilike('county', county);
-    }
-    selectResult = (await retry) as typeof selectResult;
-  }
-  if (selectResult.error && /promo_video_url|working_hours|country|cover_url|website_enabled/i.test(selectResult.error.message)) {
-    let retry = supabase
-      .from('business_profiles')
-      .select('id, name, public_code, city, county, address, latitude, longitude, logo_url, maps_url, timezone')
-      .order('name', { ascending: true })
-      .limit(limit);
-    if (q) {
-      retry = retry.or(`name.ilike.%${q}%,public_code.ilike.%${q}%`);
-    }
-    if (city) {
-      retry = retry.ilike('city', `%${city}%`);
-    }
-    if (county) {
-      retry = retry.ilike('county', county);
-    }
-    selectResult = (await retry) as typeof selectResult;
-  }
-  const { data, error } = selectResult;
-  if (error) {
-    return { rows: [], source: 'select', error: error.message };
-  }
-
-  let rows = ((data ?? []) as Record<string, unknown>[])
-    .map((r) => normalizeRow({ ...r, avg_rating: null, review_count: 0 }))
+  let rows = (rpc.data as Record<string, unknown>[])
+    .map(normalizeRow)
     .filter((r): r is PublicBusiness => r != null);
-
   if (county) {
     const needle = county.toLowerCase();
     rows = rows.filter((r) => (r.county ?? '').toLowerCase() === needle);
@@ -200,8 +132,7 @@ export async function listPublicBusinesses(
     const needle = city.toLowerCase();
     rows = rows.filter((r) => (r.city ?? '').toLowerCase().includes(needle));
   }
-
-  return { rows, source: 'select', error: null };
+  return { rows, error: null };
 }
 
 /** Distanță haversine în km. */
@@ -236,6 +167,7 @@ export function formatBizHint(
   opts?: { distanceKm?: number | null }
 ): string {
   const parts: string[] = [];
+  if (biz.category === GENERAL_CATEGORY_KEY && biz.specialization) parts.push(biz.specialization);
   const place = [biz.city, biz.county].filter(Boolean).join(', ');
   if (place) parts.push(place);
   if (biz.avg_rating != null && biz.review_count > 0) {

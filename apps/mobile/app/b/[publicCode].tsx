@@ -77,7 +77,7 @@ import {
   locationFromBusiness,
   openMaps,
 } from '@/lib/location';
-import { BROWSE_CATEGORIES, categoryLabelForKey } from '@/lib/browseCategories';
+import { BROWSE_CATEGORIES, businessCategoryText } from '@/lib/browseCategories';
 import {
   effectiveDescription,
   normalizeGalleryUrls,
@@ -678,7 +678,7 @@ export default function PublicBookScreen() {
   // --- Pagina de prezentare (Faza 1): totul derivă din datele deja încărcate. ---
   const pageOn = presentationEnabled(business.website_enabled);
   const category = BROWSE_CATEGORIES.find((c) => c.key === business.category) ?? null;
-  const categoryCity = [categoryLabelForKey(business.category), business.city]
+  const categoryCity = [businessCategoryText(business, lang), business.city]
     .filter(Boolean)
     .join(' · ');
   const coverSource = business.cover_url
@@ -688,7 +688,7 @@ export default function PublicBookScreen() {
   const descriptionText = effectiveDescription({
     description: business.description,
     name: business.name,
-    categoryLabel: categoryLabelForKey(business.category, lang),
+    categoryLabel: businessCategoryText(business, lang),
     city: business.city,
     county: business.county,
     serviceNames: services.map((s) => s.name),

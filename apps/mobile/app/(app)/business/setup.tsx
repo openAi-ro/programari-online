@@ -65,6 +65,12 @@ import { trKey, useLanguage, useT } from '@/lib/i18n';
 import type { BreakHours, BusinessProfile, WorkingHours } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 import { managerOnly } from '@/components/ManagerOnly';
+import {
+  GENERAL_CATEGORY_KEY,
+  normalizeSpecialization,
+  SPECIALIZATION_MAX,
+  specializationError,
+} from '@/lib/specialization';
 
 function todayYmd(): string {
   const d = new Date();
@@ -119,6 +125,7 @@ function BusinessSetupScreen() {
   const [publicCode, setPublicCode] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
+  const [specialization, setSpecialization] = useState('');
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [duration, setDuration] = useState('60');
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_WORKING_HOURS);
@@ -229,6 +236,7 @@ function BusinessSetupScreen() {
         setPublicCode(b.public_code);
         setName(b.name);
         setCategory(typeof b.category === 'string' ? b.category : '');
+        setSpecialization(b.specialization ?? '');
         setTimezone(b.timezone || DEFAULT_TIMEZONE);
         setDuration(String(b.session_duration_minutes));
         setWorkingHours(b.working_hours);
@@ -337,6 +345,7 @@ function BusinessSetupScreen() {
     setPublicCode(b.public_code);
     setName(b.name);
     setCategory(typeof b.category === 'string' ? b.category : '');
+    setSpecialization(b.specialization ?? '');
     setTimezone(b.timezone || DEFAULT_TIMEZONE);
     setDuration(String(b.session_duration_minutes));
     setWorkingHours(b.working_hours);
@@ -373,6 +382,17 @@ function BusinessSetupScreen() {
     setError(null);
   }
 
+  /** Specializarea există doar la categoria General (obligatorie acolo); altfel null. */
+  function specializationValue(): { ok: true; value: string | null } | { ok: false } {
+    if (category !== GENERAL_CATEGORY_KEY) return { ok: true, value: null };
+    const err = specializationError(specialization);
+    if (err) {
+      setError(trKey(err === 'tooLong' ? 'spec.tooLong' : err === 'tooShort' ? 'spec.tooShort' : 'spec.empty'));
+      return { ok: false };
+    }
+    return { ok: true, value: normalizeSpecialization(specialization) };
+  }
+
   async function handleSave() {
     if (loadFailed) {
       // Încărcarea firmei a eșuat: nu salvăm, ca să nu creăm un duplicat.
@@ -386,6 +406,8 @@ function BusinessSetupScreen() {
       setError(trKey('setup.nameRequired'));
       return;
     }
+    const spec = specializationValue();
+    if (!spec.ok) return;
     const minutes = parseInt(duration, 10);
     if (!Number.isFinite(minutes) || minutes < 5 || minutes > 480) {
       setError(trKey('svc.badDuration'));
@@ -527,6 +549,7 @@ function BusinessSetupScreen() {
         .update({
           name: trimmed,
           category: category.trim() || null,
+          specialization: spec.value,
           timezone: timezone.trim(),
           session_duration_minutes: minutes,
           working_hours: workingHours,
@@ -559,6 +582,7 @@ function BusinessSetupScreen() {
         name: trimmed,
         public_code: code,
         category: category.trim() || null,
+        specialization: spec.value,
         timezone: timezone.trim(),
         session_duration_minutes: minutes,
         working_hours: workingHours,
@@ -641,7 +665,9 @@ function BusinessSetupScreen() {
       if (!Number.isFinite(minutes) || minutes < 5 || minutes > 480) { setError(trKey('svc.badDuration')); return; }
       if (!timezone.trim()) { setError(trKey('setup.tzRequired')); return; }
       if (!isValidTimeZone(timezone.trim())) { setError(trKey('setup.badTimezone')); return; }
-      columns = { name: trimmed, category: category.trim() || null, timezone: timezone.trim(), session_duration_minutes: minutes };
+      const spec = specializationValue();
+      if (!spec.ok) return;
+      columns = { name: trimmed, category: category.trim() || null, specialization: spec.value, timezone: timezone.trim(), session_duration_minutes: minutes };
     } else if (section === 'location') {
       if (county.trim() && !city.trim()) { setError(trKey('setup.pickCity')); return; }
       const lat = latitude.trim() === '' ? null : Number(String(latitude).replace(',', '.'));
@@ -735,6 +761,14 @@ function BusinessSetupScreen() {
               onPress={() => router.push('/(app)/business/qr' as never)}
             />
           ) : null}
+          {existingId ? (
+            <Button
+              label={tr('priv.openFromSetup')}
+              variant="secondary"
+              icon="lock-closed-outline"
+              onPress={() => router.push('/(app)/business/private-codes' as never)}
+            />
+          ) : null}
         </View>
       }
     >
@@ -767,6 +801,17 @@ function BusinessSetupScreen() {
         icon="grid-outline"
         hint={tr('setup.categoryHint')}
       />
+      {category === GENERAL_CATEGORY_KEY ? (
+        <Field
+          label={tr('spec.label')}
+          value={specialization}
+          onChangeText={(v) => setSpecialization(v.slice(0, SPECIALIZATION_MAX + 10))}
+          placeholder={tr('spec.placeholder')}
+          icon="pricetag-outline"
+          hint={tr('spec.hint')}
+          autoCapitalize="sentences"
+        />
+      ) : null}
       <Field
         label={tr('setup.sessionDur')}
         value={duration}

@@ -18,7 +18,7 @@ import { router } from 'expo-router';
 import { Button, Callout, EmptyState, SectionTitle, Skeleton, useTheme } from '@/components/ui';
 import { PickerField } from '@/components/PickerField';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { BROWSE_CATEGORIES, categoryLabelForKey } from '@/lib/browseCategories';
+import { BROWSE_CATEGORIES, businessCategoryText } from '@/lib/browseCategories';
 import { visibleCoverUrl } from '@/lib/businessPage';
 import {
   formatDistanceKm,
@@ -315,7 +315,7 @@ function BusinessCard({ biz, width }: { biz: PublicBusinessWithDistance; width: 
   const category = BROWSE_CATEGORIES.find((c) => c.key === biz.category) ?? null;
   const cover = visibleCoverUrl(biz);
   const distance = formatDistanceKm(biz.distanceKm);
-  const meta = [categoryLabelForKey(biz.category), distance, biz.city].filter(Boolean).join(' · ');
+  const meta = [businessCategoryText(biz), distance, biz.city].filter(Boolean).join(' · ');
   return (
     <View testID="nearby-card" style={[styles.card, { width, backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
       <View style={[styles.media, { backgroundColor: t.colors.surfaceMuted }]}>

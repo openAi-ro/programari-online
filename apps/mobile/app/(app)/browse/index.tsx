@@ -21,13 +21,14 @@ import { ClientTabBar } from '@/components/ClientTabBar';
 import { PickerField } from '@/components/PickerField';
 import { SalonRow } from '@/components/SalonRow';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { isOpenNow, sortBusinesses } from '@/lib/browseList';
+import { isOpenNow, matchesBusinessQuery, sortBusinesses } from '@/lib/browseList';
 import {
   listPublicBusinesses,
   type PublicBusiness,
 } from '@/lib/discover';
 import {
   BROWSE_CATEGORIES,
+  SECRET_TILE_IMAGE,
   businessMatchesCategory,
   categoryLabel,
   type BrowseCategory,
@@ -106,12 +107,42 @@ function CategoryTile({
   );
 }
 
+/** „Top secret”: nu listează nimic, doar duce la introducerea unui cod de invitație. */
+function SecretTile({ onPress }: { onPress: () => void }) {
+  const t = useTheme();
+  const tr = useT();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={tr('secret.tileA11y')}
+      style={({ pressed }) => [
+        styles.catTile,
+        { borderColor: t.colors.border, backgroundColor: t.colors.surface, opacity: pressed ? 0.9 : 1 },
+        t.shadows.sm,
+      ]}
+    >
+      <Image source={SECRET_TILE_IMAGE} style={styles.catImage} resizeMode="cover" accessibilityIgnoresInvertColors />
+      <View style={[styles.catCountBadge, { backgroundColor: 'rgba(15,23,42,0.55)' }]}>
+        <Text style={styles.catCountText}>🔒</Text>
+      </View>
+      <View style={[styles.catLabelWrap, { backgroundColor: 'rgba(15,23,42,0.62)' }]}>
+        <Text style={[styles.catLabel, { color: '#ffffff' }]} numberOfLines={2}>
+          {tr('secret.tile')}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function CategoryGrid({
   counts,
   onSelect,
+  onSecret,
 }: {
   counts: Record<string, number>;
   onSelect: (cat: BrowseCategory) => void;
+  onSecret: () => void;
 }) {
   const t = useTheme();
   const tr = useT();
@@ -131,6 +162,7 @@ function CategoryGrid({
             onPress={() => onSelect(cat)}
           />
         ))}
+        <SecretTile onPress={onSecret} />
       </View>
     </View>
   );
@@ -170,14 +202,7 @@ export default function BrowseScreen() {
 
   const matchesFilters = useCallback(
     (r: PublicBusiness) => {
-      const qq = q.trim().toLowerCase();
-      if (
-        qq &&
-        !r.name.toLowerCase().includes(qq) &&
-        !r.public_code.toLowerCase().includes(qq)
-      ) {
-        return false;
-      }
+      if (!matchesBusinessQuery(r, q)) return false;
       if (selectedCountryCode) {
         if (countryCodeOf(r.country) !== selectedCountryCode) return false;
       }
@@ -373,6 +398,7 @@ export default function BrowseScreen() {
             <CategoryGrid
               counts={categoryCounts}
               onSelect={onSelectCategory}
+              onSecret={() => router.push('/(app)/browse/secret' as never)}
             />
 
             {hasActiveFilters ? (

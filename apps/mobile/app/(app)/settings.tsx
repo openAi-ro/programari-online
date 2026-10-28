@@ -1720,6 +1720,12 @@ export default function SettingsScreen() {
                 onPress={() => router.push('/(app)/business/page' as never)}
               />
               <SettingRow
+                icon="lock-closed-outline"
+                title={tr('priv.title')}
+                description={tr('priv.rowDesc')}
+                onPress={() => router.push('/(app)/business/private-codes' as never)}
+              />
+              <SettingRow
                 icon="cut-outline"
                 title={tr('svc.title')}
                 description={hasServices ? tr('set.manageOffer') : tr('set.addFirstService')}
