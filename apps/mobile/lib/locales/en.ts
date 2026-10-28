@@ -1105,6 +1105,7 @@ export const en: typeof ro = {
   'qa.servicesTotal': 'Services · total {mins} min · {price} lei',
   'qa.day': 'Day',
   'qa.today': 'Today',
+  'qa.pastSlotsHint': 'Past times are greyed out — you can still pick one to log a visit that already happened.',
   'qa.pickServiceFirst': 'Pick at least one service first.',
   'qa.note': 'Note (optional)',
   'qa.notePh': 'E.g. comes with a child, prefers scissors',

@@ -1103,6 +1103,7 @@ export const ro = {
   'qa.servicesTotal': 'Servicii · total {mins} min · {price} lei',
   'qa.day': 'Ziua',
   'qa.today': 'Azi',
+  'qa.pastSlotsHint': 'Orele trecute sunt gri — le poți alege ca să notezi o programare deja făcută.',
   'qa.pickServiceFirst': 'Alege întâi cel puțin un serviciu.',
   'qa.note': 'Notă (opțional)',
   'qa.notePh': 'Ex: vine cu copilul, preferă foarfecă',

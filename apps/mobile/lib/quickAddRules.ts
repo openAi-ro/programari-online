@@ -99,3 +99,18 @@ export function quickAddDays(todayYmd: string, pastDays: number, futureDays: num
   }
   return out;
 }
+
+/**
+ * Cum apare clientul pe cardul din calendar: numele întâi (guest_name al programării,
+ * altfel numele din fișa business_clients), apoi telefonul și emailul. Fără nume → doar contactul.
+ */
+export function appointmentClientParts(input: {
+  guestName?: string | null;
+  businessClientName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}): string[] {
+  const name = input.guestName?.trim() || input.businessClientName?.trim() || '';
+  const parts = [name, input.phone?.trim() ?? '', input.email?.trim() ?? ''].filter(Boolean);
+  return parts.filter((x, i) => parts.indexOf(x) === i);
+}

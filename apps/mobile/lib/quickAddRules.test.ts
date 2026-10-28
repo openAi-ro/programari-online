@@ -3,6 +3,7 @@
  * from apps/mobile
  */
 import {
+  appointmentClientParts,
   buildQuickAddPayload,
   canNotifyClient,
   quickAddDays,
@@ -61,6 +62,17 @@ const days = quickAddDays('2026-10-28', 2, 3);
 assert(days.length === 6 && days[0] === '2026-10-26' && days[5] === '2026-10-31', 'day strip past+future', days.join(','));
 assert(quickAddDays('2026-03-29', 0, 1)[1] === '2026-03-30', 'DST day boundary ok');
 assert(!quickAddQueryReady(' a ') && quickAddQueryReady('07'), 'query needs 2 chars');
+
+assert(
+  appointmentClientParts({ guestName: ' Ana ', businessClientName: 'Ana P', phone: '+40700000123' }).join('|') === 'Ana|+40700000123',
+  'card: guest_name first, then phone',
+);
+assert(
+  appointmentClientParts({ guestName: '', businessClientName: 'Ion', phone: '+40700000123', email: 'i@x.ro' }).join('|') === 'Ion|+40700000123|i@x.ro',
+  'card: falls back to business_clients name',
+);
+assert(appointmentClientParts({ phone: '+40700000123' }).join('|') === '+40700000123', 'card: phone only when no name');
+assert(appointmentClientParts({}).length === 0, 'card: nothing to show');
 
 // Edge-function gates (supabase/functions/_shared/businessCreated.ts)
 assert(isBusinessCreatedInsert('INSERT', { created_by: 'u' }), 'owner push skipped for business-created insert');

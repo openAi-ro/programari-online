@@ -52,8 +52,16 @@ type Props = {
   onSaved?: (appointment: Appointment | null) => void;
 };
 
-export function QuickAddAppointmentSheet({
-  visible,
+/**
+ * Corpul se montează la fiecare deschidere: starea pornește din props (zi, client, specialist),
+ * fără reset într-un effect — altfel primul cadru afișa ziua/serviciile deschiderii anterioare
+ * și banda de zile rămânea derulată la ziua veche.
+ */
+export function QuickAddAppointmentSheet(props: Props) {
+  return props.visible ? <QuickAddBody {...props} /> : null;
+}
+
+function QuickAddBody({
   business,
   staffList: staffProp,
   initialDate,
@@ -66,7 +74,7 @@ export function QuickAddAppointmentSheet({
   const tr = useT();
   const insets = useSafeAreaInsets();
   const tz = business.timezone;
-  const today = useMemo(() => formatInTimeZone(new Date(), tz, 'yyyy-MM-dd'), [tz, visible]);
+  const [today] = useState(() => formatInTimeZone(new Date(), tz, 'yyyy-MM-dd'));
 
   const [staffList, setStaffList] = useState<QuickAddStaff[]>(staffProp ?? []);
   const [services, setServices] = useState<Service[]>([]);
@@ -79,7 +87,7 @@ export function QuickAddAppointmentSheet({
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slot, setSlot] = useState<FreeSlot | null>(null);
-  const [picked, setPicked] = useState<BusinessClientContact | null>(null);
+  const [picked, setPicked] = useState<BusinessClientContact | null>(initialClient ?? null);
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -92,22 +100,9 @@ export function QuickAddAppointmentSheet({
   const searchSeq = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
-  // Reset + încărcare la fiecare deschidere.
+  // Încărcare la montare (= la fiecare deschidere).
   useEffect(() => {
-    if (!visible) return;
     let alive = true;
-    setError(null);
-    setOk(null);
-    setSlot(null);
-    setServiceIds([]);
-    setPicked(initialClient ?? null);
-    setPhone('');
-    setName('');
-    setEmail('');
-    setNote('');
-    setNotify(false);
-    setSuggestions([]);
-    setDay(initialDate ?? formatInTimeZone(new Date(), tz, 'yyyy-MM-dd'));
     void (async () => {
       const teamReq = staffProp
         ? Promise.resolve({ data: staffProp })
@@ -149,7 +144,7 @@ export function QuickAddAppointmentSheet({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, business.id]);
+  }, [business.id]);
 
   const totals = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
   const eligible = useMemo(
@@ -168,7 +163,6 @@ export function QuickAddAppointmentSheet({
 
   // Sloturi libere pe durata totală; fără notBefore → și orele trecute (business notează după).
   useEffect(() => {
-    if (!visible) return;
     setSlot(null);
     if (totals.durationMinutes <= 0 || (staffList.length > 0 && !member)) {
       setSlots([]);
@@ -206,11 +200,11 @@ export function QuickAddAppointmentSheet({
     return () => {
       alive = false;
     };
-  }, [visible, day, member, totals.durationMinutes, business, tz, staffList.length]);
+  }, [day, member, totals.durationMinutes, business, tz, staffList.length]);
 
   // Autocomplete client (telefon / nume) pe server, cu debounce.
   useEffect(() => {
-    if (!visible || picked) return;
+    if (picked) return;
     const q = phone.trim() || name.trim();
     if (!quickAddQueryReady(q)) {
       setSuggestions([]);
@@ -223,8 +217,10 @@ export function QuickAddAppointmentSheet({
       });
     }, 250);
     return () => clearTimeout(timer);
-  }, [visible, phone, name, picked, business.id]);
+  }, [phone, name, picked, business.id]);
 
+  const nowMs = Date.now();
+  const hasPastSlots = slots.some((s) => Date.parse(s.startUtc) < nowMs);
   const notifyAllowed = canNotifyClient(slot?.endUtc ?? null);
   useEffect(() => {
     if (!notifyAllowed && notify) setNotify(false);
@@ -286,7 +282,7 @@ export function QuickAddAppointmentSheet({
   });
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => !saving && onClose()} statusBarTranslucent>
+    <Modal visible animationType="slide" transparent onRequestClose={() => !saving && onClose()} statusBarTranslucent>
       <View style={[styles.backdrop, { backgroundColor: t.colors.overlay, paddingBottom: spacing.md + insets.bottom }]}>
         <View style={[styles.card, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
           <View style={styles.head}>
@@ -439,28 +435,43 @@ export function QuickAddAppointmentSheet({
             ) : slots.length === 0 ? (
               <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('cal.noSlots', { date: day })}</Text>
             ) : (
-              <View style={styles.wrap}>
-                {slots.map((s) => {
-                  const on = slot?.startUtc === s.startUtc;
-                  const past = Date.parse(s.startUtc) < Date.now();
-                  return (
-                    <Pressable
-                      key={s.startUtc}
-                      onPress={() => setSlot(s)}
-                      style={[
-                        styles.slot,
-                        {
-                          backgroundColor: on ? t.colors.accent : t.colors.surface,
-                          borderColor: on ? t.colors.accent : t.colors.border,
-                          opacity: past && !on ? 0.6 : 1,
-                        },
-                      ]}
-                    >
-                      <Text style={chipText(on)}>{s.labelLocal}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <>
+                {hasPastSlots ? (
+                  <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.pastSlotsHint')}</Text>
+                ) : null}
+                <View style={styles.wrap}>
+                  {slots.map((s) => {
+                    const on = slot?.startUtc === s.startUtc;
+                    const past = Date.parse(s.startUtc) < nowMs;
+                    return (
+                      <Pressable
+                        key={s.startUtc}
+                        onPress={() => setSlot(s)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        style={[
+                          styles.slot,
+                          on
+                            ? { backgroundColor: t.colors.accent, borderColor: t.colors.accentPressed }
+                            : past
+                              ? { backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.surfaceMuted }
+                              : { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontSize: fontSize.sm,
+                            color: on ? t.colors.onAccent : past ? t.colors.textFaint : t.colors.text,
+                            fontWeight: on ? '800' : past ? '500' : '700',
+                          }}
+                        >
+                          {s.labelLocal}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
             )}
 
             <Field label={tr('qa.note')} placeholder={tr('qa.notePh')} value={note} onChangeText={setNote} multiline maxLength={500} />
@@ -507,7 +518,7 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1 },
   dayChip: { alignItems: 'center', minWidth: 58, borderRadius: radius.md },
-  slot: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1 },
+  slot: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 2 },
   hint: { fontSize: fontSize.xs },
   pickedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1 },
   suggestion: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1 },

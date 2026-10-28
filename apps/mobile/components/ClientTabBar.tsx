@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/components/ui';
@@ -66,6 +66,23 @@ const TABS: {
   },
 ];
 
+const BAR_PAD_X = spacing.xs;
+const ITEM_PAD_X = 2;
+/** Lățimea celei mai lungi etichete („Programări", „Messages") la weight 600 ≈ 5 em; +8% rezervă. */
+const LONGEST_LABEL_EM = 5.4;
+const MIN_LABEL_SIZE = 9;
+
+/**
+ * Mărimea etichetei din lățimea reală a unui tab: 12 px când încape (≥ ~400 px),
+ * coboară în pași de 0,5 px pe ecrane înguste (390 → 11, 360 → 10) ca să nu fie tăiată
+ * („Program…"). adjustsFontSizeToFit nu există pe web, deci nu ne bazăm pe el.
+ */
+function labelFontSize(barWidth: number): number {
+  const perTab = (barWidth - 2 * BAR_PAD_X) / TABS.length - 2 * ITEM_PAD_X;
+  const fit = Math.floor((perTab / LONGEST_LABEL_EM) * 2) / 2;
+  return Math.max(MIN_LABEL_SIZE, Math.min(fontSize.xs, fit));
+}
+
 /**
  * Client-only bottom bar (6 tabs). Render inside client screens only —
  * do NOT mount on business routes.
@@ -78,6 +95,9 @@ export function ClientTabBar({
   const t = useTheme();
   const tr = useT();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const [barWidth, setBarWidth] = useState(0);
+  const labelSize = labelFontSize(barWidth || windowWidth);
   const pathname = usePathname() || '';
   const [chatUnread, setChatUnread] = useState(0);
   // Necitite: cache partajat (max. o cerere/minut pentru toate tab bar-urile montate),
@@ -94,6 +114,7 @@ export function ClientTabBar({
 
   return (
     <View
+      onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
       style={[
         styles.bar,
         {
@@ -124,7 +145,7 @@ export function ClientTabBar({
               <TabCountBadge count={count} />
             </View>
             <Text
-              style={[styles.label, { color }]}
+              style={[styles.label, { color, fontSize: labelSize }]}
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.75}
@@ -144,7 +165,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: BAR_PAD_X,
   },
   item: {
     flex: 1,
@@ -153,11 +174,10 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 0,
     maxWidth: '100%',
-    paddingHorizontal: 2,
+    paddingHorizontal: ITEM_PAD_X,
     // Fara overflow hidden: badge-ul (top: -4) era taiat sus. Eticheta are deja numberOfLines=1.
   },
   label: {
-    fontSize: fontSize.xs,
     fontWeight: '600',
     flexShrink: 1,
     minWidth: 0,
