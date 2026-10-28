@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
   rowValue: { fontSize: fontSize.sm, fontWeight: '600', flexShrink: 1 },
   qrCaption: {
-    fontSize: 10,
+    fontSize: fontSize.xs,
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 13,
