@@ -1481,6 +1481,8 @@ export const en: typeof ro = {
   'page.autoCta': 'Book your spot online, no phone call needed.',
   'page.reviewCount': '{n} reviews',
   'page.priceFrom': 'from {price}',
+  'page.prevPhoto': 'Previous photo',
+  'page.nextPhoto': 'Next photo',
   'pageEdit.title': 'Business page',
   'pageEdit.subtitle': 'How customers see your business online',
   'pageEdit.cover': 'Cover photo',

@@ -1363,6 +1363,108 @@ const COVER_HEIGHT = 210;
 const COVER_HEIGHT_WIDE = 360;
 const COVER_AUTO_MS = 5000;
 
+/** Carusel cu pagini: avans automat pe web, sageti pe web, puncte peste tot. */
+function useAutoCarousel(count: number) {
+  const isWeb = Platform.OS === 'web';
+  const scroller = useRef<ScrollView>(null);
+  const indexRef = useRef(0);
+  const [index, setIndex] = useState(0);
+  const [width, setWidth] = useState(0);
+
+  const go = useCallback(
+    (target: number, animated = true) => {
+      if (count === 0) return;
+      const next = ((target % count) + count) % count;
+      indexRef.current = next;
+      setIndex(next);
+      if (width > 0) scroller.current?.scrollTo({ x: next * width, animated });
+    },
+    [count, width],
+  );
+
+  useEffect(() => {
+    if (count > 0 && indexRef.current >= count) go(0, false);
+  }, [count, go]);
+
+  // Timer repornit la fiecare schimbare de index, deci o apasare pe sageata nu e urmata imediat de avans automat.
+  useEffect(() => {
+    if (!isWeb || count < 2 || width <= 0) return;
+    const timer = setTimeout(() => go(indexRef.current + 1), COVER_AUTO_MS);
+    return () => clearTimeout(timer);
+  }, [isWeb, count, width, index, go]);
+
+  useEffect(() => {
+    if (width <= 0) return;
+    scroller.current?.scrollTo({ x: indexRef.current * width, animated: false });
+  }, [width]);
+
+  const sync = (offsetX: number) => {
+    if (width <= 0 || count === 0) return;
+    const next = Math.max(0, Math.min(count - 1, Math.round(offsetX / width)));
+    indexRef.current = next;
+    setIndex(next);
+  };
+
+  const onLayout = (e: { nativeEvent: { layout: { width: number } } }) => {
+    const next = Math.round(e.nativeEvent.layout.width);
+    if (next > 0 && next !== width) setWidth(next);
+  };
+
+  return { isWeb, scroller, index, width, go, sync, onLayout };
+}
+
+function CarouselControls({
+  count,
+  index,
+  showArrows,
+  onGo,
+}: {
+  count: number;
+  index: number;
+  showArrows: boolean;
+  onGo: (target: number) => void;
+}) {
+  const tr = useT();
+  if (count < 2) return null;
+  return (
+    <>
+      {showArrows ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr('page.prevPhoto')}
+            onPress={() => onGo(index - 1)}
+            style={({ pressed }) => [styles.carouselArrow, styles.carouselArrowLeft, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Ionicons name="chevron-back" size={20} color="#ffffff" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr('page.nextPhoto')}
+            onPress={() => onGo(index + 1)}
+            style={({ pressed }) => [styles.carouselArrow, styles.carouselArrowRight, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+          </Pressable>
+        </>
+      ) : null}
+      <View style={styles.carouselDots}>
+        {Array.from({ length: count }, (_, i) => (
+          <Pressable
+            key={i}
+            accessibilityRole="button"
+            accessibilityLabel={`${i + 1} / ${count}`}
+            accessibilityState={{ selected: i === index }}
+            hitSlop={6}
+            onPress={() => onGo(i)}
+            style={[styles.carouselDot, i === index ? styles.carouselDotActive : null]}
+          />
+        ))}
+      </View>
+    </>
+  );
+}
+
 function SpecialistCover({
   slides,
   wide,
@@ -1375,40 +1477,9 @@ function SpecialistCover({
   onImageError: (url: string) => void;
 }) {
   const t = useTheme();
-  const isWeb = Platform.OS === 'web';
-  const scroller = useRef<ScrollView>(null);
-  const indexRef = useRef(0);
-  const [width, setWidth] = useState(0);
   const height = wide ? COVER_HEIGHT_WIDE : COVER_HEIGHT;
   const count = slides.length;
-
-  useEffect(() => {
-    if (count === 0) return;
-    if (indexRef.current >= count) {
-      indexRef.current = 0;
-      scroller.current?.scrollTo({ x: 0, animated: false });
-    }
-  }, [count]);
-
-  useEffect(() => {
-    if (!isWeb || count < 2 || width <= 0) return;
-    const timer = setInterval(() => {
-      const next = (indexRef.current + 1) % count;
-      indexRef.current = next;
-      scroller.current?.scrollTo({ x: next * width, animated: true });
-    }, COVER_AUTO_MS);
-    return () => clearInterval(timer);
-  }, [isWeb, count, width]);
-
-  useEffect(() => {
-    if (width <= 0) return;
-    scroller.current?.scrollTo({ x: indexRef.current * width, animated: false });
-  }, [width]);
-
-  const sync = (offsetX: number) => {
-    if (width <= 0 || count === 0) return;
-    indexRef.current = Math.max(0, Math.min(count - 1, Math.round(offsetX / width)));
-  };
+  const { isWeb, scroller, index, width, go, sync, onLayout } = useAutoCarousel(count);
 
   return (
     <View
@@ -1418,10 +1489,7 @@ function SpecialistCover({
         styles.coverClip,
         { backgroundColor: t.colors.surfaceMuted },
       ]}
-      onLayout={(e) => {
-        const next = Math.round(e.nativeEvent.layout.width);
-        if (next > 0 && next !== width) setWidth(next);
-      }}
+      onLayout={onLayout}
     >
       {width > 0 ? (
         <ScrollView
@@ -1448,6 +1516,7 @@ function SpecialistCover({
       <View style={styles.coverBadge} pointerEvents="none">
         <Badge tone="accent">{badge}</Badge>
       </View>
+      <CarouselControls count={count} index={index} showArrows={isWeb} onGo={go} />
     </View>
   );
 }
@@ -1462,47 +1531,13 @@ function LatestCarousel({
   onWorkError: (url: string) => void;
 }) {
   const t = useTheme();
-  const isWeb = Platform.OS === 'web';
-  const scroller = useRef<ScrollView>(null);
-  const indexRef = useRef(0);
-  const [width, setWidth] = useState(0);
   const count = slides.length;
-
-  useEffect(() => {
-    if (count === 0) return;
-    if (indexRef.current >= count) {
-      indexRef.current = 0;
-      scroller.current?.scrollTo({ x: 0, animated: false });
-    }
-  }, [count]);
-
-  useEffect(() => {
-    if (!isWeb || count < 2 || width <= 0) return;
-    const timer = setInterval(() => {
-      const next = (indexRef.current + 1) % count;
-      indexRef.current = next;
-      scroller.current?.scrollTo({ x: next * width, animated: true });
-    }, COVER_AUTO_MS);
-    return () => clearInterval(timer);
-  }, [isWeb, count, width]);
-
-  useEffect(() => {
-    if (width <= 0) return;
-    scroller.current?.scrollTo({ x: indexRef.current * width, animated: false });
-  }, [width]);
-
-  const sync = (offsetX: number) => {
-    if (width <= 0 || count === 0) return;
-    indexRef.current = Math.max(0, Math.min(count - 1, Math.round(offsetX / width)));
-  };
+  const { isWeb, scroller, index, width, go, sync, onLayout } = useAutoCarousel(count);
 
   return (
     <View
       style={[styles.latestClip, { backgroundColor: t.colors.surfaceMuted }]}
-      onLayout={(e) => {
-        const next = Math.round(e.nativeEvent.layout.width);
-        if (next > 0 && next !== width) setWidth(next);
-      }}
+      onLayout={onLayout}
     >
       {width > 0 ? (
         <ScrollView
@@ -1531,10 +1566,10 @@ function LatestCarousel({
           ))}
         </ScrollView>
       ) : null}
+      <CarouselControls count={count} index={index} showArrows={isWeb} onGo={go} />
     </View>
   );
 }
-
 function ContactChip({
   icon,
   label,
@@ -1678,6 +1713,35 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
+  carouselArrow: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(12, 18, 34, 0.55)',
+  },
+  carouselArrowLeft: { left: spacing.sm },
+  carouselArrowRight: { right: spacing.sm },
+  carouselDots: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  carouselDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+  },
+  carouselDotActive: { width: 18, backgroundColor: '#ffffff' },
 
   hoursCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
