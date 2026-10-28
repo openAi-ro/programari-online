@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
@@ -74,7 +75,9 @@ import {
   buildMapsUrl,
   buildNativeMapsUrl,
   formatAddress,
+  hasCoordinates,
   locationFromBusiness,
+  openDriveChooser,
   openMaps,
 } from '@/lib/location';
 import { BROWSE_CATEGORIES, businessCategoryText } from '@/lib/browseCategories';
@@ -86,13 +89,14 @@ import {
   whatsAppUrl,
 } from '@/lib/businessPage';
 import { formatTimeRange } from '@/lib/workingHoursRules';
-import { trKey, useLanguage, useT } from '@/lib/i18n';
+import { trKey, translateTo, useLanguage, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { markWaitlistBooked } from '@/lib/notify-client';
 import { normalizeWalkinContact } from '@/lib/walkinRules';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { parseTipInput, tipOptions } from '@/lib/tip';
 import { generateFreeSlots } from '@/lib/slots';
+import { normalizePortfolioUrls } from '@/lib/staffPortfolio';
 import { createRequestTracker } from '@/lib/latestRequest';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { fireAndForget } from '@/lib/fireAndForget';
@@ -432,6 +436,14 @@ export default function PublicBookScreen() {
     void loadSlots();
   }, [loadSlots]);
 
+  // Titlul din browser și limba documentului urmează limba paginii, nu rămân fixe pe română.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined' || !business) return;
+    document.documentElement.lang = lang === 'en' ? 'en' : 'ro';
+    const city = (business.city ?? '').trim();
+    document.title = `${business.name}${city ? ` – ${city}` : ''} | ${translateTo(lang, 'pub.online')}`;
+  }, [business, lang]);
+
   // Coperta se preîncarcă imediat pe web (fără așteptare la derulare).
   useEffect(() => {
     if (Platform.OS !== 'web' || !business?.cover_url || typeof document === 'undefined') return;
@@ -685,6 +697,13 @@ export default function PublicBookScreen() {
     ? { uri: business.cover_url }
     : (category?.image ?? null);
   const gallery = normalizeGalleryUrls(business.gallery_urls).filter((u) => !brokenImages[u]);
+  // Coperta = imaginile din galerie. Fără galerie, rămâne coperta firmei. Fără poze de profil.
+  const coverSlides: { key: string; source: ImageSourcePropType; url?: string }[] =
+    gallery.length > 0
+      ? gallery.map((url) => ({ key: url, source: { uri: url }, url }))
+      : coverSource
+        ? [{ key: 'business-cover', source: coverSource }]
+        : [];
   const descriptionText = effectiveDescription({
     description: business.description,
     name: business.name,
@@ -692,12 +711,27 @@ export default function PublicBookScreen() {
     city: business.city,
     county: business.county,
     serviceNames: services.map((s) => s.name),
+    lang,
   });
   const callHref = telUrl(business.contact_phone);
   const whatsHref = whatsAppUrl(business.contact_phone);
   const location = locationFromBusiness(business);
   const mapsHref = buildMapsUrl(location);
+  const canDrive = hasCoordinates(location);
   const reviewCount = rating?.review_count ?? 0;
+  const latestWorks: string[] = [];
+  for (const member of staffList) {
+    const urls = normalizePortfolioUrls(member.portfolio_urls).filter((u) => !brokenImages[u]);
+    for (let i = urls.length - 1; i >= 0 && latestWorks.length < 12; i--) {
+      const url = urls[i];
+      if (!latestWorks.includes(url)) latestWorks.push(url);
+    }
+  }
+  const latestSlides: LatestSlide[] = latestWorks.map((url) => ({
+    key: `work:${url}`,
+    kind: 'work' as const,
+    url,
+  }));
   const showReviews = reviewCount >= 3 && reviewSnippets.length > 0;
   const todayKey = (
     ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
@@ -725,11 +759,12 @@ export default function PublicBookScreen() {
   // "de la X lei" doar când toate serviciile au preț (minimul > 0).
   const minPrice =
     services.length > 0 ? Math.min(...services.map((s) => Number(s.price) || 0)) : 0;
-  // Echipa = selectorul de specialist: 2 carduri pe rând (1 sub 360px), primul „Oricine disponibil”.
+  // Echipa arată toți specialiștii activi, nu doar pe cei ai serviciului bifat.
+  // 2 carduri pe rând (1 sub 360px), primul „Oricine disponibil”.
   const teamCellStyle = windowWidth < 360 ? styles.teamCellFull : styles.teamCellHalf;
   const teamCards: { id: string | null; member: Staff | null }[] = [
     { id: null, member: null },
-    ...eligibleStaff.map((m) => ({ id: m.id, member: m })),
+    ...staffList.map((m) => ({ id: m.id, member: m })),
   ];
   const teamSection =
     staffList.length > 0 ? (
@@ -738,6 +773,7 @@ export default function PublicBookScreen() {
         <View style={styles.teamGrid}>
           {teamCards.map(({ id, member }) => {
             const on = staffId === id;
+            const canPick = !id || staffOffersServices(staffServices, id, serviceIds);
             const phone = id ? staffPhones[id] : undefined;
             const phoneHref = phone ? telUrl(phone) : null;
             const portfolio = member
@@ -753,8 +789,9 @@ export default function PublicBookScreen() {
               <Pressable
                 key={id ?? 'any'}
                 accessibilityRole="button"
-                accessibilityState={{ selected: on }}
+                accessibilityState={{ selected: on, disabled: !canPick }}
                 accessibilityLabel={name}
+                disabled={!canPick}
                 onPress={() => {
                   setStaffId(id);
                   setSelected(null);
@@ -762,6 +799,7 @@ export default function PublicBookScreen() {
                 style={[
                   styles.teamCard,
                   teamCellStyle,
+                  canPick ? null : styles.teamCardOff,
                   {
                     backgroundColor: on ? TEAM_SELECTED_BG : t.colors.surface,
                     borderColor: on ? TEAM_SELECTED : t.colors.border,
@@ -841,6 +879,48 @@ export default function PublicBookScreen() {
       </>
     ) : null;
 
+  const hoursSection = (
+    <>
+      <SectionTitle>{tr('page.hours')}</SectionTitle>
+      <View
+        style={[
+          styles.hoursCard,
+          { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+        ]}
+      >
+        {weekDays.map((d) => {
+          const h = business.working_hours?.[d.key];
+          const isToday = d.key === todayKey;
+          return (
+            <View key={d.key} style={styles.hoursRow}>
+              <Text
+                style={[
+                  styles.hoursDay,
+                  { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
+                ]}
+              >
+                {d.label}
+              </Text>
+              <Text
+                style={[
+                  styles.hoursVal,
+                  {
+                    color: isToday ? t.colors.text : t.colors.textMuted,
+                    fontWeight: isToday ? '700' : '400',
+                  },
+                ]}
+              >
+                {h && !h.closed
+                  ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
+                  : tr('hours.closed')}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </>
+  );
+
   return (
     <Screen
       wide
@@ -848,6 +928,18 @@ export default function PublicBookScreen() {
       subtitle={tr('pub.online')}
       scrollRef={scrollRef}
       onBack={goBack}
+      headerRight={
+        reviewCount >= 3 && rating?.avg_rating != null ? (
+          <View style={styles.headerScore}>
+            <Text style={[styles.reviewStars, { color: t.colors.accent }]}>
+              {'★'.repeat(Math.min(5, Math.max(1, Math.round(Number(rating.avg_rating)))))}
+            </Text>
+            <Text style={[styles.headerScoreText, { color: t.colors.textMuted }]} numberOfLines={1}>
+              {Number(rating.avg_rating).toFixed(1)} · {tr('page.reviewCount', { n: reviewCount })}
+            </Text>
+          </View>
+        ) : null
+      }
       footer={
         <>
           {catalogFailed ? (
@@ -897,16 +989,20 @@ export default function PublicBookScreen() {
         </>
       }
     >
-      {pageOn && coverSource ? (
-        <Image
-          source={coverSource}
-          style={[styles.cover, { backgroundColor: t.colors.surfaceMuted }, isWide ? styles.coverWide : null]}
-          resizeMode="cover"
-          accessibilityIgnoresInvertColors
+      {pageOn && coverSlides.length > 0 ? (
+        <SpecialistCover
+          slides={coverSlides}
+          wide={isWide}
+          badge={tr('book.freeCount', { n: slots.length })}
+          onImageError={markImageBroken}
         />
+      ) : pageOn ? (
+        <View style={styles.coverBadgeRow}>
+          <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
+        </View>
       ) : null}
 
-      <View style={[styles.summary, { backgroundColor: t.colors.accentSoft }]}>
+      {!pageOn ? <View style={[styles.summary, { backgroundColor: t.colors.accentSoft }]}>
         <View style={[styles.summaryIcon, { backgroundColor: t.colors.surface, overflow: 'hidden' }]}>
           {business.logo_url && !logoFailed ? (
             <Image
@@ -944,7 +1040,7 @@ export default function PublicBookScreen() {
           ) : null}
         </View>
         <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
-      </View>
+      </View> : null}
 
       {pageOn ? (
         <>
@@ -952,6 +1048,12 @@ export default function PublicBookScreen() {
             <View style={isWide ? styles.wideMain : styles.colGap}>
               <SectionTitle>{tr('page.about')}</SectionTitle>
               <Text style={[styles.bodyText, { color: t.colors.text }]}>{descriptionText}</Text>
+              {formatAddress(location) ? (
+                <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
+                  <Ionicons name="location-outline" size={14} color={t.colors.textMuted} />{' '}
+                  {formatAddress(location)}
+                </Text>
+              ) : null}
 
               <View style={styles.contactRow}>
                   <ContactChip
@@ -971,6 +1073,14 @@ export default function PublicBookScreen() {
                       icon="logo-whatsapp"
                       label={tr('page.whatsapp')}
                       onPress={() => void Linking.openURL(whatsHref)}
+                    />
+                  ) : null}
+                  {canDrive ? (
+                    <ContactChip
+                      icon="navigate"
+                      label={tr('appt.driveNow')}
+                      onPress={() => void openDriveChooser(location)}
+                      role="button"
                     />
                   ) : null}
                   {business.instagram_url ? (
@@ -1002,106 +1112,11 @@ export default function PublicBookScreen() {
                   poster={business.cover_url}
                 />
               ) : null}
-            </View>
-            <View style={isWide ? styles.wideSide : styles.colGap}>
-              <SectionTitle>{tr('page.hours')}</SectionTitle>
-              <View
-                style={[
-                  styles.hoursCard,
-                  { backgroundColor: t.colors.surface, borderColor: t.colors.border },
-                ]}
-              >
-                {weekDays.map((d) => {
-                  const h = business.working_hours?.[d.key];
-                  const isToday = d.key === todayKey;
-                  return (
-                    <View key={d.key} style={styles.hoursRow}>
-                      <Text
-                        style={[
-                          styles.hoursDay,
-                          { color: t.colors.text, fontWeight: isToday ? '800' : '400' },
-                        ]}
-                      >
-                        {d.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.hoursVal,
-                          {
-                            color: isToday ? t.colors.text : t.colors.textMuted,
-                            fontWeight: isToday ? '700' : '400',
-                          },
-                        ]}
-                      >
-                        {h && !h.closed
-                          ? formatTimeRange(h.start, h.end, tr('hours.nextDay'))
-                          : tr('hours.closed')}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-              <LocationCard location={location} />
+              {teamSection}
             </View>
           </View>
 
-          {teamSection}
 
-          {gallery.length > 0 ? (
-            <>
-              <SectionTitle>{tr('page.gallery')}</SectionTitle>
-              <View style={styles.grid}>
-                {gallery.map((url) => (
-                  <Pressable
-                    key={url}
-                    style={[styles.thumbWrap, { backgroundColor: t.colors.surfaceMuted }, isWide ? styles.thumbWrapWide : null]}
-                    accessibilityRole="imagebutton"
-                    onPress={() => setLightbox(url)}
-                  >
-                    <Image
-                      source={{ uri: url }}
-                      style={styles.thumb}
-                      resizeMode="cover"
-                      onError={() => markImageBroken(url)}
-                      accessibilityIgnoresInvertColors
-                    />
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          ) : null}
-
-          {showReviews ? (
-            <>
-              <SectionTitle>{tr('page.reviews')}</SectionTitle>
-              <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
-                ★ {Number(rating?.avg_rating ?? 0).toFixed(1)} ·{' '}
-                {tr('page.reviewCount', { n: reviewCount })}
-              </Text>
-              <View style={styles.serviceList}>
-                {reviewSnippets.map((r, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.serviceRow,
-                      { backgroundColor: t.colors.surface, borderColor: t.colors.border },
-                    ]}
-                  >
-                    <View style={styles.flex}>
-                      <Text style={[styles.reviewStars, { color: t.colors.accent }]}>
-                        {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
-                      </Text>
-                      {r.comment?.trim() ? (
-                        <Text style={[styles.serviceDesc, { color: t.colors.text }]}>
-                          {r.comment.trim()}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </>
-          ) : null}
         </>
       ) : null}
 
@@ -1288,7 +1303,229 @@ export default function PublicBookScreen() {
           />
         </View>
       ) : null}
+
+      {pageOn && (reviewSnippets.length > 0 || latestSlides.length > 0) ? (
+        <>
+          {reviewSnippets.length > 0 ? (
+            <>
+              <SectionTitle>{tr('page.reviews')}</SectionTitle>
+              <View style={styles.serviceList}>
+                {reviewSnippets.map((r, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.serviceRow,
+                      { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+                    ]}
+                  >
+                    <View style={styles.flex}>
+                      <Text style={[styles.reviewStars, { color: t.colors.accent }]}>
+                        {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
+                      </Text>
+                      {r.comment?.trim() ? (
+                        <Text style={[styles.serviceDesc, { color: t.colors.text }]}>
+                          {r.comment.trim()}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : null}
+          {latestSlides.length > 0 ? (
+            <>
+            <SectionTitle>{tr('page.latest')}</SectionTitle>
+            <LatestCarousel
+              slides={latestSlides}
+              onWorkPress={setLightbox}
+              onWorkError={markImageBroken}
+            />
+            </>
+          ) : null}
+        </>
+      ) : null}
+
+      {pageOn ? hoursSection : null}
     </Screen>
+  );
+}
+
+type LatestSlide = { key: string; kind: 'work'; url: string };
+
+const COVER_HEIGHT = 210;
+const COVER_HEIGHT_WIDE = 360;
+const COVER_AUTO_MS = 5000;
+
+function SpecialistCover({
+  slides,
+  wide,
+  badge,
+  onImageError,
+}: {
+  slides: { key: string; source: ImageSourcePropType; url?: string }[];
+  wide: boolean;
+  badge: string;
+  onImageError: (url: string) => void;
+}) {
+  const t = useTheme();
+  const isWeb = Platform.OS === 'web';
+  const scroller = useRef<ScrollView>(null);
+  const indexRef = useRef(0);
+  const [width, setWidth] = useState(0);
+  const height = wide ? COVER_HEIGHT_WIDE : COVER_HEIGHT;
+  const count = slides.length;
+
+  useEffect(() => {
+    if (count === 0) return;
+    if (indexRef.current >= count) {
+      indexRef.current = 0;
+      scroller.current?.scrollTo({ x: 0, animated: false });
+    }
+  }, [count]);
+
+  useEffect(() => {
+    if (!isWeb || count < 2 || width <= 0) return;
+    const timer = setInterval(() => {
+      const next = (indexRef.current + 1) % count;
+      indexRef.current = next;
+      scroller.current?.scrollTo({ x: next * width, animated: true });
+    }, COVER_AUTO_MS);
+    return () => clearInterval(timer);
+  }, [isWeb, count, width]);
+
+  useEffect(() => {
+    if (width <= 0) return;
+    scroller.current?.scrollTo({ x: indexRef.current * width, animated: false });
+  }, [width]);
+
+  const sync = (offsetX: number) => {
+    if (width <= 0 || count === 0) return;
+    indexRef.current = Math.max(0, Math.min(count - 1, Math.round(offsetX / width)));
+  };
+
+  return (
+    <View
+      style={[
+        styles.cover,
+        wide ? styles.coverWide : null,
+        styles.coverClip,
+        { backgroundColor: t.colors.surfaceMuted },
+      ]}
+      onLayout={(e) => {
+        const next = Math.round(e.nativeEvent.layout.width);
+        if (next > 0 && next !== width) setWidth(next);
+      }}
+    >
+      {width > 0 ? (
+        <ScrollView
+          ref={scroller}
+          horizontal
+          pagingEnabled
+          scrollEnabled={!isWeb && count > 1}
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => sync(e.nativeEvent.contentOffset.x)}
+          onScrollEndDrag={(e) => sync(e.nativeEvent.contentOffset.x)}
+        >
+          {slides.map((s) => (
+            <Image
+              key={s.key}
+              source={s.source}
+              style={{ width, height }}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+              onError={s.url ? () => onImageError(s.url as string) : undefined}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+      <View style={styles.coverBadge} pointerEvents="none">
+        <Badge tone="accent">{badge}</Badge>
+      </View>
+    </View>
+  );
+}
+
+function LatestCarousel({
+  slides,
+  onWorkPress,
+  onWorkError,
+}: {
+  slides: LatestSlide[];
+  onWorkPress: (url: string) => void;
+  onWorkError: (url: string) => void;
+}) {
+  const t = useTheme();
+  const isWeb = Platform.OS === 'web';
+  const scroller = useRef<ScrollView>(null);
+  const indexRef = useRef(0);
+  const [width, setWidth] = useState(0);
+  const count = slides.length;
+
+  useEffect(() => {
+    if (count === 0) return;
+    if (indexRef.current >= count) {
+      indexRef.current = 0;
+      scroller.current?.scrollTo({ x: 0, animated: false });
+    }
+  }, [count]);
+
+  useEffect(() => {
+    if (!isWeb || count < 2 || width <= 0) return;
+    const timer = setInterval(() => {
+      const next = (indexRef.current + 1) % count;
+      indexRef.current = next;
+      scroller.current?.scrollTo({ x: next * width, animated: true });
+    }, COVER_AUTO_MS);
+    return () => clearInterval(timer);
+  }, [isWeb, count, width]);
+
+  useEffect(() => {
+    if (width <= 0) return;
+    scroller.current?.scrollTo({ x: indexRef.current * width, animated: false });
+  }, [width]);
+
+  const sync = (offsetX: number) => {
+    if (width <= 0 || count === 0) return;
+    indexRef.current = Math.max(0, Math.min(count - 1, Math.round(offsetX / width)));
+  };
+
+  return (
+    <View
+      style={[styles.latestClip, { backgroundColor: t.colors.surfaceMuted }]}
+      onLayout={(e) => {
+        const next = Math.round(e.nativeEvent.layout.width);
+        if (next > 0 && next !== width) setWidth(next);
+      }}
+    >
+      {width > 0 ? (
+        <ScrollView
+          ref={scroller}
+          horizontal
+          pagingEnabled
+          scrollEnabled={!isWeb && count > 1}
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => sync(e.nativeEvent.contentOffset.x)}
+          onScrollEndDrag={(e) => sync(e.nativeEvent.contentOffset.x)}
+        >
+          {slides.map((slide) => (
+            <Pressable
+              key={slide.key}
+              accessibilityRole="imagebutton"
+              onPress={() => onWorkPress(slide.url)}
+            >
+              <Image
+                source={{ uri: slide.url }}
+                style={{ width, height: 240 }}
+                resizeMode="cover"
+                accessibilityIgnoresInvertColors
+                onError={() => onWorkError(slide.url)}
+              />
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+    </View>
   );
 }
 
@@ -1296,6 +1533,7 @@ function ContactChip({
   icon,
   label,
   onPress,
+  role = 'link',
 }: {
   icon:
     | 'call-outline'
@@ -1303,14 +1541,16 @@ function ContactChip({
     | 'logo-instagram'
     | 'logo-facebook'
     | 'map-outline'
-    | 'share-social-outline';
+    | 'share-social-outline'
+    | 'navigate';
   label: string;
   onPress: () => void;
+  role?: 'link' | 'button';
 }) {
   const t = useTheme();
   return (
     <Pressable
-      accessibilityRole="link"
+      accessibilityRole={role}
       accessibilityLabel={label}
       onPress={onPress}
       style={({ pressed }) => [
@@ -1358,12 +1598,14 @@ const styles = StyleSheet.create({
   serviceDesc: { fontSize: fontSize.sm, opacity: 0.9 },
   serviceMeta: { fontSize: fontSize.sm },
   slotsLoading: { paddingVertical: spacing['2xl'], alignItems: 'center' },
-  cover: { width: '100%', height: 210, borderRadius: radius.lg },
-  coverWide: { height: 360 },
+  cover: { width: '100%', height: COVER_HEIGHT, borderRadius: radius.lg },
+  coverWide: { height: COVER_HEIGHT_WIDE },
+  coverClip: { overflow: 'hidden', position: 'relative' },
+  coverBadge: { position: 'absolute', top: spacing.md, right: spacing.md },
+  coverBadgeRow: { alignItems: 'flex-end' },
   wideRow: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
   wideMain: { flex: 1.6, gap: spacing.md, minWidth: 0 },
-  wideSide: { flex: 1, gap: spacing.md, minWidth: 0 },
-  thumbWrapWide: { width: '23%' },
+
   colGap: { gap: spacing.md },
   bodyText: { fontSize: fontSize.md, lineHeight: 23 },
   contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -1419,10 +1661,17 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   teamCallText: { fontSize: fontSize.sm, fontWeight: '700', flexShrink: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  thumbWrap: { width: '31%', aspectRatio: 1 },
-  thumb: { width: '100%', height: '100%', borderRadius: radius.md },
   reviewStars: { fontSize: fontSize.md },
+  teamCardOff: { opacity: 0.5 },
+  headerScore: { alignItems: 'flex-end', maxWidth: 140 },
+  headerScoreText: { fontSize: fontSize.xs },
+  latestClip: {
+    width: '100%',
+    height: 240,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+
   hoursCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   hoursDay: { fontSize: fontSize.sm },

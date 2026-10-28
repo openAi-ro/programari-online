@@ -176,6 +176,7 @@ function BusinessPageSettingsScreen() {
         city: business.city,
         county: business.county,
         serviceNames,
+        lang,
       }).slice(0, MAX_DESCRIPTION_LENGTH)
     );
   }

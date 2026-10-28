@@ -1465,6 +1465,7 @@ export const ro = {
   'page.team': 'Echipa',
   'page.gallery': 'Galerie',
   'page.reviews': 'Recenzii',
+  'page.latest': 'Ultimele lucrări',
   'page.hours': 'Program',
   'page.closed': 'Închis',
   'page.call': 'Sună',

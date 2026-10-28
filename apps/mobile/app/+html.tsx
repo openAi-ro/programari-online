@@ -42,6 +42,13 @@ export default function Root({ children }: { children: ReactNode }) {
             __html: `(function(){try{var h=location.hostname;var ok=location.protocol==='https:'||h==='localhost'||h==='127.0.0.1';if(!ok||!('serviceWorker' in navigator))return;window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(function(r){r.update();}).catch(function(){});});}catch(e){}})();`,
           }}
         />
+
+        {/* Inspector de culori: se încarcă doar cu ?color-inspect=1 (sau steagul din localStorage) ori pe localhost. Pe producție, vizitatorii obișnuiți nu descarcă nimic și nu au scurtătura Alt+Shift+C. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var h=location.hostname;var dev=h==='localhost'||h==='127.0.0.1';var on=/[?&]color-inspect=1(&|$)/.test(location.search)||localStorage.getItem('promixt-color-inspect')==='1';if(!dev&&!on)return;var s=document.createElement('script');s.src='/color-inspector.js?v=20261014-drag-resize';s.defer=true;document.head.appendChild(s);}catch(e){}})();`,
+          }}
+        />
       </head>
       <body {...bodyAttributes}>
         {children}

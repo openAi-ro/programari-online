@@ -1467,6 +1467,7 @@ export const en: typeof ro = {
   'page.team': 'Team',
   'page.gallery': 'Gallery',
   'page.reviews': 'Reviews',
+  'page.latest': 'Latest work',
   'page.hours': 'Opening hours',
   'page.closed': 'Closed',
   'page.call': 'Call',

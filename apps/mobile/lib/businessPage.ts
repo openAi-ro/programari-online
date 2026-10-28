@@ -1,4 +1,4 @@
-import { trKey, translateTo } from './i18n';
+import { translateTo, type AppLanguage } from './i18n';
 import { normalizePhoneE164 } from './phone';
 
 /** Limite aliniate cu migrarea v60 (check-uri în DB). */
@@ -38,6 +38,7 @@ export function effectiveDescription(input: {
   city?: string | null;
   county?: string | null;
   serviceNames: readonly string[];
+  lang?: AppLanguage;
 }): string {
   const own = (input.description ?? '').trim();
   if (own) return own;
@@ -54,7 +55,11 @@ export function buildAutoDescription(input: {
   city?: string | null;
   county?: string | null;
   serviceNames: readonly string[];
+  lang?: AppLanguage;
 }): string {
+  const lang = input.lang ?? 'ro';
+  const say = (key: Parameters<typeof translateTo>[1], vars?: Parameters<typeof translateTo>[2]) =>
+    translateTo(lang, key, vars);
   const parts: string[] = [];
   const name = input.name.trim();
   const city = input.city?.trim() ?? '';
@@ -64,27 +69,27 @@ export function buildAutoDescription(input: {
     : '';
   if (name) {
     if (category && city) {
-      parts.push(translateTo('ro', 'page.autoWelcomeCatCity', { name, category, city }));
+      parts.push(say('page.autoWelcomeCatCity', { name, category, city }));
     } else if (category) {
-      parts.push(translateTo('ro', 'page.autoWelcomeCat', { name, category }));
+      parts.push(say('page.autoWelcomeCat', { name, category }));
     } else {
-      parts.push(translateTo('ro', 'page.autoWelcome', { name }));
+      parts.push(say('page.autoWelcome', { name }));
     }
   }
 
   const place = [city, input.county?.trim()].filter(Boolean).join(', ');
   // Orașul deja numit în prima propoziție nu se repetă.
-  if (place && !(category && city)) parts.push(translateTo('ro', 'page.autoPlace', { place }));
+  if (place && !(category && city)) parts.push(say('page.autoPlace', { place }));
 
   const names = input.serviceNames.map((s) => s.trim()).filter(Boolean);
   if (names.length > 0) {
     const listed = names.slice(0, AUTO_DESCRIPTION_SERVICES).join(', ');
     const suffix =
-      names.length > AUTO_DESCRIPTION_SERVICES ? ` ${translateTo('ro', 'page.autoMore')}` : '';
-    parts.push(translateTo('ro', 'page.autoServices', { services: `${listed}${suffix}` }));
+      names.length > AUTO_DESCRIPTION_SERVICES ? ` ${say('page.autoMore')}` : '';
+    parts.push(say('page.autoServices', { services: `${listed}${suffix}` }));
   }
 
-  parts.push(translateTo('ro', 'page.autoCta'));
+  parts.push(say('page.autoCta'));
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 

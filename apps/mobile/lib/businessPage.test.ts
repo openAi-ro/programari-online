@@ -63,6 +63,15 @@ function main() {
   assert(!poor.includes('..'), 'sablon sarac: fara puncte duble');
   assert(!poor.includes('Oferim') && !poor.includes('We offer'), 'sablon sarac: fara servicii');
   assert(poor.length > 0, 'sablon sarac: totusi are bun-venit + CTA');
+  const enText = buildAutoDescription({
+    name: 'Salon Ana',
+    categoryLabel: 'Hair',
+    city: 'Cluj-Napoca',
+    serviceNames: [],
+    lang: 'en',
+  });
+  assert(enText.includes('Welcome to Salon Ana, hair in Cluj-Napoca!'), 'sablon en');
+  assert(!enText.includes('Bine ai venit'), 'sablon en nu e romana');
 
   // Telefon public -> tel: / wa.me
   assert(telUrl('0722 111 222') === 'tel:+40722111222', 'tel url din numar national');
