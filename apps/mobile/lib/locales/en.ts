@@ -1087,7 +1087,6 @@ export const en: typeof ro = {
   'cal.phone': 'Phone',
   'cal.email': 'Email (optional)',
   'qa.title': 'New booking',
-  'qa.newBooking': 'New booking',
   'qa.book': 'Book',
   'qa.client': 'Client',
   'qa.phone': 'Phone',

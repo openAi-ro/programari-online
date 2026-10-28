@@ -1085,7 +1085,6 @@ export const ro = {
   'cal.phone': 'Telefon',
   'cal.email': 'Email (opțional)',
   'qa.title': 'Programare nouă',
-  'qa.newBooking': 'Programare nouă',
   'qa.book': 'Programează',
   'qa.client': 'Client',
   'qa.phone': 'Telefon',

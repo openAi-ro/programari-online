@@ -353,14 +353,6 @@ function BusinessClientsScreen() {
         placeholder={tr('cli.searchPh')}
         icon="search-outline"
       />
-      {business ? (
-        <Button
-          label={tr('qa.newBooking')}
-          icon="add"
-          size="sm"
-          onPress={() => setQuickAdd({ client: null })}
-        />
-      ) : null}
       <View style={styles.chips}>
         {[
           { key: 'all', label: tr('cli.allClients'), on: !inactiveOnly },
