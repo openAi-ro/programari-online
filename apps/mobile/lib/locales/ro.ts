@@ -362,6 +362,7 @@ export const ro = {
   'chat.firstMessageHint': 'Fiecare parte poate trimite primul mesaj.',
   'chat.goBack': 'Întoarce',
 
+  'loc.countyPrefix': 'Jud. {county}',
   'loc.seeOnMap': 'Vezi locația pe hartă',
   'loc.gpsSaved': 'Coordonate GPS salvate — poți porni navigarea acum.',
   'loc.openForDirections': 'Deschide harta pentru indicații de orientare.',

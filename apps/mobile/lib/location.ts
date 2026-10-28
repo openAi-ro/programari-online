@@ -21,7 +21,7 @@ export function formatAddress(location: BusinessLocation): string | null {
   const parts = [
     location.address?.trim(),
     location.city?.trim(),
-    county ? `Jud. ${county}` : '',
+    county ? trKey('loc.countyPrefix', { county }) : '',
   ].filter((p): p is string => Boolean(p && p.length > 0));
   if (parts.length === 0) return null;
   return parts.join(', ');

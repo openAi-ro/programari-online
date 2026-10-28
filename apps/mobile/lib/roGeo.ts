@@ -3,6 +3,7 @@
 // Aceeași logică de potrivire ca în romania_geo.py, dar fără dependență de Python.
 
 import localitatiData from '@/assets/data/ro-localitati.json';
+import { trKey } from './i18n';
 
 type JudetEntry = { auto: string; nume: string; localitati: string[] };
 
@@ -112,7 +113,7 @@ export function adresaCompleta(
   const j = (judet ?? '').trim();
   const l = (localitate ?? '').trim();
   const s = (strada ?? '').trim();
-  if (j) parts.push(`Jud. ${j}`);
+  if (j) parts.push(trKey('loc.countyPrefix', { county: j }));
   if (l) parts.push(l);
   if (s) parts.push(s);
   return parts.join(', ');

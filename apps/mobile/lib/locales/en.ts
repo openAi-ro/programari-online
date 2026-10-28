@@ -364,6 +364,7 @@ export const en: typeof ro = {
   'chat.firstMessageHint': 'Either side can send the first message.',
   'chat.goBack': 'Go back',
 
+  'loc.countyPrefix': '{county} County',
   'loc.seeOnMap': 'See location on map',
   'loc.gpsSaved': 'GPS coordinates saved — you can start navigation now.',
   'loc.openForDirections': 'Open the map for directions.',
