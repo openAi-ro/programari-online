@@ -90,6 +90,7 @@ export function QuickAddAppointmentSheet({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const searchSeq = useRef(0);
+  const dayStripRef = useRef<ScrollView>(null);
 
   // Reset + încărcare la fiecare deschidere.
   useEffect(() => {
@@ -408,12 +409,19 @@ export function QuickAddAppointmentSheet({
             ) : null}
 
             <SectionTitle>{tr('qa.day')}</SectionTitle>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+            <ScrollView ref={dayStripRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {days.map((d) => {
                 const on = d === day;
                 const date = new Date(`${d}T12:00:00Z`);
                 return (
-                  <Pressable key={d} onPress={() => setDay(d)} style={[chip(on), styles.dayChip]} accessibilityRole="button" accessibilityLabel={d}>
+                  <Pressable
+                    key={d}
+                    onPress={() => setDay(d)}
+                    onLayout={on ? (e) => dayStripRef.current?.scrollTo({ x: Math.max(0, e.nativeEvent.layout.x - 48), animated: false }) : undefined}
+                    style={[chip(on), styles.dayChip]}
+                    accessibilityRole="button"
+                    accessibilityLabel={d}
+                  >
                     <Text style={[chipText(on), { fontSize: fontSize.xs }]}>
                       {d === today ? tr('qa.today') : formatInTimeZone(date, 'UTC', 'EEE')}
                     </Text>
