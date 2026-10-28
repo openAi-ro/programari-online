@@ -632,7 +632,7 @@ export function SettingRow({
     <>
       {icon ? (
         <View style={[styles.settingIcon, { backgroundColor: t.colors.surfaceMuted }]}>
-          <Ionicons name={icon} size={18} color={danger ? t.colors.danger : t.colors.accent} />
+          <Ionicons name={icon} size={20} color={danger ? t.colors.danger : t.colors.accent} />
         </View>
       ) : null}
       <View style={styles.flex}>
@@ -899,7 +899,7 @@ export function ErrorState({
   return (
     <View style={styles.empty}>
       <View style={[styles.emptyIcon, { backgroundColor: t.colors.dangerSoft }]}>
-        <Ionicons name={icon} size={30} color={t.colors.danger} />
+        <Ionicons name={icon} size={32} color={t.colors.danger} />
       </View>
       <Text style={[styles.emptyTitle, { color: t.colors.text }]}>{title}</Text>
       {description ? (
@@ -949,7 +949,7 @@ export function EmptyState({
           { backgroundColor: t.colors.surfaceMuted },
         ]}
       >
-        <Ionicons name={icon} size={compact ? 22 : 30} color={t.colors.textFaint} />
+        <Ionicons name={icon} size={compact ? 22 : 32} color={t.colors.textFaint} />
       </View>
       <Text style={[styles.emptyTitle, compact ? styles.emptyTitleCompact : null, { color: t.colors.text }]}>
         {title}
