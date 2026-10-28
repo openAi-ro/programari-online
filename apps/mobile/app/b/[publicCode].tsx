@@ -1319,8 +1319,8 @@ export default function PublicBookScreen() {
                     ]}
                   >
                     <View style={styles.flex}>
-                      <Text style={[styles.reviewStars, { color: t.colors.accent }]}>
-                        {'★'.repeat(Math.min(5, Math.max(1, r.rating)))}
+                      <Text style={[styles.reviewScore, { color: t.colors.accent }]}>
+                        {'★'} {Math.min(5, Math.max(1, r.rating))}
                       </Text>
                       {r.comment?.trim() ? (
                         <Text style={[styles.serviceDesc, { color: t.colors.text }]}>
@@ -1662,6 +1662,7 @@ const styles = StyleSheet.create({
   },
   teamCallText: { fontSize: fontSize.sm, fontWeight: '700', flexShrink: 1 },
   reviewStars: { fontSize: fontSize.md },
+  reviewScore: { fontSize: fontSize.xs, fontWeight: '700' },
   teamCardOff: { opacity: 0.5 },
   headerScore: { alignItems: 'flex-end', maxWidth: 140 },
   headerScoreText: { fontSize: fontSize.xs },
