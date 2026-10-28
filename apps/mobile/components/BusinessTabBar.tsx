@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/components/ui';
 import { useT, type TrKey } from '@/lib/i18n';
-import { spacing } from '@/constants/theme';
+import { fontSize, spacing } from '@/constants/theme';
 import { markNavStart } from '@/lib/navTiming';
 import { TabCountBadge } from '@/components/CountBadge';
 import { canSeeClientsAndReports } from '@/lib/teamAccess';
@@ -88,7 +88,7 @@ const TABS: {
 ];
 
 /**
- * Business-only bottom bar (5 tabs).
+ * Business-only bottom bar (up to 6 tabs, 12 px labels; no auto-shrink below 12).
  * Preferred: rendered once as Tabs `tabBar={...}` so screens stay mounted.
  * Fallback: pathname + router.replace (should be rare after Pas 5).
  */
@@ -172,8 +172,6 @@ export function BusinessTabBar({
             <Text
               style={[styles.label, { color }]}
               numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
               ellipsizeMode="tail"
             >
               {tr(tab.labelKey)}
@@ -199,7 +197,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   label: {
-    fontSize: 10,
+    fontSize: fontSize.xs,
     fontWeight: '600',
     flexShrink: 1,
     minWidth: 0,

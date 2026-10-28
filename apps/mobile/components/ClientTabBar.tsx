@@ -67,14 +67,14 @@ const TABS: {
 ];
 
 const BAR_PAD_X = spacing.xs;
-const ITEM_PAD_X = 2;
+const ITEM_PAD_X = 0;
 /** Lățimea celei mai lungi etichete („Programări", „Messages") la weight 600 ≈ 5 em; +8% rezervă. */
 const LONGEST_LABEL_EM = 5.4;
-const MIN_LABEL_SIZE = 9;
+const MIN_LABEL_SIZE = 11;
 
 /**
  * Mărimea etichetei din lățimea reală a unui tab: 12 px când încape (≥ ~400 px),
- * coboară în pași de 0,5 px pe ecrane înguste (390 → 11, 360 → 10) ca să nu fie tăiată
+ * coboară în pași de 0,5 px pe ecrane înguste (minim 11 px la 360–390) ca să nu fie tăiată
  * („Program…"). adjustsFontSizeToFit nu există pe web, deci nu ne bazăm pe el.
  */
 function labelFontSize(barWidth: number): number {
@@ -147,8 +147,6 @@ export function ClientTabBar({
             <Text
               style={[styles.label, { color, fontSize: labelSize }]}
               numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
               ellipsizeMode="tail"
             >
               {tr(tab.labelKey)}
