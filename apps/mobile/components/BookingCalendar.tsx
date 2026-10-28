@@ -16,9 +16,6 @@ import {
 } from '@/lib/bookingCalendar';
 import { useLanguage } from '@/lib/i18n';
 
-const SELECTED_BG = '#2dd4bf';
-const SELECTED_TEXT = '#0b1220';
-
 type Props = CalendarRules & {
   /** Ziua aleasă, "YYYY-MM-DD". */
   value: string;
@@ -101,8 +98,8 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
                   testID={`calendar-day-${ymd}`}
                   style={[
                     styles.day,
-                    selected ? { backgroundColor: SELECTED_BG } : null,
-                    today && !selected ? { borderWidth: 1, borderColor: SELECTED_BG } : null,
+                    selected ? { backgroundColor: t.colors.accent } : null,
+                    today && !selected ? { borderWidth: 1, borderColor: t.colors.accent } : null,
                   ]}
                 >
                   <Text
@@ -110,7 +107,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
                       styles.dayText,
                       {
                         color: selected
-                          ? SELECTED_TEXT
+                          ? t.colors.onAccent
                           : disabled
                             ? t.colors.textMuted
                             : t.colors.text,
