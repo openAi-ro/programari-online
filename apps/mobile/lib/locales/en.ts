@@ -521,7 +521,6 @@ export const en: typeof ro = {
   'home.title': 'Bookings',
   'home.nextAppointment': 'Next booking',
   'home.untilLocal': 'until {time} · business local time',
-  'home.bookAgain': 'Book again',
   'home.seeDetails': 'See details',
   'home.noUpcoming': 'No upcoming bookings',
   'home.noUpcomingDesc': 'Use the Scan QR button below or enter the public code / link.',

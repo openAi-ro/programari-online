@@ -519,7 +519,6 @@ export const ro = {
   'home.title': 'Programări',
   'home.nextAppointment': 'Următoarea programare',
   'home.untilLocal': 'până la {time} · ora locală a business-ului',
-  'home.bookAgain': 'Rezervă din nou',
   'home.seeDetails': 'Vezi detalii',
   'home.noUpcoming': 'Nicio programare viitoare',
   'home.noUpcomingDesc': 'Folosește butonul Scanează QR de mai jos sau introdu codul / linkul public.',

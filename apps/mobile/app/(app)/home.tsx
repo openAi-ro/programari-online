@@ -32,15 +32,9 @@ import { fetchMyBusiness } from '@/lib/myBusiness';
 import { appModeFrom, canSwitchAppMode } from '@/lib/teamAccess';
 import { canConfirmAttendance, mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { extractPublicCode } from '@/lib/bookingLink';
-import {
-  hasLocation,
-  openDriveChooser,
-  type BusinessLocation,
-} from '@/lib/location';
 import { presentLocalBookingNotification } from '@/lib/notifications';
 import { statusMeta } from '@/lib/status';
 import { trKey, useT, type TrKey } from '@/lib/i18n';
-import { appointmentNextHint } from '@/lib/appointmentNextHint';
 import {
   getFavoriteIds,
   subscribeFavorites,
@@ -629,18 +623,6 @@ function ClientHome({
   const [codeError, setCodeError] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
-  const nextLocation: BusinessLocation | null = next
-    ? {
-        county: next.county,
-        city: next.city,
-        address: next.address,
-        mapsUrl: next.mapsUrl,
-        latitude: next.latitude,
-        longitude: next.longitude,
-      }
-    : null;
-  const canDriveNext =
-    Boolean(nextLocation && next?.status === 'approved' && hasLocation(nextLocation));
 
   function openByCode() {
     setCodeError(null);
@@ -738,11 +720,6 @@ function ClientHome({
               {tr('home.untilLocal', { time: formatInTimeZone(new Date(next.end_at), next.timezone, 'HH:mm') })}
 
             </Text>
-            <Text style={[styles.nextHint, { color: t.colors.textMuted }]} numberOfLines={2}>
-              {appointmentNextHint(next.status, {
-                attendanceConfirmed: next.attendanceConfirmed,
-              })}
-            </Text>
           </View>
 
           {confirmError ? (
@@ -763,44 +740,6 @@ function ClientHome({
                   labelNumberOfLines={1}
                   loading={confirmBusy}
                   onPress={() => void confirmAttendanceInline()}
-                />
-              </View>
-            ) : null}
-            {next.publicCode ? (
-              <View style={styles.nextAction}>
-                <Button
-                  label={tr('home.bookAgain')}
-                  variant="primary"
-                  size="md"
-                  icon="refresh-outline"
-                  contentAlign="start"
-                  labelNumberOfLines={1}
-                  onPress={() => {
-                    const parts: string[] = [];
-                    if (next.serviceId) {
-                      parts.push(`serviceId=${encodeURIComponent(next.serviceId)}`);
-                    }
-                    if (next.staffId) {
-                      parts.push(`staffId=${encodeURIComponent(next.staffId)}`);
-                    }
-                    const qs = parts.join('&');
-                    router.push(
-                      (`/(app)/book/${next.publicCode}` + (qs ? `?${qs}` : '')) as never
-                    );
-                  }}
-                />
-              </View>
-            ) : null}
-            {canDriveNext && nextLocation ? (
-              <View style={styles.nextAction}>
-                <Button
-                  label={tr('appt.driveNow')}
-                  variant="secondary"
-                  size="md"
-                  icon="navigate-outline"
-                  contentAlign="start"
-                  labelNumberOfLines={1}
-                  onPress={() => void openDriveChooser(nextLocation)}
                 />
               </View>
             ) : null}
