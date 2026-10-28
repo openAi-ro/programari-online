@@ -489,6 +489,9 @@ verify_jwt = true
 [functions.notify-waitlist]
 verify_jwt = true
 
+[functions.send-business-invite]
+verify_jwt = true
+
 [functions.process-referrals]
 verify_jwt = true
 

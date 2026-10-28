@@ -7,6 +7,7 @@ import {
   sendEmail,
   maskRecipient,
   messageApproved,
+  messageBusinessInvite,
   messageWaitlistSpot,
   notifyClientChannels,
   resolveClientPhone,
@@ -254,4 +255,26 @@ Deno.test('chat push body labels attachments and keeps the caption', () => {
   assertEquals(chatPushBody({ body: null, attachment_kind: 'video' }, 'en'), '🎬 Video');
   assertEquals(chatPushBody({ body: 'x', attachment_kind: 'image' }, 'en'), '📷 Photo · x');
   assertEquals(chatPushBody({ body: 'a'.repeat(200) }).length, 120);
+});
+
+Deno.test('messageBusinessInvite: salon, role, link, code and expiry in Romanian', () => {
+  const m = messageBusinessInvite({
+    businessName: 'Salon Test',
+    inviterName: 'Ana',
+    role: 'staff',
+    staffName: 'Ion',
+    email: 'x@y.ro',
+    link: 'https://programari.expo.app/invitatie?token=abc',
+    token: 'abc',
+    expiresAt: '2026-11-04T10:00:00Z',
+  });
+  assertEquals(m.subject, 'Invitație în echipa Salon Test – Programări');
+  for (const part of ['„Salon Test”', 'angajat pentru specialistul Ion', 'https://programari.expo.app/invitatie?token=abc', 'x@y.ro', 'Cod invitație: abc', 'invitația apare pe ecranul principal', '2026']) {
+    assertEquals(m.text.includes(part), true, part);
+  }
+  const admin = messageBusinessInvite({
+    businessName: 'S', inviterName: 'A', role: 'admin', staffName: null, email: 'a@b.co',
+    link: 'L', token: 't', expiresAt: '2026-11-04T10:00:00Z',
+  }, 'en');
+  assertEquals(admin.text.includes('administrator'), true);
 });

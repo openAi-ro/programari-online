@@ -998,6 +998,76 @@ export function messageCancelledByBusiness(
   };
 }
 
+/** Team invitation email (business_invitations). Plain text; the link opens /invitatie?token=… */
+export function messageBusinessInvite(
+  opts: {
+    businessName: string;
+    inviterName: string;
+    role: 'staff' | 'admin';
+    staffName: string | null;
+    email: string;
+    link: string;
+    token: string;
+    expiresAt: string;
+  },
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  const expires = new Date(opts.expiresAt).toLocaleDateString(notifyLocale(lang), {
+    timeZone: 'Europe/Bucharest',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  if (lang === 'en') {
+    const role =
+      opts.role === 'admin'
+        ? 'administrator (manages everything except adding other administrators)'
+        : `employee${opts.staffName ? ` for specialist ${opts.staffName}` : ''} (sees and manages only that specialist's appointments)`;
+    return {
+      subject: `Invitation to join ${opts.businessName} on Programari`,
+      text: [
+        'Hello,',
+        '',
+        `${opts.inviterName} invited you to join the team of "${opts.businessName}" in the Programari app as ${role}.`,
+        '',
+        'Accept the invitation:',
+        opts.link,
+        '',
+        `Important: sign in with exactly this email address (${opts.email}). If you do not have an account yet, create one with this address, then open the link again.`,
+        '',
+        `If the link does not work, sign in to the app with this email address: the invitation appears on the home screen. Invitation code: ${opts.token}`,
+        '',
+        `The invitation expires on ${expires}.`,
+        '',
+        'If you were not expecting this email, you can ignore it.',
+      ].join('\n'),
+    };
+  }
+  const role =
+    opts.role === 'admin'
+      ? 'administrator (gestionezi tot, mai puțin adăugarea altor administratori)'
+      : `angajat${opts.staffName ? ` pentru specialistul ${opts.staffName}` : ''} (vezi și gestionezi doar programările acestui specialist)`;
+  return {
+    subject: `Invitație în echipa ${opts.businessName} – Programări`,
+    text: [
+      'Bună,',
+      '',
+      `${opts.inviterName} te-a invitat în echipa „${opts.businessName}” din aplicația Programări, ca ${role}.`,
+      '',
+      'Acceptă invitația:',
+      opts.link,
+      '',
+      `Important: intră în aplicație cu exact această adresă de email (${opts.email}). Dacă nu ai cont, creează-ți unul cu această adresă, apoi deschide din nou linkul.`,
+      '',
+      `Dacă linkul nu merge, intră în aplicație cu această adresă de email: invitația apare pe ecranul principal. Cod invitație: ${opts.token}`,
+      '',
+      `Invitația expiră pe ${expires}.`,
+      '',
+      'Dacă nu te așteptai la acest email, îl poți ignora.',
+    ].join('\n'),
+  };
+}
+
 /** Public web base for links in client messages. */
 export function appWebBase(): string {
   return (Deno.env.get('PUBLIC_WEB_BASE_URL') ?? 'https://programari.expo.app').replace(/\/$/, '');
