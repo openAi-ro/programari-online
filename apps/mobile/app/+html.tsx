@@ -61,11 +61,11 @@ export default function Root({ children }: { children: ReactNode }) {
 // Keep in sync with palette.ink50 / palette.ink950 in constants/theme.ts
 const responsiveBackground = `
 body {
-  background-color: #f6f8fc; /* palette.ink50 */
+  background-color: #f5f8fb; /* palette.ink50 */
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #0b1120; /* palette.ink950 */
+    background-color: #0c1222; /* palette.ink950 */
   }
 }
 /* Campurile isi deseneaza singure inelul de focus (accent), deci renuntam la conturul UA. */
