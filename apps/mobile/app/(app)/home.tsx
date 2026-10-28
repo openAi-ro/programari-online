@@ -1044,13 +1044,6 @@ function BusinessHome({
         ) : null}
       </Card>
       )}
-      <Card
-        icon="calendar-outline"
-        title={tr('home.cardCalendar')}
-        hint={tr('home.cardCalendarHint')}
-        chevron
-        onPress={() => router.push('/(app)/business/(tabs)/calendar' as never)}
-      />
       {isStaff ? null : (
       <>
       <Card
@@ -1088,13 +1081,6 @@ function BusinessHome({
         hint={tr('rev.subtitle')}
         chevron
         onPress={() => router.push('/(app)/business/reviews' as never)}
-      />
-      <Card
-        icon="settings-outline"
-        title={tr('home.cardSetup')}
-        hint={tr('home.cardSetupHint')}
-        chevron
-        onPress={() => router.push('/(app)/business/setup')}
       />
       </>
       )}
