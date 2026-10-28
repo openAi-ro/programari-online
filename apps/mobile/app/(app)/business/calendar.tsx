@@ -18,6 +18,7 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { statusMeta } from '@/lib/status';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
@@ -72,6 +73,7 @@ function mondayOfYmd(ymd: string): string {
 }
 export default function BusinessCalendarScreen() {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const back = useBack();
   const tr = useT();
   const router = useRouter();
@@ -539,7 +541,7 @@ export default function BusinessCalendarScreen() {
         onRequestClose={() => !walkinSaving && setWalkinOpen(false)}
         statusBarTranslucent
       >
-        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay, paddingBottom: spacing.md + insets.bottom }]}>
           <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
             <View style={styles.modalHead}>
               <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
@@ -750,7 +752,7 @@ export default function BusinessCalendarScreen() {
       onRequestClose={() => setDetailApt(null)}
       statusBarTranslucent
     >
-      <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+      <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay, paddingBottom: spacing.md + insets.bottom }]}>
         <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
           <View style={styles.modalHead}>
             <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
@@ -839,7 +841,8 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
   },
   modalCard: {
     borderRadius: radius.lg,

@@ -18,6 +18,7 @@ import {
 import { trKey, useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBack } from '@/lib/nav';
 import { mapBookingRpcError, staffSchedule } from '@/lib/bookingRules';
 import {
@@ -61,6 +62,7 @@ export default function BusinessRequestsScreen() {
     }
   }, []);
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const back = useBack();
   const tr = useT();
   const [rows, setRows] = useState<Row[]>([]);
@@ -696,7 +698,7 @@ export default function BusinessRequestsScreen() {
         onRequestClose={() => !moveSaving && setMoveApt(null)}
         statusBarTranslucent
       >
-        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay, paddingBottom: spacing.md + insets.bottom }]}>
           <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
             <View style={styles.modalHead}>
               <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
@@ -794,7 +796,7 @@ export default function BusinessRequestsScreen() {
         onRequestClose={() => setDeleteTarget(null)}
         statusBarTranslucent
       >
-        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay }]}>
+        <View style={[styles.modalBackdrop, { backgroundColor: t.colors.overlay, paddingBottom: spacing.md + insets.bottom }]}>
           <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
             <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
               {tr('req.confirmDeleteTitle')}
@@ -841,7 +843,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   headerBlock: { gap: spacing.md, marginBottom: spacing.xs },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', padding: spacing.md },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: spacing.md, paddingTop: spacing.md },
   modalCard: { borderRadius: radius.lg, borderWidth: 1, padding: spacing.lg, gap: spacing.md },
   modalHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   modalTitle: { flex: 1, fontSize: fontSize.lg, fontWeight: '800' },
