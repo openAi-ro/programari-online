@@ -11,7 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, ButtonRow, Callout, Field, SectionTitle, Toggle, useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { trKey, useT } from '@/lib/i18n';
+import { trKey, useLanguage, useT } from '@/lib/i18n';
+import { calendarNames } from '@/lib/bookingCalendar';
 import { staffSchedule } from '@/lib/bookingRules';
 import { listBusyRanges } from '@/lib/bookingRpc';
 import {
@@ -72,6 +73,7 @@ function QuickAddBody({
 }: Props) {
   const t = useTheme();
   const tr = useT();
+  const { lang } = useLanguage();
   const insets = useSafeAreaInsets();
   const tz = business.timezone;
   const [today] = useState(() => formatInTimeZone(new Date(), tz, 'yyyy-MM-dd'));
@@ -419,7 +421,7 @@ function QuickAddBody({
                     accessibilityLabel={d}
                   >
                     <Text style={[chipText(on), { fontSize: fontSize.xs }]}>
-                      {d === today ? tr('qa.today') : formatInTimeZone(date, 'UTC', 'EEE')}
+                      {d === today ? tr('qa.today') : calendarNames(lang).weekdays[(date.getUTCDay() + 6) % 7]}
                     </Text>
                     <Text style={chipText(on)}>{formatInTimeZone(date, 'UTC', 'dd.MM')}</Text>
                   </Pressable>

@@ -57,7 +57,7 @@ assert(r.error === null && r.payload?.p_client_user_id === 'u1' && r.payload.p_c
 const now = new Date('2026-10-28T12:00:00Z');
 assert(canNotifyClient('2026-10-28T12:30:00Z', now), 'future slot can notify');
 assert(!canNotifyClient('2026-10-28T11:30:00Z', now), 'past slot cannot notify');
-assert(!canNotifyClient(null, now), 'no slot cannot notify');
+assert(canNotifyClient(null, now), 'no slot yet: toggle stays usable');
 
 const days = quickAddDays('2026-10-28', 2, 3);
 assert(days.length === 6 && days[0] === '2026-10-26' && days[5] === '2026-10-31', 'day strip past+future', days.join(','));

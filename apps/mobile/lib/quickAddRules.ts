@@ -84,9 +84,9 @@ export function buildQuickAddPayload(
   };
 }
 
-/** Toggle-ul „Anunță clientul" are sens doar pentru o programare care n-a trecut. */
+/** Toggle-ul „Anunță clientul" se blochează doar pentru o oră deja trecută; fără oră aleasă rămâne liber. */
 export function canNotifyClient(slotEndUtc: string | null, now: Date = new Date()): boolean {
-  return !!slotEndUtc && Date.parse(slotEndUtc) > now.getTime();
+  return !slotEndUtc || Date.parse(slotEndUtc) > now.getTime();
 }
 
 /** Zile de la (azi - pastDays) la (azi + futureDays), YYYY-MM-DD, pentru selectorul de zi. */
