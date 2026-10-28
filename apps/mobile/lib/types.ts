@@ -107,6 +107,8 @@ export type Appointment = {
   client_email: string | null;
   client_phone: string | null;
   guest_name?: string | null;
+  /** Embed PostgREST `business_client:business_clients(name)` (doar pe ecranele salonului). */
+  business_client?: { name: string | null } | null;
   reminder_sent: boolean;
   reminder_24h_sent?: boolean;
   decision_notified: boolean;

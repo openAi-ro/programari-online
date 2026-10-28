@@ -3,6 +3,7 @@ import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Tex
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
+import { appointmentContactParts } from '@/lib/quickAddRules';
 import { DatePickerField } from '@/components/DatePickerField';
 import {
   Button,
@@ -140,7 +141,7 @@ export default function BusinessRequestsScreen() {
     setBusinessList(list);
     const { data, error: aErr } = await supabase
       .from('appointments')
-      .select('*')
+      .select('*, business_client:business_clients(name)')
       .in('business_id', ids);
     if (aErr) {
       setError(aErr.message, { sticky: true });
@@ -233,6 +234,7 @@ export default function BusinessRequestsScreen() {
               status?: string;
               client_email?: string | null;
               client_phone?: string | null;
+              guest_name?: string | null;
               start_at?: string;
             })
           | null;
@@ -247,7 +249,7 @@ export default function BusinessRequestsScreen() {
           !seenIdsRef.current.has(row.id)
         ) {
           seenIdsRef.current.add(row.id);
-          const contact = row.client_email || row.client_phone || trKey('req.newClient');
+          const contact = appointmentContactParts(row).join(' · ') || trKey('req.newClient');
           void presentLocalBookingNotification({
             title: trKey('req.notifTitle'),
             body: trKey('req.notifBody').replace('{contact}', contact),

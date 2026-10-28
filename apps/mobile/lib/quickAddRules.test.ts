@@ -4,6 +4,7 @@
  */
 import {
   appointmentClientParts,
+  appointmentContactParts,
   buildQuickAddPayload,
   canNotifyClient,
   quickAddDays,
@@ -73,6 +74,15 @@ assert(
 );
 assert(appointmentClientParts({ phone: '+40700000123' }).join('|') === '+40700000123', 'card: phone only when no name');
 assert(appointmentClientParts({}).length === 0, 'card: nothing to show');
+assert(
+  appointmentContactParts({ guest_name: 'Test Rapid', client_phone: '+40700000123', client_email: null })[0] === 'Test Rapid',
+  'list: guest name before phone',
+);
+assert(
+  appointmentContactParts({ guest_name: null, business_client: { name: 'Ion' }, client_phone: null, client_email: 'i@x.ro' }).join('|') === 'Ion|i@x.ro',
+  'list: business client name fallback',
+);
+assert(appointmentContactParts({ client_phone: null, client_email: null }).length === 0, 'list: nothing to show');
 
 // Edge-function gates (supabase/functions/_shared/businessCreated.ts)
 assert(isBusinessCreatedInsert('INSERT', { created_by: 'u' }), 'owner push skipped for business-created insert');

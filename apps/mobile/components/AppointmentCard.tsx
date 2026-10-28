@@ -24,6 +24,7 @@ import { localeTag, useT } from '@/lib/i18n';
 import type { Appointment } from '@/lib/types';
 import { telUrl, whatsAppUrl } from '@/lib/businessPage';
 import { hasPendingReschedule } from '@/lib/rescheduleRequest';
+import { appointmentContactParts } from '@/lib/quickAddRules';
 
 const POSTPONE_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const WHEEL_ITEM_H = 44;
@@ -132,9 +133,7 @@ export function AppointmentCard({
     appointment.end_at
   ).toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit' })}`;
 
-  const contact = [appointment.client_email, appointment.client_phone]
-    .filter(Boolean)
-    .join(' · ');
+  const contact = appointmentContactParts(appointment).join(' · ');
 
   const [confirming, setConfirming] = useState(false);
   const [expanded, setExpanded] = useState(false);

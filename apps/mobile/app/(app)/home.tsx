@@ -55,6 +55,7 @@ import { businessIdFilter } from '@/lib/realtimeFilters';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { AppointmentStatus } from '@/lib/types';
+import { appointmentContactParts } from '@/lib/quickAddRules';
 
 type Biz = { id: string; name: string; public_code: string; logo_url?: string | null };
 
@@ -513,6 +514,7 @@ export default function HomeScreen() {
               status?: string;
               client_email?: string | null;
               client_phone?: string | null;
+              guest_name?: string | null;
             }
           | null;
         if (!row?.id || row.business_id !== businessIdRef.current) return;
@@ -520,7 +522,7 @@ export default function HomeScreen() {
         if (seenPendingRef.current.has(row.id)) return;
         seenPendingRef.current.add(row.id);
         setPendingCount((c) => c + 1);
-        const contact = row.client_email || row.client_phone || trKey('home.newClient');
+        const contact = appointmentContactParts(row).join(' · ') || trKey('home.newClient');
         void presentLocalBookingNotification({
           title: trKey('notif.newBookingTitle'),
           body: trKey('home.pendingPushBody', { contact }),

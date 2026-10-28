@@ -31,23 +31,10 @@ import {
   type StaffUnavailability,
 } from '@/lib/staffUnavailability';
 import type { Appointment, BusinessProfile, Staff } from '@/lib/types';
-import { formatPhoneDisplay } from '@/lib/phone';
-import { appointmentClientParts } from '@/lib/quickAddRules';
+import { appointmentContactParts } from '@/lib/quickAddRules';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type CalendarStaff = Pick<Staff, 'id' | 'name' | 'color' | 'working_hours' | 'break_hours'>;
-type CalendarAppointment = Appointment & { business_client?: { name: string | null } | null };
-
-/** Nume (programare / fișă client), apoi telefon și email. */
-function clientParts(a: CalendarAppointment): string[] {
-  return appointmentClientParts({
-    guestName: a.guest_name,
-    businessClientName: a.business_client?.name,
-    phone: a.client_phone ? formatPhoneDisplay(a.client_phone) : null,
-    email: a.client_email,
-  });
-}
-
 function toYmd(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -76,8 +63,8 @@ export default function BusinessCalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
-  const [rows, setRows] = useState<CalendarAppointment[]>([]);
-  const [detailApt, setDetailApt] = useState<CalendarAppointment | null>(null);
+  const [rows, setRows] = useState<Appointment[]>([]);
+  const [detailApt, setDetailApt] = useState<Appointment | null>(null);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const dayInitRef = useRef(false);
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
@@ -149,7 +136,7 @@ export default function BusinessCalendarScreen() {
     if (aErr) {
       setError(aErr.message, { sticky: true });
     } else {
-      setRows((data ?? []) as CalendarAppointment[]);
+      setRows((data ?? []) as Appointment[]);
     }
     setLoading(false);
   }, [dateLocal, staffFilter, viewMode]);
@@ -313,7 +300,7 @@ export default function BusinessCalendarScreen() {
           const meta = statusMeta(a.status);
           const start = formatInTimeZone(new Date(a.start_at), business.timezone, 'HH:mm');
           const end = formatInTimeZone(new Date(a.end_at), business.timezone, 'HH:mm');
-          const contact = clientParts(a).join(' · ');
+          const contact = appointmentContactParts(a).join(' · ');
           return (
             <Pressable
               key={a.id}
@@ -418,8 +405,8 @@ export default function BusinessCalendarScreen() {
               <Text style={{ color: t.colors.textMuted }}>
                 {formatInTimeZone(new Date(detailApt.start_at), business.timezone, 'dd.MM.yyyy HH:mm')} - {formatInTimeZone(new Date(detailApt.end_at), business.timezone, 'HH:mm')}
               </Text>
-              {clientParts(detailApt).length > 0 ? (
-                <Text style={{ color: t.colors.textMuted }}>{clientParts(detailApt).join(' · ')}</Text>
+              {appointmentContactParts(detailApt).length > 0 ? (
+                <Text style={{ color: t.colors.textMuted }}>{appointmentContactParts(detailApt).join(' · ')}</Text>
               ) : null}
               {detailApt.no_show ? (
                 <Text style={{ color: t.colors.danger, fontWeight: '700' }}>{tr('cli.noShow')}</Text>

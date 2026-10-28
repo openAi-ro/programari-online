@@ -2,7 +2,7 @@
  * v101 (3.03): reguli pure pentru programarea rapidă din business (fără Supabase) →
  * testabile cu `npx tsx lib/quickAddRules.test.ts`.
  */
-import { normalizePhoneE164 } from './phone';
+import { formatPhoneDisplay, normalizePhoneE164 } from './phone';
 
 export type BusinessClientContact = {
   /** fișa business_clients; null = client cu cont fără fișă încă */
@@ -113,4 +113,22 @@ export function appointmentClientParts(input: {
   const name = input.guestName?.trim() || input.businessClientName?.trim() || '';
   const parts = [name, input.phone?.trim() ?? '', input.email?.trim() ?? ''].filter(Boolean);
   return parts.filter((x, i) => parts.indexOf(x) === i);
+}
+
+/**
+ * Contactul clientului pe orice listă a salonului (calendar, Cereri, waitlist, notificări):
+ * numele întâi, apoi telefonul formatat și emailul.
+ */
+export function appointmentContactParts(row: {
+  guest_name?: string | null;
+  business_client?: { name: string | null } | null;
+  client_phone?: string | null;
+  client_email?: string | null;
+}): string[] {
+  return appointmentClientParts({
+    guestName: row.guest_name,
+    businessClientName: row.business_client?.name,
+    phone: row.client_phone ? formatPhoneDisplay(row.client_phone) : null,
+    email: row.client_email,
+  });
 }

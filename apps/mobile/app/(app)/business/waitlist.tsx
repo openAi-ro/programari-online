@@ -23,6 +23,7 @@ import { getCurrentUser } from '@/lib/currentUser';
 import type { WaitlistEntry } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 import { managerOnly } from '@/components/ManagerOnly';
+import { appointmentContactParts } from '@/lib/quickAddRules';
 
 type Row = WaitlistEntry & {
   services?: { name: string | null } | null;
@@ -173,7 +174,7 @@ function BusinessWaitlistScreen() {
         />
       ) : (
         filterWaitlistByDate(rows, filterDate).map((row) => {
-          const contact = [row.client_phone, row.client_email].filter(Boolean).join(' · ');
+          const contact = appointmentContactParts(row).join(' · ');
           return (
             <View
               key={row.id}
