@@ -823,7 +823,7 @@ function BusinessSetupScreen() {
       />
 
       <PickerField
-        label="Timezone"
+        label={tr('setup.timezone')}
         value={timezone}
         options={COUNTRY_TIMEZONES}
         onChange={setTimezone}

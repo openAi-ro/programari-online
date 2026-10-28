@@ -53,7 +53,7 @@ export default function ForgotPasswordScreen() {
         </Text>
 
         <Field
-          label="Email"
+          label={tr('set.email')}
           icon="mail-outline"
           autoCapitalize="none"
           keyboardType="email-address"

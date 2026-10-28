@@ -1844,7 +1844,7 @@ export default function SettingsScreen() {
       <SectionTitle>{tr('set.creds')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         <Field
-          label="Email"
+          label={tr('set.email')}
           value={emailInput}
           onChangeText={setEmailInput}
           placeholder={tr('set.emailPh')}
