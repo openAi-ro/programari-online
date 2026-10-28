@@ -14,7 +14,7 @@ import {
   SkeletonStatGrid,
   useTheme,
 } from '@/components/ui';
-import { trKey, useT } from '@/lib/i18n';
+import { useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatLei } from '@/lib/format';
@@ -57,7 +57,7 @@ export default function BusinessReportsScreen() {
     setError(null);
     const { data, error: err } = await supabase.rpc('business_report', { p_days: days });
     if (err) {
-      setError(err.message.includes('not_owner') ? trKey('members.staffOnly') : err.message);
+      setError(err.message);
       setReport(null);
     } else {
       setReport((data ?? null) as Report | null);

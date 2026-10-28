@@ -12,11 +12,6 @@ export function isBusinessRole(value: unknown): value is BusinessRole {
   return value === 'owner' || value === 'admin' || value === 'staff';
 }
 
-/** Owner și admin văd toate programările; staff vede doar programările specialistului legat. */
-export function canSeeAllAppointments(role: BusinessRole | string | null | undefined): boolean {
-  return roleRank(role) >= RANKS.admin;
-}
-
 /** Baza de clienți și rapoartele financiare: doar owner/admin, niciodată staff. */
 export function canSeeClientsAndReports(role: BusinessRole | string | null | undefined): boolean {
   return roleRank(role) >= RANKS.admin;
@@ -36,6 +31,50 @@ export function canInviteRole(
   return targetRole === 'staff';
 }
 
+/** Servicii, specialiști, echipă, profilul/pagina salonului, recenzii, listă de așteptare: owner/admin. */
 export function canManageBusinessSettings(role: BusinessRole | string | null | undefined): boolean {
   return roleRank(role) >= RANKS.admin;
+}
+
+/** Ecranele din /business pe care angajatul (staff) nu le poate deschide nici din link direct. */
+const OWNER_ADMIN_SCREENS = [
+  'setup',
+  'services',
+  'staff',
+  'packages',
+  'page',
+  'booking-button',
+  'reviews',
+  'waitlist',
+  'chat',
+  'clients',
+  'reports',
+];
+
+/** true dacă rolul nu are voie pe ruta din /business (pathname Expo Router, ex. „/business/services”). */
+export function isBusinessPathBlocked(
+  role: BusinessRole | string | null | undefined,
+  pathname: string,
+): boolean {
+  if (!role || canManageBusinessSettings(role)) return false;
+  const parts = pathname.split('?')[0].split('/').filter(Boolean);
+  const i = parts.indexOf('business');
+  const screen = i >= 0 ? parts[i + 1] : undefined;
+  return screen !== undefined && OWNER_ADMIN_SCREENS.includes(screen);
+}
+
+/** Data de expirare a unei invitații, ex. „4 noiembrie 2026” (ora României). */
+export function formatInviteDate(iso: string, lang: 'ro' | 'en'): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(lang === 'en' ? 'en-GB' : 'ro-RO', {
+    timeZone: 'Europe/Bucharest',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+export function isInviteExpired(iso: string, now: Date = new Date()): boolean {
+  return new Date(iso).getTime() <= now.getTime();
 }

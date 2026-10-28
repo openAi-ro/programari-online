@@ -8,6 +8,8 @@ import { useT, type TrKey } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { markNavStart } from '@/lib/navTiming';
 import { TabCountBadge } from '@/components/CountBadge';
+import { canSeeClientsAndReports } from '@/lib/teamAccess';
+import { useBusinessRole } from '@/lib/useBusinessRole';
 
 type TabKey = 'home' | 'requests' | 'calendar' | 'clients' | 'reports' | 'settings';
 
@@ -103,6 +105,11 @@ export function BusinessTabBar({
   const tr = useT();
   const insets = useSafeAreaInsets();
   const pathname = usePathname() || '';
+  const { role } = useBusinessRole();
+  // Angajatul nu are clienți și rapoarte; până se știe rolul, tab-urile rămân (RLS filtrează datele).
+  const tabs = role && !canSeeClientsAndReports(role)
+    ? TABS.filter((tab) => tab.key !== 'clients' && tab.key !== 'reports')
+    : TABS;
   const fromTabs = Boolean(state && navigation);
 
   const activeKeyFromTabs: TabKey | null = fromTabs
@@ -124,7 +131,7 @@ export function BusinessTabBar({
         },
       ]}
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const active = fromTabs
           ? activeKeyFromTabs === tab.key
           : tab.match(pathname);

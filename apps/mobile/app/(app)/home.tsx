@@ -9,6 +9,7 @@ import { ClientTabBar } from '@/components/ClientTabBar';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import { BizCardRow } from '@/components/BizCardRow';
+import { InvitationAcceptCard } from '@/components/InvitationAcceptCard';
 import {
   Avatar,
   Badge,
@@ -45,6 +46,7 @@ import {
 } from '@/lib/favorites';
 import { getUnreadTotal } from '@/lib/chatRpc';
 import { useForegroundInterval } from '@/lib/useForegroundInterval';
+import { useBusinessRole } from '@/lib/useBusinessRole';
 import { formatInTimeZone } from '@/lib/timezone';
 import { businessIdFilter } from '@/lib/realtimeFilters';
 import { supabase } from '@/lib/supabase';
@@ -666,6 +668,8 @@ function ClientHome({
 
       <UpdateBanner />
 
+      <InvitationAcceptCard compact />
+
       {loadError ? <Callout tone="danger" title={loadError} /> : null}
 
       {next && nextStatus ? (
@@ -896,6 +900,9 @@ function BusinessHome({
 }) {
   const t = useTheme();
   const tr = useT();
+  const { role } = useBusinessRole();
+  // Angajatul vede doar programările specialistului său: fără chat, listă de așteptare, echipă, servicii, setări.
+  const isStaff = role === 'staff';
   // Necitite din chat (același cache partajat ca badge-ul clientului): la focus
   // și la 60 s cât ecranul e în focus și aplicația în prim-plan.
   const [chatUnread, setChatUnread] = useState(0);
@@ -935,6 +942,7 @@ function BusinessHome({
 
       {!business ? (
         <>
+          <InvitationAcceptCard compact />
           <Banner
             tone="accent"
             icon="rocket-outline"
@@ -947,6 +955,7 @@ function BusinessHome({
         </>
       ) : (
         <>
+          {isStaff ? <Callout tone="info">{tr('members.staffNote')}</Callout> : null}
           {pendingCount > 0 ? (
             <Banner
               tone="warm"
@@ -999,7 +1008,7 @@ function BusinessHome({
 
       <SectionTitle>{tr('home.title')}</SectionTitle>
 
-      
+      {isStaff ? null : (
       <Card
         icon='chatbubbles-outline'
         title={tr('home.cardMessages')}
@@ -1016,6 +1025,7 @@ function BusinessHome({
           </View>
         ) : null}
       </Card>
+      )}
       <Card
         icon="calendar-outline"
         title={tr('home.cardCalendar')}
@@ -1023,6 +1033,8 @@ function BusinessHome({
         chevron
         onPress={() => router.push('/(app)/business/(tabs)/calendar' as never)}
       />
+      {isStaff ? null : (
+      <>
       <Card
         icon="notifications-outline"
         title={tr('home.cardWaitlist')}
@@ -1066,7 +1078,8 @@ function BusinessHome({
         chevron
         onPress={() => router.push('/(app)/business/setup')}
       />
-
+      </>
+      )}
 
       <SectionTitle>{tr('home.asClient')}</SectionTitle>
 

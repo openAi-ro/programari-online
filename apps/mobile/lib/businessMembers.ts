@@ -1,4 +1,6 @@
+import { functionErrorCode } from './notify-client';
 import { supabase } from './supabase';
+import { getPublicWebOrigin } from './webBase';
 import { isBusinessRole, type BusinessRole } from './teamAccess';
 import type { WalkinClientCandidate } from './walkinClientSearch';
 
@@ -24,6 +26,7 @@ export type BusinessInvitation = {
   token: string;
   expires_at: string;
   created_at: string;
+  last_sent_at: string | null;
 };
 
 export type MyBusinessInvitation = {
@@ -34,6 +37,19 @@ export type MyBusinessInvitation = {
   staff_id: string | null;
   token: string;
   expires_at: string;
+  staff_name: string | null;
+};
+
+/** Invitația deschisă din linkul /invitatie?token=… (v97: get_business_invitation). */
+export type InvitationByToken = {
+  invitation_id: string;
+  business_id: string;
+  business_name: string;
+  role: BusinessRole;
+  staff_name: string | null;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expires_at: string;
+  email_matches: boolean;
 };
 
 /** Rolul meu într-un business; proprietarul istoric fără rând de membru rămâne 'owner' (rezolvat în SQL). */
@@ -84,9 +100,33 @@ export async function fetchMyBusinessInvitations() {
   return { invitations: (data ?? []) as MyBusinessInvitation[], error: error?.message ?? null };
 }
 
+export async function fetchInvitationByToken(token: string) {
+  const { data, error } = await supabase.rpc('get_business_invitation', { p_token: token.trim() });
+  const row = Array.isArray(data) ? data[0] : data;
+  return { invitation: (row ?? null) as InvitationByToken | null, error: error?.message ?? null };
+}
+
+/** Acceptă invitația; întoarce business-ul în care tocmai am intrat. */
 export async function acceptBusinessInvitation(token: string) {
-  const { error } = await supabase.rpc('accept_business_invitation', { p_token: token.trim() });
-  return { error: error?.message ?? null };
+  const { data, error } = await supabase.rpc('accept_business_invitation', { p_token: token.trim() });
+  const row = (Array.isArray(data) ? data[0] : data) as { business_id?: string } | null;
+  return { businessId: row?.business_id ?? null, error: error?.message ?? null };
+}
+
+/** Emailul de invitație (Brevo) prin send-business-invite; serverul limitează la 1 / minut. */
+export async function sendBusinessInviteEmail(invitationId: string): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.functions.invoke('send-business-invite', {
+    body: { invitation_id: invitationId },
+  });
+  if (error) return { error: (await functionErrorCode(error)) ?? error.message };
+  const payload = data as { ok?: boolean; error?: string } | null;
+  if (payload?.ok === false) return { error: payload.error ?? 'email_failed' };
+  return { error: null };
+}
+
+/** Linkul public de acceptare, același ca în email. */
+export function invitationLink(token: string): string {
+  return `${getPublicWebOrigin()}/invitatie?token=${encodeURIComponent(token)}`;
 }
 
 export async function updateBusinessMemberRole(memberId: string, role: BusinessRole) {

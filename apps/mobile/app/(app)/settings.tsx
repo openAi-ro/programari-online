@@ -69,6 +69,7 @@ import {
 } from '@/lib/serviceChecklist';
 import type { Profile } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
+import { useBusinessRole } from '@/lib/useBusinessRole';
 
 export default function SettingsScreen() {
   const segments = useSegments();
@@ -90,6 +91,9 @@ export default function SettingsScreen() {
   const [phoneInput, setPhoneInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [appMode, setAppModeState] = useState<AppMode | null>(null);
+  const { role: bizRole } = useBusinessRole();
+  // Angajatul nu editează profilul salonului (logo, video, servicii, echipă, Google Calendar).
+  const bizManager = appMode === 'business' && bizRole !== 'staff';
   const [saving, setSaving] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushTestBusy, setPushTestBusy] = useState(false);
@@ -1273,7 +1277,7 @@ export default function SettingsScreen() {
         </View>
 
         
-        {appMode === 'business' ? (
+        {bizManager ? (
           <View style={styles.logoRow}>
             <Pressable
               onPress={openLogoPicker}
@@ -1326,7 +1330,7 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-        {appMode === 'business' ? (
+        {bizManager ? (
           <View style={styles.logoRow}>
             <Pressable
               onPress={openVideoPicker}
@@ -1368,12 +1372,12 @@ export default function SettingsScreen() {
             </View>
           </View>
         ) : null}
-        {appMode === 'business' && videoUrl && businessId ? (
+        {bizManager && videoUrl && businessId ? (
           <PromoVideo videoUrl={videoUrl} title={tr('set.promoTitle')} />
         ) : null}
 
 <Field
-          label={appMode === 'business' ? tr('set.bizPhone') : tr('cal.phone')}
+          label={bizManager ? tr('set.bizPhone') : tr('cal.phone')}
           value={phoneInput}
           onChangeText={setPhoneInput}
           placeholder="07xxxxxxxx"
@@ -1381,7 +1385,7 @@ export default function SettingsScreen() {
           autoComplete="tel"
           icon="call-outline"
           hint={
-            appMode === 'business'
+            bizManager
               ? tr('set.bizPhoneHint', { save: tr('set.saveProfile') })
               : tr('set.phoneHint', { save: tr('set.saveProfile') })
           }
@@ -1690,6 +1694,16 @@ export default function SettingsScreen() {
                 onPress={() => router.push('/(app)/business/setup' as never)}
               />
             </View>
+          ) : !bizManager ? (
+            <>
+              <Callout tone="info">{tr('members.staffNote')}</Callout>
+              <SettingRow
+                icon="qr-code-outline"
+                title={tr('qr.title')}
+                description={bizPublicCode ? tr('set.pubCodeRow', { code: bizPublicCode }) : tr('set.shareLink')}
+                onPress={() => router.push('/(app)/business/qr' as never)}
+              />
+            </>
           ) : (
             <>
               <SettingRow

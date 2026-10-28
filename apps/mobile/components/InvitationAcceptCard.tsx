@@ -1,22 +1,50 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Button, Callout, Field } from '@/components/ui';
-import { useT } from '@/lib/i18n';
+import { Button, Callout, Field, useTheme } from '@/components/ui';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { setAppMode } from '@/lib/appMode';
 import {
   acceptBusinessInvitation,
   fetchMyBusinessInvitations,
+  type BusinessRole,
   type MyBusinessInvitation,
 } from '@/lib/businessMembers';
+import { useLanguage, useT } from '@/lib/i18n';
+import { setSelectedBusinessId } from '@/lib/myBusiness';
+import { formatInviteDate } from '@/lib/teamAccess';
+import { teamErrorKey } from '@/lib/teamErrors';
+import { invalidateBusinessRole } from '@/lib/useBusinessRole';
 
-/** Acceptarea invitației de echipă: automat după email, sau manual cu codul primit de la salon. */
-export function InvitationAcceptCard({ onAccepted }: { onAccepted?: () => void }) {
+/** După acceptare: business-ul nou devine cel activ și utilizatorul ajunge direct în zona salonului. */
+export async function enterAcceptedBusiness(businessId: string | null) {
+  if (businessId) await setSelectedBusinessId(businessId);
+  await setAppMode('business');
+  invalidateBusinessRole();
+  router.replace('/(app)/business/(tabs)');
+}
+
+export function useRoleLabel() {
   const tr = useT();
+  return (r: BusinessRole) =>
+    r === 'owner' ? tr('members.roleOwner') : r === 'admin' ? tr('members.roleAdmin') : tr('members.roleStaff');
+}
+
+/**
+ * Invitațiile de echipă pentru emailul contului. `compact`: doar cardurile, nimic dacă nu există
+ * (ecranul principal); altfel și câmpul pentru cod.
+ */
+export function InvitationAcceptCard({ compact = false }: { compact?: boolean }) {
+  const t = useTheme();
+  const tr = useT();
+  const { lang } = useLanguage();
+  const roleLabel = useRoleLabel();
   const [invitations, setInvitations] = useState<MyBusinessInvitation[]>([]);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { invitations: rows } = await fetchMyBusinessInvitations();
@@ -30,47 +58,80 @@ export function InvitationAcceptCard({ onAccepted }: { onAccepted?: () => void }
   async function accept(token: string) {
     setBusy(true);
     setError(null);
-    const { error: err } = await acceptBusinessInvitation(token);
+    const { businessId, error: err } = await acceptBusinessInvitation(token);
     setBusy(false);
     if (err) {
-      setError(err);
+      setError(tr(teamErrorKey(err)));
       return;
     }
-    setMessage(tr('members.accepted'));
-    onAccepted?.();
-    await load();
+    await enterAcceptedBusiness(businessId);
   }
 
+  if (compact && invitations.length === 0 && !error) return null;
+
   return (
-    <View style={{ gap: 12 }}>
+    <View style={styles.wrap}>
       {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
-      {message ? <Callout tone="success">{message}</Callout> : null}
       {invitations.map((inv) => (
-        <Callout key={inv.invitation_id} tone="info" title={tr('members.acceptTitle')}>
-          {inv.business_name} · {inv.role}
-          {'\n'}
+        <View
+          key={inv.invitation_id}
+          style={[
+            styles.card,
+            { backgroundColor: t.colors.accentSoft, borderColor: t.colors.accent },
+          ]}
+        >
+          <View style={styles.head}>
+            <Ionicons name="people-outline" size={20} color={t.colors.accentSoftText} />
+            <Text style={[styles.title, { color: t.colors.accentSoftText }]}>{tr('members.acceptTitle')}</Text>
+          </View>
+          <Text style={[styles.body, { color: t.colors.text }]}>
+            {tr('members.acceptBody', {
+              salon: inv.business_name,
+              role: roleLabel(inv.role).toLocaleLowerCase(lang === 'en' ? 'en-GB' : 'ro-RO'),
+            })}
+            {inv.staff_name ? ` ${tr('members.acceptStaff', { staff: inv.staff_name })}` : ''}
+          </Text>
+          <Text style={[styles.help, { color: t.colors.textMuted }]}>
+            {tr(inv.role === 'admin' ? 'members.roleAdminHelp' : 'members.roleStaffHelp')}{' '}
+            {tr('members.acceptExpires', { date: formatInviteDate(inv.expires_at, lang) })}
+          </Text>
           <Button
             label={tr('members.accept')}
-            size="sm"
+            icon="checkmark-circle-outline"
+            size="md"
             loading={busy}
             onPress={() => void accept(inv.token)}
           />
-        </Callout>
+        </View>
       ))}
-      <Field
-        label={tr('members.haveCode')}
-        placeholder={tr('members.codePh')}
-        autoCapitalize="none"
-        value={code}
-        onChangeText={setCode}
-      />
-      <Button
-        label={tr('members.accept')}
-        variant="secondary"
-        loading={busy}
-        disabled={!code.trim()}
-        onPress={() => void accept(code)}
-      />
+      {compact ? null : (
+        <>
+          <Field
+            label={tr('members.haveCode')}
+            hint={tr('members.codeFromSalon')}
+            placeholder={tr('members.codePh')}
+            autoCapitalize="none"
+            value={code}
+            onChangeText={setCode}
+          />
+          <Button
+            label={tr('members.accept')}
+            variant="secondary"
+            loading={busy}
+            disabled={!code.trim()}
+            onPress={() => void accept(code)}
+          />
+        </>
+      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrap: { gap: spacing.md },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  title: { fontSize: fontSize.lg, fontWeight: '700', flex: 1 },
+  body: { fontSize: fontSize.md, lineHeight: 21 },
+  help: { fontSize: fontSize.sm, lineHeight: 18 },
+});

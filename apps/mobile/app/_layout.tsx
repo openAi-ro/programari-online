@@ -155,6 +155,8 @@ function useSessionGuard() {
       __DEV__ &&
       ((segments[0] as string) === 'dev-nav-bench' || path.startsWith('/dev-nav-bench'));
     const inAuthCallbackPath = inAuthCallback || path.startsWith('/auth/callback');
+    // Linkul de invitație ține minte tokenul și trimite singur la login (app/invitatie.tsx).
+    const inInvite = (segments[0] as string) === 'invitatie' || path.startsWith('/invitatie');
     // Ruta inexistentă ajunge pe ecranul +not-found; garda nu o trimite la login (audit C-09).
     const inNotFound = segments[0] === '+not-found' || path === '/+not-found';
 
@@ -166,6 +168,7 @@ function useSessionGuard() {
       !inPublicBook &&
       !inPublicInstall &&
       !inPublicGcal &&
+      !inInvite &&
       !inDevNavBench
     ) {
       router.replace('/(auth)/login');
@@ -274,6 +277,7 @@ function RootLayoutNav() {
         <Stack.Screen name="b/[publicCode]" />
         <Stack.Screen name="install" />
       <Stack.Screen name="gcal-connected" />
+        <Stack.Screen name="invitatie" />
       </Stack>
       <DialogHost />
     </ThemeProvider>

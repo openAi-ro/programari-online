@@ -1,4 +1,4 @@
-import { router, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -8,6 +8,8 @@ import { useT } from '@/lib/i18n';
 import { spacing } from '@/constants/theme';
 import { resolveAppMode, type AppMode } from '@/lib/appMode';
 import { getCurrentUser } from '@/lib/currentUser';
+import { isBusinessPathBlocked } from '@/lib/teamAccess';
+import { useBusinessRole } from '@/lib/useBusinessRole';
 
 /**
  * Ecranele de business sunt doar pentru conturile de business.
@@ -24,6 +26,9 @@ export const unstable_settings = {
 export default function BusinessLayout() {
   const tr = useT();
   const [mode, setMode] = useState<AppMode | null>(null);
+  const pathname = usePathname();
+  const { role } = useBusinessRole();
+  const blocked = mode === 'business' && isBusinessPathBlocked(role, pathname ?? '');
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +57,7 @@ export default function BusinessLayout() {
         <Callout tone="danger" title={tr('biz.clientAccount')}>
           {tr('biz.clientOnly')}
         </Callout>
-        <InvitationAcceptCard onAccepted={() => router.replace('/(app)/home')} />
+        <InvitationAcceptCard />
         <View style={styles.actions}>
           <Button
             label={tr('biz.backToMyBookings')}
@@ -70,9 +75,27 @@ export default function BusinessLayout() {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // Angajatul nu deschide ecranele owner/admin nici din link direct; datele sunt oricum filtrate de RLS.
+  return (
+    <View style={styles.fill}>
+      <Stack screenOptions={{ headerShown: false }} />
+      {blocked ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Screen>
+            <Callout tone="info">{tr('members.staffNoAccess')}</Callout>
+            <Button
+              label={tr('members.backToAppointments')}
+              icon="arrow-back"
+              onPress={() => router.replace('/(app)/business/(tabs)')}
+            />
+          </Screen>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   actions: { gap: spacing.md },
+  fill: { flex: 1 },
 });
