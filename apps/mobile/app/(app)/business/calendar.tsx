@@ -26,6 +26,7 @@ import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
+import { fetchBusinessRole } from '@/lib/businessMembers';
 import {
   fetchStaffUnavailability,
   type StaffUnavailability,
@@ -67,6 +68,7 @@ export default function BusinessCalendarScreen() {
   const [detailApt, setDetailApt] = useState<Appointment | null>(null);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const dayInitRef = useRef(false);
+  const staffInitRef = useRef(false);
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
   const [staffList, setStaffList] = useState<CalendarStaff[]>([]);
@@ -100,7 +102,17 @@ export default function BusinessCalendarScreen() {
       dayInitRef.current = true;
       setDateLocal(formatInTimeZone(new Date(), profile.timezone, 'yyyy-MM-dd'));
     }
-    const { data: team } = await supabase
+    if (!staffInitRef.current) {
+      // Angajatul pornește filtrat pe specialistul lui (vede și cele neasignate).
+      staffInitRef.current = true;
+      if ((await fetchBusinessRole(profile.id)) === 'staff') {
+        const { data: own } = await supabase.rpc('business_member_staff_id', { p_business_id: profile.id });
+        if (own) {
+          setStaffFilter(own as string);
+          return;
+        }
+      }
+    }    const { data: team } = await supabase
       .from('staff')
       .select('id, name, color, working_hours, break_hours')
       .eq('business_id', profile.id)

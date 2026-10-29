@@ -876,6 +876,44 @@ function BusinessHome({
     }, [refreshUnread])
   );
   useForegroundInterval(refreshUnread, 60_000, homeFocused);
+  // Angajatul nu are listă proprie pe Acasă: îi arătăm următoarea lui programare (aprobată sau în așteptare).
+  const [nextOwn, setNextOwn] = useState<{ startAt: string; tz: string; count: number } | null>(null);
+  const bizId = business?.id ?? null;
+  useFocusEffect(
+    useCallback(() => {
+      if (!isStaff || !bizId) {
+        setNextOwn(null);
+        return;
+      }
+      let alive = true;
+      (async () => {
+        const [{ data: own }, { data: bp }] = await Promise.all([
+          supabase.rpc('business_member_staff_id', { p_business_id: bizId }),
+          supabase.from('business_profiles').select('timezone').eq('id', bizId).maybeSingle(),
+        ]);
+        if (!own) return;
+        const { data, count } = await supabase
+          .from('appointments')
+          .select('start_at', { count: 'exact' })
+          .eq('business_id', bizId)
+          .eq('staff_id', own as string)
+          .in('status', ['pending', 'approved'])
+          .gte('start_at', new Date().toISOString())
+          .order('start_at', { ascending: true })
+          .limit(1);
+        if (!alive) return;
+        const first = (data ?? [])[0] as { start_at: string } | undefined;
+        setNextOwn(
+          first
+            ? { startAt: first.start_at, tz: (bp?.timezone as string | null) ?? 'Europe/Bucharest', count: count ?? 1 }
+            : null
+        );
+      })().catch(() => {});
+      return () => {
+        alive = false;
+      };
+    }, [isStaff, bizId])
+  );
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
     <Screen bottomInset={bottomInset}>
@@ -912,6 +950,18 @@ function BusinessHome({
       ) : (
         <>
           {isStaff ? <Callout tone="info">{tr('members.staffNote')}</Callout> : null}
+          {isStaff && nextOwn ? (
+            <Banner
+              tone="accent"
+              icon="calendar-outline"
+              title={tr('home.staffUpcomingTitle', { count: String(nextOwn.count) })}
+              description={tr('home.staffUpcomingNext', {
+                date: formatInTimeZone(new Date(nextOwn.startAt), nextOwn.tz, 'dd.MM.yyyy HH:mm'),
+              })}
+              actionLabel={tr('home.staffUpcomingCta')}
+              onPress={() => router.push('/(app)/business/(tabs)/calendar')}
+            />
+          ) : null}
           {canSwitch ? <AppModeSwitch target="client" /> : null}
           {pendingCount > 0 ? (
             <Banner
