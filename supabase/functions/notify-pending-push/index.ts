@@ -5,7 +5,11 @@
  * (or manual/app POST with { record } / { id, business_id, ... }).
  *
  * 1) Expo push to business owner device tokens
- * 2) WhatsApp/email to owner profile (even if no push tokens)
+ * 2) WhatsApp/email to owner profile (even if no push tokens);
+ *    auto-approved bookings: email only (no approved WhatsApp template for them)
+ * 3) New booking assigned to a staff member: push to the staff member's account
+ *    (business_members.staff_id) + email (profile email, else staff_private.email).
+ *    Skipped when that account is the owner. notification_log type STAFF_NEW_BOOKING.
  *
  * Webhook setup (Dashboard → Database → Webhooks):
  *   Table: appointments
@@ -15,11 +19,16 @@
  *   header x-webhook-secret read from Vault secret `webhook_secret` (= WEBHOOK_SECRET).
  */
 import { isBusinessCreatedInsert } from '../_shared/businessCreated.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import { bearerToken, checkWebhookSecret, isServiceRole } from '../_shared/secret-auth.ts';
 import {
+  appWebBase,
+  logNotification,
+  messageAutoApprovedOwner,
   messageNewPendingRequest,
+  messageStaffNewBooking,
+  sendEmail,
   messageRescheduledRequest,
   messageRescheduleRequested,
   notifyClientChannels,
@@ -39,6 +48,8 @@ type AppointmentRow = {
   start_at?: string;
   requested_start_at?: string | null;
   created_by?: string | null;
+  staff_id?: string | null;
+  service_name?: string | null;
 };
 
 type WebhookPayload = {
@@ -164,7 +175,7 @@ Deno.serve(async (req) => {
   if (authResult.userId) {
     const { data: live } = await admin
       .from('appointments')
-      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at, staff_id, service_name')
       .eq('id', record.id)
       .maybeSingle();
     if (!live) return jsonResponse({ error: 'appointment_not_found' }, 404);
@@ -189,7 +200,7 @@ Deno.serve(async (req) => {
   ) {
     const { data: live } = await admin
       .from('appointments')
-      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at, staff_id, service_name')
       .eq('id', record.id)
       .maybeSingle();
     if (live) {
@@ -243,7 +254,7 @@ Deno.serve(async (req) => {
     : rescheduled
     ? (lang === 'en' ? 'Booking moved' : 'Programare mutată')
     : autoApproved
-      ? (lang === 'en' ? 'Auto-approved booking' : 'Programare auto-aprobată')
+      ? (lang === 'en' ? 'New confirmed booking' : 'Programare nouă confirmată')
       : (lang === 'en' ? 'New booking request' : 'Cerere nouă de programare');
   const bodyText = requestCopy
     ? requestCopy.text
@@ -253,8 +264,8 @@ Deno.serve(async (req) => {
       : (lang === 'en' ? `${contact} moved the booking. Open the Calendar.` : `${contact} a mutat programarea. Deschide Calendarul.`)
     : autoApproved
       ? startLocal
-        ? (lang === 'en' ? `Auto-approved booking from ${contact} (${startLocal}).` : `Programare auto-aprobată de la ${contact} (${startLocal}).`)
-        : (lang === 'en' ? `Auto-approved booking from ${contact}.` : `Programare auto-aprobată de la ${contact}.`)
+        ? (lang === 'en' ? `${contact} (${startLocal}), approved automatically.` : `${contact} (${startLocal}), aprobată automat.`)
+        : (lang === 'en' ? `${contact}, approved automatically.` : `${contact}, aprobată automat.`)
       : startLocal
         ? (lang === 'en' ? `You have a pending request from ${contact} (${startLocal}). Open Requests to reply.` : `Ai o cerere pending de la ${contact} (${startLocal}). Deschide Cereri pentru a răspunde.`)
         : (lang === 'en' ? `You have a pending request from ${contact}. Open Requests to reply.` : `Ai o cerere pending de la ${contact}. Deschide Cereri pentru a răspunde.`);
@@ -362,6 +373,8 @@ Deno.serve(async (req) => {
     ? requestCopy
     : rescheduled
     ? messageRescheduledRequest(business.name, contact, startLocal, lang)
+    : autoApproved
+    ? messageAutoApprovedOwner(business.name, contact, startLocal, lang)
     : messageNewPendingRequest(business.name, contact, startLocal, lang);
   let sentWhatsapp = false;
   let sentEmail = false;
@@ -372,11 +385,12 @@ Deno.serve(async (req) => {
   } else {
     const channelResults = await notifyClientChannels({
       email: ownerProfile.email ?? null,
-      phone: ownerProfile.phone ?? null,
+      // Auto-approved: no approved WhatsApp template fits, and free text outside the 24h
+      // window always fails (Meta 131047) -> owner gets push + email only.
+      phone: autoApproved ? null : ownerProfile.phone ?? null,
       subject: msg.subject,
       text: msg.text,
-      // Template only for a real pending request (Meta drops free text outside the 24h window).
-      wa: autoApproved ? undefined : msg.wa,
+      wa: msg.wa,
       log: {
         admin,
         type: rescheduleRequested ? 'OWNER_RESCHEDULE_REQUEST' : rescheduled ? 'OWNER_RESCHEDULED' : 'OWNER_PENDING',
@@ -393,6 +407,20 @@ Deno.serve(async (req) => {
     }
   }
 
+  // --- Assigned staff member (new bookings only; not for moves) ---
+  const staff = rescheduled
+    ? { sent_push: 0, sent_email: false, reason: 'skipped_rescheduled' }
+    : await notifyAssignedStaff(admin, {
+        record: record!,
+        businessName: business.name,
+        timezone: business.timezone ?? 'Europe/Bucharest',
+        ownerUserId: business.owner_user_id,
+        ownerEmail: ownerProfile?.email ?? null,
+        contact,
+        pending: !autoApproved,
+        fallbackLang: lang,
+      });
+
   const reason =
     pushReason && ownerReason
       ? `${pushReason}+${ownerReason}`
@@ -406,5 +434,111 @@ Deno.serve(async (req) => {
     reason,
     expoStatus,
     removedInvalid,
+    staff,
   });
 });
+
+// deno-lint-ignore no-explicit-any
+type AdminClient = SupabaseClient<any, 'public', any>;
+
+/**
+ * Push + email to the staff member the booking is assigned to (record.staff_id).
+ * Account: business_members(business_id, staff_id).user_id, skipped when it is the owner
+ * (the owner was already notified above). Email: that account's profile email, else
+ * staff_private.email (staff without an account / web-only users still get the email).
+ */
+async function notifyAssignedStaff(
+  admin: AdminClient,
+  ctx: {
+    record: AppointmentRow;
+    businessName: string;
+    timezone: string;
+    ownerUserId: string;
+    ownerEmail: string | null;
+    contact: string;
+    pending: boolean;
+    fallbackLang: 'ro' | 'en';
+  }
+): Promise<{ sent_push: number; sent_email: boolean; reason: string }> {
+  const { record } = ctx;
+  if (!record.staff_id) return { sent_push: 0, sent_email: false, reason: 'no_staff' };
+
+  const [{ data: members }, { data: priv }] = await Promise.all([
+    admin
+      .from('business_members')
+      .select('user_id')
+      .eq('business_id', record.business_id)
+      .eq('staff_id', record.staff_id),
+    admin.from('staff_private').select('email').eq('staff_id', record.staff_id).maybeSingle(),
+  ]);
+  const memberIds = ((members ?? []) as { user_id: string }[]).map((m) => m.user_id);
+  if (memberIds.includes(ctx.ownerUserId)) {
+    return { sent_push: 0, sent_email: false, reason: 'staff_is_owner' };
+  }
+  const userId = memberIds[0] ?? null;
+
+  type StaffProfile = { email?: string | null; language?: string | null };
+  const profile: StaffProfile | null = userId
+    ? ((await admin.from('profiles').select('email, language').eq('id', userId).maybeSingle()).data as StaffProfile | null)
+    : null;
+  const lang = profile?.language ? parseNotifyLang(profile.language) : ctx.fallbackLang;
+  const whenLabel = formatWhen(record.start_at, ctx.timezone, lang);
+  const copy = messageStaffNewBooking(
+    {
+      businessName: ctx.businessName,
+      contact: ctx.contact,
+      serviceName: record.service_name ?? null,
+      whenLabel,
+      pending: ctx.pending,
+      link: `${appWebBase()}/business/calendar`,
+    },
+    lang
+  );
+
+  // Push to the staff member's devices; tap opens the business calendar.
+  let sentPush = 0;
+  if (userId) {
+    const { data: tokens } = await admin
+      .from('device_push_tokens')
+      .select('expo_push_token')
+      .eq('user_id', userId);
+    if (tokens?.length) {
+      try {
+        const res = await fetch(EXPO_PUSH_URL, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            (tokens as { expo_push_token: string }[]).map((t) => ({
+              to: t.expo_push_token,
+              title: copy.pushTitle,
+              body: copy.pushBody,
+              sound: 'default',
+              priority: 'high',
+              channelId: 'cereri_heads',
+              data: { screen: 'calendar', appointmentId: record.id, businessId: record.business_id },
+            }))
+          ),
+        });
+        const j = await res.json().catch(() => null);
+        console.log('Staff push response', res.status, JSON.stringify(j));
+        const tickets = Array.isArray(j?.data) ? j.data : [];
+        sentPush = tickets.filter((t: { status?: string }) => t?.status === 'ok').length;
+      } catch (e) {
+        console.error('Staff push failed', e);
+      }
+    }
+  }
+
+  const email = profile?.email?.trim() || (priv as { email?: string | null } | null)?.email?.trim() || null;
+  if (!email) return { sent_push: sentPush, sent_email: false, reason: 'staff_no_email' };
+  if (ctx.ownerEmail && email.toLowerCase() === ctx.ownerEmail.toLowerCase()) {
+    return { sent_push: sentPush, sent_email: false, reason: 'staff_email_is_owner' };
+  }
+  const r = await sendEmail(email, copy.subject, copy.text, { html: copy.html });
+  await logNotification(
+    { admin, type: 'STAFF_NEW_BOOKING', businessId: record.business_id, appointmentId: record.id },
+    email,
+    r
+  );
+  return { sent_push: sentPush, sent_email: r.ok, reason: r.ok ? 'ok' : 'staff_email_failed' };
+}

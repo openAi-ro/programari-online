@@ -559,6 +559,13 @@ export function handleNotificationNavigation(data: Record<string, unknown> | und
     return;
   }
 
+  // Staff member: a new booking assigned to them (notify-pending-push, STAFF_NEW_BOOKING).
+  if (screen === 'calendar') {
+    void setAppMode('business');
+    router.push('/(app)/business/(tabs)/calendar' as never);
+    return;
+  }
+
   if (screen === 'my-appointments') {
     void setAppMode('client');
     router.push('/(app)/my-appointments');

@@ -4,6 +4,8 @@ import {
   chatPushBody,
   logNotification,
   messageNewPendingRequest,
+  messageAutoApprovedOwner,
+  messageStaffNewBooking,
   sendEmail,
   maskRecipient,
   messageApproved,
@@ -309,4 +311,31 @@ Deno.test('messageBusinessInvite: salon, role, link, code and expiry in Romanian
     link: 'L', token: 't', expiresAt: '2026-11-04T10:00:00Z',
   }, 'en');
   assertEquals(admin.text.includes('administrator'), true);
+});
+
+Deno.test('auto-approved owner copy: own text, no WhatsApp template', () => {
+  const ro = messageAutoApprovedOwner('Salon X', 'ana@x.ro', '30 oct. 2026, 11:00') as Record<string, unknown>;
+  assertEquals(ro.subject, 'Programare nouă confirmată (aprobată automat)');
+  assertStringIncludes(String(ro.text), 'aprobată automat');
+  assert(!String(ro.text).includes('Cereri'));
+  assertEquals(ro.wa, undefined);
+  assertStringIncludes(String(messageAutoApprovedOwner('S', 'c', undefined, 'en').text), 'approved automatically');
+});
+
+Deno.test('staff new booking: confirmed vs pending, service and date, HTML escaped', () => {
+  const m = messageStaffNewBooking({
+    businessName: 'Salon <X>', contact: 'ana@x.ro', serviceName: 'Tuns', whenLabel: '30 oct. 2026, 11:00',
+    pending: false, link: 'https://programari.expo.app/business/calendar',
+  });
+  assertEquals(m.subject, 'Programare nouă: ana@x.ro, Tuns, 30 oct. 2026, 11:00');
+  assertEquals(m.pushTitle, 'Programare nouă');
+  assertEquals(m.pushBody, 'ana@x.ro, Tuns, 30 oct. 2026, 11:00');
+  assertStringIncludes(m.text, 'Serviciu: Tuns');
+  assertStringIncludes(m.html, 'Salon &lt;X&gt;');
+  assert(!m.html.includes('Salon <X>'));
+  const p = messageStaffNewBooking({ businessName: 'S', contact: 'c', serviceName: null, pending: true, link: 'l' });
+  assertEquals(p.subject, 'Cerere nouă de programare: c');
+  assertStringIncludes(p.text, 'Așteaptă aprobarea');
+  assert(!p.text.includes('Serviciu'));
+  assertEquals(messageStaffNewBooking({ businessName: 'S', contact: 'c', pending: false, link: 'l' }, 'en').subject, 'New booking: c');
 });

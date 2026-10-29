@@ -635,6 +635,97 @@ export function messageNewPendingRequest(
   return { subject: 'Cerere nouă de programare', text, wa };
 }
 
+/**
+ * Owner copy for a booking that was approved automatically (auto_approve_returning).
+ * No WhatsApp template: there is no approved Meta template for it, so WhatsApp is skipped
+ * (free text outside the 24h window always fails with 131047).
+ */
+export function messageAutoApprovedOwner(
+  businessName: string,
+  contact: string,
+  whenLabel?: string,
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string } {
+  if (lang === 'en') {
+    const text = whenLabel
+      ? `New confirmed booking at ${businessName} from ${contact} (${whenLabel}), approved automatically. You can see it in the Calendar.`
+      : `New confirmed booking at ${businessName} from ${contact}, approved automatically. You can see it in the Calendar.`;
+    return { subject: 'New confirmed booking (auto-approved)', text };
+  }
+  const text = whenLabel
+    ? `Programare nouă confirmată la ${businessName} de la ${contact} (${whenLabel}), aprobată automat. O găsești în Calendar.`
+    : `Programare nouă confirmată la ${businessName} de la ${contact}, aprobată automat. O găsești în Calendar.`;
+  return { subject: 'Programare nouă confirmată (aprobată automat)', text };
+}
+
+/** Staff member (specialist) the new booking is assigned to: push + email (text and HTML). */
+export function messageStaffNewBooking(
+  opts: {
+    businessName: string;
+    contact: string;
+    serviceName?: string | null;
+    whenLabel?: string;
+    /** true = still waiting for the business to approve it. */
+    pending: boolean;
+    link: string;
+  },
+  lang: NotifyLang = 'ro'
+): { subject: string; text: string; html: string; pushTitle: string; pushBody: string } {
+  const service = opts.serviceName?.trim() || null;
+  const parts = [opts.contact, service, opts.whenLabel].filter(Boolean).join(', ');
+  const c =
+    lang === 'en'
+      ? {
+          subject: opts.pending ? `New booking request: ${parts}` : `New booking: ${parts}`,
+          pushTitle: opts.pending ? 'New booking request' : 'New booking',
+          hello: 'Hello,',
+          intro: opts.pending
+            ? `You have a new booking request at ${opts.businessName}. It is waiting for approval.`
+            : `You have a new confirmed booking at ${opts.businessName}.`,
+          client: 'Client',
+          service: 'Service',
+          when: 'Date and time',
+          open: 'Open the calendar',
+          footer: 'You receive this email because you are on the team of this business in the Programari app.',
+        }
+      : {
+          subject: opts.pending ? `Cerere nouă de programare: ${parts}` : `Programare nouă: ${parts}`,
+          pushTitle: opts.pending ? 'Cerere nouă de programare' : 'Programare nouă',
+          hello: 'Bună,',
+          intro: opts.pending
+            ? `Ai o cerere nouă de programare la ${opts.businessName}. Așteaptă aprobarea.`
+            : `Ai o programare nouă confirmată la ${opts.businessName}.`,
+          client: 'Client',
+          service: 'Serviciu',
+          when: 'Data și ora',
+          open: 'Deschide calendarul',
+          footer: 'Primești acest email pentru că faci parte din echipa acestei firme în aplicația Programări.',
+        };
+  const rows: [string, string][] = [[c.client, opts.contact]];
+  if (service) rows.push([c.service, service]);
+  if (opts.whenLabel) rows.push([c.when, opts.whenLabel]);
+  const text = [c.hello, '', c.intro, '', ...rows.map(([k, v]) => `${k}: ${v}`), '', `${c.open}: ${opts.link}`, '', c.footer].join('\n');
+  const e = escapeHtml;
+  const html = `<!DOCTYPE html>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(c.subject)}</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 12px;"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;padding:28px 24px;"><tr><td>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#1f2937;">${e(c.hello)}</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#1f2937;">${e(c.intro)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;font-size:15px;color:#1f2937;">
+${rows.map(([k, v]) => `<tr><td style="padding:4px 16px 4px 0;color:#6b7280;">${e(k)}</td><td style="padding:4px 0;font-weight:bold;">${e(v)}</td></tr>`).join('\n')}
+</table>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;"><tr><td style="border-radius:8px;background:#2563eb;">
+<a href="${e(opts.link)}" style="display:inline-block;padding:12px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;">${e(c.open)}</a>
+</td></tr></table>
+<p style="margin:0;font-size:13px;line-height:1.5;color:#6b7280;">${e(c.footer)}</p>
+</td></tr></table>
+</td></tr></table>
+</body></html>`;
+  return { subject: c.subject, text, html, pushTitle: c.pushTitle, pushBody: parts };
+}
+
 /** Notify business owner that a client moved their appointment. */
 export function messageRescheduledRequest(
   businessName: string,
