@@ -7,9 +7,11 @@
  * 1) Expo push to business owner device tokens
  * 2) WhatsApp/email to owner profile (even if no push tokens);
  *    auto-approved bookings: email only (no approved WhatsApp template for them)
+ *    Booking created by the business itself (quick-add, created_by set): owner is NOT notified.
  * 3) New booking assigned to a staff member: push to the staff member's account
  *    (business_members.staff_id) + email (profile email, else staff_private.email).
- *    Skipped when that account is the owner. notification_log type STAFF_NEW_BOOKING.
+ *    Skipped when that account is the owner, or when that staff member created the booking.
+ *    notification_log type STAFF_NEW_BOOKING.
  *
  * Webhook setup (Dashboard → Database → Webhooks):
  *   Table: appointments
@@ -50,6 +52,7 @@ type AppointmentRow = {
   created_by?: string | null;
   staff_id?: string | null;
   service_name?: string | null;
+  guest_name?: string | null;
 };
 
 type WebhookPayload = {
@@ -156,10 +159,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'missing_record' }, 400);
   }
 
-  // v101: business-ul și-a creat singur programarea (rapidă din calendar) → fără push/WhatsApp/email către el.
-  if (isBusinessCreatedInsert(payload.type, record, payload.reason)) {
-    return jsonResponse({ ok: true, skipped: 'business_created', sent_push: 0, sent_whatsapp: false });
-  }
+  // v101: business-ul și-a creat singur programarea (rapidă din calendar) → owner-ul nu e anunțat
+  // (el / echipa lui a creat-o), dar specialistul asignat da (mai jos, notifyAssignedStaff).
+  const businessCreated = isBusinessCreatedInsert(payload.type, record, payload.reason);
+  const createdBy = businessCreated ? record.created_by ?? null : null;
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -175,7 +178,7 @@ Deno.serve(async (req) => {
   if (authResult.userId) {
     const { data: live } = await admin
       .from('appointments')
-      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at, staff_id, service_name')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at, staff_id, service_name, guest_name')
       .eq('id', record.id)
       .maybeSingle();
     if (!live) return jsonResponse({ error: 'appointment_not_found' }, 404);
@@ -200,7 +203,7 @@ Deno.serve(async (req) => {
   ) {
     const { data: live } = await admin
       .from('appointments')
-      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at, staff_id, service_name')
+      .select('id, business_id, status, client_email, client_phone, client_user_id, start_at, requested_start_at, staff_id, service_name, guest_name')
       .eq('id', record.id)
       .maybeSingle();
     if (live) {
@@ -284,6 +287,8 @@ Deno.serve(async (req) => {
   if (tErr) {
     console.error('tokens load failed', tErr);
     pushReason = 'tokens_failed';
+  } else if (businessCreated) {
+    pushReason = 'owner_skipped_business_created';
   } else if (!tokens?.length) {
     pushReason = 'no_tokens';
   } else {
@@ -380,7 +385,9 @@ Deno.serve(async (req) => {
   let sentEmail = false;
   let ownerReason: string | null = null;
 
-  if (!ownerProfile?.email && !ownerProfile?.phone) {
+  if (businessCreated) {
+    ownerReason = null;
+  } else if (!ownerProfile?.email && !ownerProfile?.phone) {
     ownerReason = 'owner_no_contact';
   } else {
     const channelResults = await notifyClientChannels({
@@ -416,8 +423,9 @@ Deno.serve(async (req) => {
         timezone: business.timezone ?? 'Europe/Bucharest',
         ownerUserId: business.owner_user_id,
         ownerEmail: ownerProfile?.email ?? null,
-        contact,
-        pending: !autoApproved,
+        contact: record!.guest_name?.trim() || contact,
+        pending: !autoApproved && !businessCreated,
+        createdBy,
         fallbackLang: lang,
       });
 
@@ -457,6 +465,8 @@ async function notifyAssignedStaff(
     ownerEmail: string | null;
     contact: string;
     pending: boolean;
+    /** Set when the business created the booking itself (quick-add): who created it. */
+    createdBy: string | null;
     fallbackLang: 'ro' | 'en';
   }
 ): Promise<{ sent_push: number; sent_email: boolean; reason: string }> {
@@ -475,6 +485,10 @@ async function notifyAssignedStaff(
   if (memberIds.includes(ctx.ownerUserId)) {
     return { sent_push: 0, sent_email: false, reason: 'staff_is_owner' };
   }
+  if (ctx.createdBy && memberIds.includes(ctx.createdBy)) {
+    // The specialist added this booking themselves: nothing to tell them.
+    return { sent_push: 0, sent_email: false, reason: 'staff_is_creator' };
+  }
   const userId = memberIds[0] ?? null;
 
   type StaffProfile = { email?: string | null; language?: string | null };
@@ -490,6 +504,7 @@ async function notifyAssignedStaff(
       serviceName: record.service_name ?? null,
       whenLabel,
       pending: ctx.pending,
+      byBusiness: Boolean(ctx.createdBy),
       link: `${appWebBase()}/business/calendar`,
     },
     lang

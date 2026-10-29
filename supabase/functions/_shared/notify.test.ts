@@ -336,6 +336,15 @@ Deno.test('staff new booking: confirmed vs pending, service and date, HTML escap
   const p = messageStaffNewBooking({ businessName: 'S', contact: 'c', serviceName: null, pending: true, link: 'l' });
   assertEquals(p.subject, 'Cerere nouă de programare: c');
   assertStringIncludes(p.text, 'Așteaptă aprobarea');
+  const b = messageStaffNewBooking({
+    businessName: 'Salon', contact: 'Ion', serviceName: 'Tuns', whenLabel: '30 oct. 2026, 11:00',
+    pending: false, byBusiness: true, link: 'l',
+  });
+  assertEquals(b.subject, 'Programare nouă adăugată de firmă: Ion, Tuns, 30 oct. 2026, 11:00');
+  assertEquals(b.pushTitle, 'Programare nouă adăugată de firmă');
+  assertStringIncludes(b.text, 'Salon ți-a adăugat o programare nouă.');
+  assertEquals(messageStaffNewBooking({ businessName: 'S', contact: 'c', pending: false, byBusiness: true, link: 'l' }, 'en').subject,
+    'New booking added by the business: c');
   assert(!p.text.includes('Serviciu'));
   assertEquals(messageStaffNewBooking({ businessName: 'S', contact: 'c', pending: false, link: 'l' }, 'en').subject, 'New booking: c');
 });

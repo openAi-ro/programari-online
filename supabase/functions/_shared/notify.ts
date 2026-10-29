@@ -667,6 +667,8 @@ export function messageStaffNewBooking(
     whenLabel?: string;
     /** true = still waiting for the business to approve it. */
     pending: boolean;
+    /** Created by the business itself (quick-add in the calendar), not by the client. */
+    byBusiness?: boolean;
     link: string;
   },
   lang: NotifyLang = 'ro'
@@ -676,10 +678,14 @@ export function messageStaffNewBooking(
   const c =
     lang === 'en'
       ? {
-          subject: opts.pending ? `New booking request: ${parts}` : `New booking: ${parts}`,
-          pushTitle: opts.pending ? 'New booking request' : 'New booking',
+          subject: opts.byBusiness
+            ? `New booking added by the business: ${parts}`
+            : opts.pending ? `New booking request: ${parts}` : `New booking: ${parts}`,
+          pushTitle: opts.byBusiness ? 'New booking added by the business' : opts.pending ? 'New booking request' : 'New booking',
           hello: 'Hello,',
-          intro: opts.pending
+          intro: opts.byBusiness
+            ? `${opts.businessName} added a new booking for you.`
+            : opts.pending
             ? `You have a new booking request at ${opts.businessName}. It is waiting for approval.`
             : `You have a new confirmed booking at ${opts.businessName}.`,
           client: 'Client',
@@ -689,10 +695,14 @@ export function messageStaffNewBooking(
           footer: 'You receive this email because you are on the team of this business in the Programari app.',
         }
       : {
-          subject: opts.pending ? `Cerere nouă de programare: ${parts}` : `Programare nouă: ${parts}`,
-          pushTitle: opts.pending ? 'Cerere nouă de programare' : 'Programare nouă',
+          subject: opts.byBusiness
+            ? `Programare nouă adăugată de firmă: ${parts}`
+            : opts.pending ? `Cerere nouă de programare: ${parts}` : `Programare nouă: ${parts}`,
+          pushTitle: opts.byBusiness ? 'Programare nouă adăugată de firmă' : opts.pending ? 'Cerere nouă de programare' : 'Programare nouă',
           hello: 'Bună,',
-          intro: opts.pending
+          intro: opts.byBusiness
+            ? `${opts.businessName} ți-a adăugat o programare nouă.`
+            : opts.pending
             ? `Ai o cerere nouă de programare la ${opts.businessName}. Așteaptă aprobarea.`
             : `Ai o programare nouă confirmată la ${opts.businessName}.`,
           client: 'Client',
