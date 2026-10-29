@@ -36,7 +36,7 @@ export type SendResult = {
   error?: string;
   provider?: 'twilio' | 'meta' | 'stub';
   outcome?: SendOutcome;
-  /** Meta message id (wamid...) or Twilio SID when accepted. */
+  /** Provider message id when accepted: Meta wamid, Twilio SID or Brevo messageId. */
   messageId?: string;
   /** Template name used (Meta), when a template was sent. */
   template?: string;
@@ -122,7 +122,8 @@ export function parseMetaError(body: string): { code?: string; message?: string 
 export async function sendEmail(
   to: string,
   subject: string,
-  text: string
+  text: string,
+  opts: { html?: string; replyTo?: string } = {}
 ): Promise<SendResult> {
   const key = Deno.env.get('BREVO_API_KEY');
   if (!key) {
@@ -144,6 +145,8 @@ export async function sendEmail(
         to: [{ email: to }],
         subject,
         textContent: text,
+        ...(opts.html ? { htmlContent: opts.html } : {}),
+        ...(opts.replyTo ? { replyTo: { email: opts.replyTo } } : {}),
       }),
     });
     if (!res.ok) {
@@ -534,7 +537,7 @@ export function notificationLogResult(to: string | null, r: SendResult) {
   return {
     to_masked: maskRecipient(to),
     template: r.template ?? null,
-    wamid: r.channel === 'whatsapp' ? r.messageId ?? null : null,
+    wamid: r.messageId ?? null,
     status: r.outcome ?? (r.ok ? 'accepted' : r.stub ? 'stub' : 'failed'),
     error_code: r.errorCode ?? (r.stub ? 'not_configured' : null),
     error_message: r.errorMessage ?? (r.ok ? null : r.error ? `${r.error}`.slice(0, 500) : null),
@@ -998,7 +1001,17 @@ export function messageCancelledByBusiness(
   };
 }
 
-/** Team invitation email (business_invitations). Plain text; the link opens /invitatie?token=… */
+/** Escapes text for HTML element content and attribute values. */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Team invitation email (business_invitations): plain text + HTML; the link opens /invitatie?token=… */
 export function messageBusinessInvite(
   opts: {
     businessName: string;
@@ -1011,61 +1024,85 @@ export function messageBusinessInvite(
     expiresAt: string;
   },
   lang: NotifyLang = 'ro'
-): { subject: string; text: string } {
+): { subject: string; text: string; html: string } {
   const expires = new Date(opts.expiresAt).toLocaleDateString(notifyLocale(lang), {
     timeZone: 'Europe/Bucharest',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
-  if (lang === 'en') {
-    const role =
-      opts.role === 'admin'
-        ? 'administrator (manages everything except adding other administrators)'
-        : `employee${opts.staffName ? ` for specialist ${opts.staffName}` : ''} (sees and manages only that specialist's appointments)`;
-    return {
-      subject: `Invitation to join ${opts.businessName} on Programari`,
-      text: [
-        'Hello,',
-        '',
-        `${opts.inviterName} invited you to join the team of "${opts.businessName}" in the Programari app as ${role}.`,
-        '',
-        'Accept the invitation:',
-        opts.link,
-        '',
-        `Important: sign in with exactly this email address (${opts.email}). If you do not have an account yet, create one with this address, then open the link again.`,
-        '',
-        `If the link does not work, sign in to the app with this email address: the invitation appears on the home screen. Invitation code: ${opts.token}`,
-        '',
-        `The invitation expires on ${expires}.`,
-        '',
-        'If you were not expecting this email, you can ignore it.',
-      ].join('\n'),
-    };
-  }
-  const role =
-    opts.role === 'admin'
-      ? 'administrator (gestionezi tot, mai puțin adăugarea altor administratori)'
-      : `angajat${opts.staffName ? ` pentru specialistul ${opts.staffName}` : ''} (vezi și gestionezi doar programările acestui specialist)`;
-  return {
-    subject: `Invitație în echipa ${opts.businessName} – Programări`,
-    text: [
-      'Bună,',
-      '',
-      `${opts.inviterName} te-a invitat în echipa „${opts.businessName}” din aplicația Programări, ca ${role}.`,
-      '',
-      'Acceptă invitația:',
-      opts.link,
-      '',
-      `Important: intră în aplicație cu exact această adresă de email (${opts.email}). Dacă nu ai cont, creează-ți unul cu această adresă, apoi deschide din nou linkul.`,
-      '',
-      `Dacă linkul nu merge, intră în aplicație cu această adresă de email: invitația apare pe ecranul principal. Cod invitație: ${opts.token}`,
-      '',
-      `Invitația expiră pe ${expires}.`,
-      '',
-      'Dacă nu te așteptai la acest email, îl poți ignora.',
-    ].join('\n'),
-  };
+  const c =
+    lang === 'en'
+      ? {
+          subject: `Invitation to join ${opts.businessName} on Programari`,
+          hello: 'Hello,',
+          intro: (inviter: string, biz: string, role: string) =>
+            `${inviter} invited you to join the team of "${biz}" in the Programari app as ${role}.`,
+          role:
+            opts.role === 'admin'
+              ? 'administrator (manages everything except adding other administrators)'
+              : `employee${opts.staffName ? ` for specialist ${opts.staffName}` : ''} (sees and manages only that specialist's appointments)`,
+          accept: 'Accept the invitation:',
+          button: 'Accept the invitation',
+          important: `Important: sign in with exactly this email address (${opts.email}). If you do not have an account yet, create one with this address, then open the link again.`,
+          fallback: `If the link does not work, sign in to the app with this email address: the invitation appears on the home screen. Invitation code: ${opts.token}`,
+          expiry: `The invitation expires on ${expires}.`,
+          ignore: 'If you were not expecting this email, you can ignore it.',
+        }
+      : {
+          subject: `Invitație în echipa ${opts.businessName} – Programări`,
+          hello: 'Bună,',
+          intro: (inviter: string, biz: string, role: string) =>
+            `${inviter} te-a invitat în echipa „${biz}” din aplicația Programări, ca ${role}.`,
+          role:
+            opts.role === 'admin'
+              ? 'administrator (gestionezi tot, mai puțin adăugarea altor administratori)'
+              : `angajat${opts.staffName ? ` pentru specialistul ${opts.staffName}` : ''} (vezi și gestionezi doar programările acestui specialist)`,
+          accept: 'Acceptă invitația:',
+          button: 'Acceptă invitația',
+          important: `Important: intră în aplicație cu exact această adresă de email (${opts.email}). Dacă nu ai cont, creează-ți unul cu această adresă, apoi deschide din nou linkul.`,
+          fallback: `Dacă linkul nu merge, intră în aplicație cu această adresă de email: invitația apare pe ecranul principal. Cod invitație: ${opts.token}`,
+          expiry: `Invitația expiră pe ${expires}.`,
+          ignore: 'Dacă nu te așteptai la acest email, îl poți ignora.',
+        };
+  const text = [
+    c.hello,
+    '',
+    c.intro(opts.inviterName, opts.businessName, c.role),
+    '',
+    c.accept,
+    opts.link,
+    '',
+    c.important,
+    '',
+    c.fallback,
+    '',
+    c.expiry,
+    '',
+    c.ignore,
+  ].join('\n');
+  const e = escapeHtml;
+  const p = (body: string, style = '') =>
+    `<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#1f2937;${style}">${body}</p>`;
+  const html = `<!DOCTYPE html>
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(c.subject)}</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:24px 12px;"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;padding:28px 24px;"><tr><td>
+${p(e(c.hello))}
+${p(c.intro(e(opts.inviterName), `<strong>${e(opts.businessName)}</strong>`, e(c.role)))}
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;"><tr><td style="border-radius:8px;background:#2563eb;">
+<a href="${e(opts.link)}" style="display:inline-block;padding:12px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;">${e(c.button)}</a>
+</td></tr></table>
+${p(`${e(c.accept)}<br><a href="${e(opts.link)}" style="color:#2563eb;word-break:break-all;">${e(opts.link)}</a>`, 'font-size:13px;')}
+${p(e(c.important))}
+${p(e(c.fallback), 'font-size:14px;color:#4b5563;')}
+${p(e(c.expiry), 'font-weight:bold;')}
+${p(e(c.ignore), 'font-size:13px;color:#6b7280;margin:0;')}
+</td></tr></table>
+</td></tr></table>
+</body></html>`;
+  return { subject: c.subject, text, html };
 }
 
 /** Public web base for links in client messages. */

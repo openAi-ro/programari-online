@@ -5,10 +5,10 @@
  * Auth: JWT of an owner/admin of the invitation's business (checked by
  * claim_business_invitation_send, which also enforces 1 send / minute / invitation).
  *
- * Emails the invitee (Brevo) with the salon name, the role and a link to
+ * Emails the invitee (Brevo, text + HTML, reply-to = business owner) with the salon name, the role and a link to
  * <web>/invitatie?token=…; the code stays usable in the app as a fallback.
  */
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors, jsonResponse } from '../_shared/cors.ts';
 import {
   appWebBase,
@@ -29,6 +29,19 @@ type Claim = {
 };
 
 const KNOWN_ERRORS = ['not_authenticated', 'invitation_not_found', 'not_allowed', 'resend_too_soon'];
+
+/** Email of the business owner (reply-to for the invite); null when unknown. */
+async function ownerEmail(admin: SupabaseClient, businessId: string): Promise<string | null> {
+  const { data: biz } = await admin
+    .from('business_profiles')
+    .select('owner_user_id')
+    .eq('id', businessId)
+    .maybeSingle();
+  const ownerId = (biz as { owner_user_id?: string } | null)?.owner_user_id;
+  if (!ownerId) return null;
+  const { data } = await admin.auth.admin.getUserById(ownerId);
+  return data?.user?.email ?? null;
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -82,16 +95,22 @@ Deno.serve(async (req) => {
     },
     lang
   );
-  const result = await sendEmail(claim.email, msg.subject, msg.text);
-
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const { data: inv } = await admin
     .from('business_invitations')
     .select('business_id')
     .eq('id', invitationId)
     .maybeSingle();
+  const businessId = (inv as { business_id?: string } | null)?.business_id ?? null;
+  const replyTo = businessId ? await ownerEmail(admin, businessId) : null;
+
+  const result = await sendEmail(claim.email, msg.subject, msg.text, {
+    html: msg.html,
+    replyTo: replyTo ?? undefined,
+  });
+
   await logNotification(
-    { admin, type: 'business_invite', businessId: (inv as { business_id?: string } | null)?.business_id ?? null },
+    { admin, type: 'business_invite', businessId },
     claim.email,
     result
   );

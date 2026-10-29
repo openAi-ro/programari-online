@@ -8,6 +8,7 @@ import {
   maskRecipient,
   messageApproved,
   messageBusinessInvite,
+  notificationLogResult,
   messageWaitlistSpot,
   notifyClientChannels,
   resolveClientPhone,
@@ -220,6 +221,27 @@ Deno.test('email: Brevo API payload + messageId parsed', async () => {
   } finally { m.restore(); resetEnv(); }
 });
 
+Deno.test('email: optional HTML and reply-to go to Brevo', async () => {
+  resetEnv();
+  Deno.env.set('BREVO_API_KEY', 'test-key-not-real');
+  const m = mockFetch(201, { messageId: '<h@smtp-relay.mailin.fr>' });
+  try {
+    await sendEmail('a@b.ro', 'Subj', 'Body', { html: '<p>Body</p>', replyTo: 'owner@x.ro' });
+    assertEquals(m.calls[0].body.textContent, 'Body');
+    assertEquals(m.calls[0].body.htmlContent, '<p>Body</p>');
+    assertEquals(m.calls[0].body.replyTo, { email: 'owner@x.ro' });
+    await sendEmail('a@b.ro', 'Subj', 'Body');
+    assertEquals('htmlContent' in m.calls[1].body, false);
+    assertEquals('replyTo' in m.calls[1].body, false);
+  } finally { m.restore(); resetEnv(); }
+});
+
+Deno.test('notificationLogResult keeps the provider message id for email too', () => {
+  const row = notificationLogResult('a@b.ro', { ok: true, channel: 'email', outcome: 'accepted', messageId: '<m@smtp-relay.mailin.fr>' });
+  assertEquals(row.wamid, '<m@smtp-relay.mailin.fr>');
+  assertEquals(row.status, 'accepted');
+});
+
 Deno.test('owner pending: template when WHATSAPP_TPL_OWNER_PENDING set, 3 vars', async () => {
   resetEnv(); metaEnv();
   Deno.env.set('WHATSAPP_TPL_OWNER_PENDING', 'programare_noua_in_asteptare');
@@ -272,6 +294,16 @@ Deno.test('messageBusinessInvite: salon, role, link, code and expiry in Romanian
   for (const part of ['„Salon Test”', 'angajat pentru specialistul Ion', 'https://programari.expo.app/invitatie?token=abc', 'x@y.ro', 'Cod invitație: abc', 'invitația apare pe ecranul principal', '2026']) {
     assertEquals(m.text.includes(part), true, part);
   }
+  for (const part of ['<strong>Salon Test</strong>', 'href="https://programari.expo.app/invitatie?token=abc"', 'Acceptă invitația', 'Cod invitație: abc', '2026']) {
+    assertEquals(m.html.includes(part), true, part);
+  }
+  const xss = messageBusinessInvite({
+    businessName: '<b>"Rău" & Co</b>', inviterName: '<script>', role: 'staff', staffName: null, email: 'a@b.co',
+    link: 'L', token: 't', expiresAt: '2026-11-04T10:00:00Z',
+  });
+  assertEquals(xss.html.includes('<b>"Rău"'), false);
+  assertEquals(xss.html.includes('&lt;b&gt;&quot;Rău&quot; &amp; Co&lt;/b&gt;'), true);
+  assertEquals(xss.html.includes('<script>'), false);
   const admin = messageBusinessInvite({
     businessName: 'S', inviterName: 'A', role: 'admin', staffName: null, email: 'a@b.co',
     link: 'L', token: 't', expiresAt: '2026-11-04T10:00:00Z',
