@@ -1,7 +1,8 @@
 ﻿import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { TimePickerField } from '@/components/TimePickerField';
 import { SectionTitle, Toggle, useTheme } from '@/components/ui';
 import { useT, type TrKey } from '@/lib/i18n';
 import { fontSize, radius, spacing } from '@/constants/theme';
@@ -23,92 +24,8 @@ type Props = {
   onChange: (next: WorkingHours) => void;
 };
 
-function normalizeTimeInput(raw: string): string {
-  const digits = raw.replace(/[^\d]/g, '').slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-}
-
 function isValidHhMm(v: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
-}
-
-/** Compact HH:MM input styled like Field (theme border/focus). */
-function TimeChip({
-  value,
-  onChangeText,
-  placeholder,
-  accessibilityLabel,
-}: {
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder: string;
-  accessibilityLabel?: string;
-}) {
-  const t = useTheme();
-  const [focused, setFocused] = useState(false);
-  return (
-    <TextInput
-      style={[
-        styles.timeInput,
-        {
-          backgroundColor: t.colors.surface,
-          borderColor: focused ? t.colors.accent : t.colors.borderStrong,
-          color: t.colors.text,
-          minHeight: spacing.touchTarget - 8,
-        },
-      ]}
-      value={value}
-      onChangeText={(v) => onChangeText(normalizeTimeInput(v))}
-      placeholder={placeholder}
-      placeholderTextColor={t.colors.textFaint}
-      maxLength={5}
-      keyboardType="numbers-and-punctuation"
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      accessibilityLabel={accessibilityLabel}
-    />
-  );
-}
-
-function LabeledTimeBox({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder: string;
-}) {
-  const t = useTheme();
-  const [focused, setFocused] = useState(false);
-  return (
-    <View style={styles.labeledBox}>
-      <Text style={[styles.boxLabel, { color: t.colors.textMuted }]}>{label}</Text>
-      <TextInput
-        style={[
-          styles.boxInput,
-          {
-            backgroundColor: t.colors.bgElevated,
-            borderColor: focused ? t.colors.accent : t.colors.borderStrong,
-            color: t.colors.text,
-            minHeight: spacing.touchTarget,
-          },
-        ]}
-        value={value}
-        onChangeText={(v) => onChangeText(normalizeTimeInput(v))}
-        placeholder={placeholder}
-        placeholderTextColor={t.colors.textFaint}
-        maxLength={5}
-        keyboardType="numbers-and-punctuation"
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        accessibilityLabel={label}
-      />
-    </View>
-  );
 }
 
 export function WorkingHoursForm({ value, onChange }: Props) {
@@ -175,18 +92,22 @@ export function WorkingHoursForm({ value, onChange }: Props) {
           {tr('hours.rangeHint')}
         </Text>
         <View style={styles.configRow}>
-          <LabeledTimeBox
-            label={tr('hours.startLabel')}
-            value={bulkStart}
-            onChangeText={setBulkStart}
-            placeholder="09:00"
-          />
-          <LabeledTimeBox
-            label={tr('hours.endLabel')}
-            value={bulkEnd}
-            onChangeText={setBulkEnd}
-            placeholder="17:00"
-          />
+          <View style={styles.labeledBox}>
+            <TimePickerField
+              label={tr('hours.startLabel')}
+              value={bulkStart}
+              onChange={setBulkStart}
+              placeholder="09:00"
+            />
+          </View>
+          <View style={styles.labeledBox}>
+            <TimePickerField
+              label={tr('hours.endLabel')}
+              value={bulkEnd}
+              onChange={setBulkEnd}
+              placeholder="17:00"
+            />
+          </View>
         </View>
         <Pressable
           onPress={applyBulkHours}
@@ -272,9 +193,10 @@ export function WorkingHoursForm({ value, onChange }: Props) {
                 <View style={styles.times}>
                   <View style={styles.timeCol}>
                     <Text style={[styles.miniLabel, { color: t.colors.textFaint }]}>{tr('hours.startMini')}</Text>
-                    <TimeChip
+                    <TimePickerField
+                      compact
                       value={day.start}
-                      onChangeText={(start) =>
+                      onChange={(start) =>
                         updateDay(key, { closed: false, start, end: day.end })
                       }
                       placeholder="09:00"
@@ -284,9 +206,10 @@ export function WorkingHoursForm({ value, onChange }: Props) {
                   <Text style={[styles.dash, { color: t.colors.textFaint }]}>–</Text>
                   <View style={styles.timeCol}>
                     <Text style={[styles.miniLabel, { color: t.colors.textFaint }]}>{tr('hours.endMini')}</Text>
-                    <TimeChip
+                    <TimePickerField
+                      compact
                       value={day.end}
-                      onChangeText={(end) =>
+                      onChange={(end) =>
                         updateDay(key, { closed: false, start: day.start, end })
                       }
                       placeholder="17:00"
@@ -354,16 +277,7 @@ const styles = StyleSheet.create({
   configTitle: { fontSize: fontSize.md, fontWeight: '700' },
   configHint: { fontSize: fontSize.sm, lineHeight: 18 },
   configRow: { flexDirection: 'row', gap: spacing.md },
-  labeledBox: { flex: 1, gap: 6 },
-  boxLabel: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
-  boxInput: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    textAlign: 'center',
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-  },
+  labeledBox: { flex: 1 },
   applyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,16 +306,6 @@ const styles = StyleSheet.create({
   times: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   timeCol: { gap: 2, alignItems: 'center' },
   miniLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
-  timeInput: {
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 7,
-    width: 66,
-    textAlign: 'center',
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-  },
   dash: { fontSize: fontSize.sm, marginBottom: 10 },
   closedText: { width: 72, textAlign: 'right', fontSize: fontSize.md },
   quickAction: {

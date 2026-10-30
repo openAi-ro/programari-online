@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
 import { PickerField } from '@/components/PickerField';
+import { TimePickerField } from '@/components/TimePickerField';
 import { WorkingHoursForm } from '@/components/WorkingHoursForm';
 import {
   Button,
@@ -994,25 +995,19 @@ function BusinessSetupScreen() {
       {breakHours.enabled ? (
         <View style={styles.breakTimes}>
           <View style={styles.breakCol}>
-            <Field
+            <TimePickerField
               label={tr('setup.breakFrom')}
               value={breakHours.start}
-              onChangeText={(start) => setBreakHours({ ...breakHours, start })}
+              onChange={(start) => setBreakHours({ ...breakHours, start })}
               placeholder="13:00"
-              maxLength={5}
-              keyboardType="numbers-and-punctuation"
-              style={styles.breakInput}
             />
           </View>
           <View style={styles.breakCol}>
-            <Field
+            <TimePickerField
               label={tr('setup.breakTo')}
               value={breakHours.end}
-              onChangeText={(end) => setBreakHours({ ...breakHours, end })}
+              onChange={(end) => setBreakHours({ ...breakHours, end })}
               placeholder="14:00"
-              maxLength={5}
-              keyboardType="numbers-and-punctuation"
-              style={styles.breakInput}
             />
           </View>
         </View>
@@ -1295,7 +1290,6 @@ const styles = StyleSheet.create({
   breakSub: { fontSize: fontSize.sm, lineHeight: 18 },
   breakTimes: { flexDirection: 'row', gap: spacing.md },
   breakCol: { flex: 1 },
-  breakInput: { textAlign: 'center' },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     flexDirection: 'row',

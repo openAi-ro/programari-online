@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Field, SectionTitle, Toggle, useTheme } from '@/components/ui';
+import { TimePickerField } from '@/components/TimePickerField';
+import { SectionTitle, Toggle, useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import type { BreakHours } from '@/lib/types';
@@ -32,18 +33,18 @@ export function BreakHoursForm({ value, onChange }: Props) {
       {value.enabled ? (
         <View style={styles.times}>
           <View style={styles.timeField}>
-            <Field
+            <TimePickerField
               label={tr('team.breakStart')}
               value={value.start}
-              onChangeText={(start) => onChange({ ...value, start })}
+              onChange={(start) => onChange({ ...value, start })}
               placeholder="13:00"
             />
           </View>
           <View style={styles.timeField}>
-            <Field
+            <TimePickerField
               label={tr('team.breakEnd')}
               value={value.end}
-              onChangeText={(end) => onChange({ ...value, end })}
+              onChange={(end) => onChange({ ...value, end })}
               placeholder="14:00"
             />
           </View>
