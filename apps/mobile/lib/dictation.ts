@@ -12,8 +12,11 @@ export function joinDictation(base: string, spoken: string): string {
 }
 
 /** Mesajul afișat pentru o eroare a recunoașterii vocale (null = nimic de arătat). */
-export function dictationErrorKind(code: string | undefined): 'denied' | 'failed' | null {
+export type DictationError = 'denied' | 'failed' | 'noSpeech';
+
+export function dictationErrorKind(code: string | undefined): DictationError | null {
   if (code === 'not-allowed' || code === 'service-not-allowed') return 'denied';
-  if (code === 'aborted' || code === 'no-speech' || code === 'speech-timeout') return null;
+  if (code === 'aborted') return null;
+  if (code === 'no-speech' || code === 'speech-timeout') return 'noSpeech';
   return 'failed';
 }

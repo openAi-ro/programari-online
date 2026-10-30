@@ -19,7 +19,8 @@ assert(joinDictation('Salut,', 'pot veni mâine') === 'Salut, pot veni mâine', 
 assert(joinDictation('Salut  ', 'la  ora   10 ') === 'Salut la ora 10', 'spații normalizate');
 assert(joinDictation('Salut', '   ') === 'Salut', 'nimic dictat -> ciorna rămâne');
 assert(dictationErrorKind('not-allowed') === 'denied', 'permisiune refuzată');
-assert(dictationErrorKind('no-speech') === null && dictationErrorKind('aborted') === null && dictationErrorKind('speech-timeout') === null, 'fără vorbire / oprit -> fără mesaj');
+assert(dictationErrorKind('aborted') === null, 'oprit de utilizator -> fără mesaj');
+assert(dictationErrorKind('no-speech') === 'noSpeech' && dictationErrorKind('speech-timeout') === 'noSpeech', 'nimic auzit -> mesaj de reîncercare');
 assert(dictationErrorKind('network') === 'failed', 'altă eroare -> mesaj generic');
 
 console.log(`dictation: ${passed} passed, ${failed} failed`);

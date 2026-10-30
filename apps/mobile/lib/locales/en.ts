@@ -1787,6 +1787,7 @@ export const en: typeof ro = {
   'chat.micStopA11y': 'Stop dictation',
   'chat.micDenied': 'Allow microphone access (in your browser or phone settings) to dictate.',
   'chat.micFailed': 'Dictation did not work. Try again or type the message.',
+  'chat.micNoSpeech': 'No speech heard, please try again',
   'chat.micUnsupported': 'Dictation is not available in this browser.',
   'chat.attachA11y': 'Attach a photo or video',
   'chat.attachTitle': 'Photo or video',

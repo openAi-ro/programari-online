@@ -1785,6 +1785,7 @@ export const ro = {
   'chat.micStopA11y': 'Oprește dictarea',
   'chat.micDenied': 'Permite accesul la microfon (din browser sau din setările telefonului) ca să poți dicta.',
   'chat.micFailed': 'Dictarea nu a mers. Încearcă din nou sau scrie mesajul.',
+  'chat.micNoSpeech': 'Nu s-a auzit nimic, mai încercați',
   'chat.micUnsupported': 'Dictarea nu e disponibilă în acest browser.',
   'chat.attachA11y': 'Atașează o poză sau un video',
   'chat.attachTitle': 'Poză sau video',

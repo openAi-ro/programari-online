@@ -275,7 +275,13 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     <View style={styles.inputRow}>
       {dictation.error ? (
         <Text style={[styles.micError, { color: t.colors.danger }]}>
-          {dictation.error === 'denied' ? tr('chat.micDenied') : tr('chat.micFailed')}
+          {tr(
+            dictation.error === 'denied'
+              ? 'chat.micDenied'
+              : dictation.error === 'noSpeech'
+                ? 'chat.micNoSpeech'
+                : 'chat.micFailed'
+          )}
         </Text>
       ) : !dictation.supported && Platform.OS === 'web' ? (
         <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
