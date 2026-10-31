@@ -793,6 +793,7 @@ export function Segmented<T extends string>({
             onPress={() => onChange(opt.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
+            aria-selected={active}
             style={({ pressed }) => [
               styles.segmentedItem,
               {
@@ -1451,6 +1452,8 @@ const styles = StyleSheet.create({
     flex: 1,
     flexBasis: '30%',
     minWidth: 0,
+    minHeight: spacing.touchTarget,
+    justifyContent: 'center',
     paddingVertical: spacing.sm + 1,
     paddingHorizontal: spacing.xs,
     borderRadius: radius.sm,

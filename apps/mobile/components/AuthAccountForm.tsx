@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GoogleLogo } from '@/components/GoogleLogo';
 import { router } from 'expo-router';
 
-import { Button, Callout, Screen, Segmented, useTheme } from '@/components/ui';
+import { Button, Callout, Screen, useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { fontSize, spacing } from '@/constants/theme';
 import {
@@ -13,8 +13,8 @@ import {
   LoginCard,
   LoginField,
 } from '@/components/LoginCard';
-import { assertAccountKind } from '@/lib/accountKind';
-import type { AppMode } from '@/lib/appMode';
+import { resolveAppMode, type AppMode } from '@/lib/appMode';
+import { getCurrentUser } from '@/lib/currentUser';
 import {
   completeGoogleSignIn,
   getGoogleRedirectTo,
@@ -40,8 +40,6 @@ import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Mode = 'login' | 'register';
 
-const MODE_VALUES: Mode[] = ['login', 'register'];
-
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -49,7 +47,8 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
   const t = useTheme();
   const tr = useT();
   const isBusiness = kind === 'business';
-  const [mode, setMode] = useState<Mode>(initialMode);
+  // Modul vine doar din ruta (mode=login sau creare); ecranul nu il schimba singur.
+  const mode = initialMode;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,6 +63,8 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
   const [googleBusy, setGoogleBusy] = useState(false);
 
   useEffect(() => {
+    // Datele salvate precompleteaza doar ecranul de login; nu schimba niciodata modul.
+    if (initialMode !== 'login') return;
     let cancelled = false;
     (async () => {
       const saved = await loadRememberedCredentials();
@@ -71,12 +72,11 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
       setEmail(saved.email);
       if (saved.password) setPassword(saved.password);
       setRememberPassword(true);
-      setMode('login');
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialMode]);
 
 
   function clearFeedback() {
@@ -85,7 +85,6 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
   }
 
   async function handleEmailSubmit(asMode: Mode = mode) {
-    setMode(asMode);
     clearFeedback();
     const e = email.trim();
     if (!e) {
@@ -139,12 +138,10 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
       }
       return;
     }
-    const check = await assertAccountKind(kind);
+    // Login neutru: zona se fixeaza dupa tipul real al contului (ca la pornirea cu sesiune), fara delogare.
+    const signedInUser = await getCurrentUser();
+    if (signedInUser) await resolveAppMode(signedInUser.id);
     setLoading(false);
-    if (!check.ok) {
-      setError(check.error);
-      return;
-    }
     await claimReferralCode();
     if (rememberPassword) {
       await saveRememberedCredentials(e, password);
@@ -216,7 +213,7 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
         label={
           peekPendingAuthRedirect()
             ? tr('auth.backToBooking')
-            : tr('auth.backToAccountChoice')
+            : tr('common.back')
         }
         variant="ghost"
         size="sm"
@@ -232,19 +229,7 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
         style={styles.switchRole}
       />
 
-      <Segmented
-        value={mode}
-        onChange={(m) => {
-          setMode(m);
-          clearFeedback();
-        }}
-        options={MODE_VALUES.map((value) => ({
-          value,
-          label: value === 'login' ? tr('auth.signIn') : tr('auth.createAccount'),
-        }))}
-      />
-
-      <LoginCard heading={isBusiness ? tr('auth.businessAccountTitle') : tr('auth.clientAccountTitle')}>
+      <LoginCard heading={mode === 'login' ? tr('auth.signIn') : isBusiness ? tr('auth.createBusinessAccount') : tr('auth.createClientAccount')}>
         <>
             <LoginField
               label={tr('auth.email')}
@@ -291,7 +276,7 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
             ) : null}
 
 
-            {REMEMBER_PASSWORD_SUPPORTED ? (
+            {REMEMBER_PASSWORD_SUPPORTED && mode === 'login' ? (
             <Pressable
               onPress={() => setRememberPassword((v) => !v)}
               style={[
@@ -335,6 +320,26 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
               disabled={loading}
               loading={loading}
             />
+            {mode === 'register' ? (
+              <Text style={[styles.termsText, { color: t.colors.textMuted }]}>
+                {tr('auth.acceptTermsPrefix')}{' '}
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => router.push('/terms')}
+                  style={[styles.termsLink, { color: t.colors.accent }]}
+                >
+                  {tr('auth.termsOfService')}
+                </Text>{' '}
+                {tr('auth.acceptTermsAnd')}{' '}
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => router.push('/privacy')}
+                  style={[styles.termsLink, { color: t.colors.accent }]}
+                >
+                  {tr('auth.privacyPolicy')}
+                </Text>
+              </Text>
+            ) : null}
             <LoginButton
               tone="secondary"
               label={tr('auth.googleContinue')}
@@ -343,12 +348,14 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
               disabled={loading || googleBusy}
               loading={googleBusy}
             />
+            {mode === 'login' ? (
             <LoginButton
-              label={tr('auth.recoverPassword')}
+              label={tr('auth.forgotPassword')}
               tone="ghost"
               onPress={() => router.push('/(auth)/forgot-password')}
               disabled={loading}
             />
+            ) : null}
             {activationEmail ? (
               <LoginButton
                 tone="secondary"
@@ -357,6 +364,21 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
                 disabled={loading || resendBusy}
               />
             ) : null}
+            {mode === 'login' ? (
+              <LoginButton
+                tone="ghost"
+                label={tr('auth.noAccountCreateOne')}
+                onPress={() => router.replace('/(auth)/login')}
+                disabled={loading}
+              />
+            ) : (
+              <LoginButton
+                tone="ghost"
+                label={tr('auth.hasAccountSignIn')}
+                onPress={() => router.push({ pathname: '/(auth)/client', params: { mode: 'login' } } as never)}
+                disabled={loading}
+              />
+            )}
         </>
       </LoginCard>
 
@@ -380,4 +402,6 @@ const styles = StyleSheet.create({
   consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderWidth: 1, borderRadius: 12, marginTop: 8 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   consentText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18 },
+  termsText: { fontSize: fontSize.xs, lineHeight: 18, textAlign: 'center' },
+  termsLink: { fontWeight: '700', textDecorationLine: 'underline' },
 });

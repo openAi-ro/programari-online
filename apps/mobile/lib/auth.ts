@@ -5,7 +5,7 @@ import { getPublicWebOrigin } from './webBase';
 import { Platform } from 'react-native';
 
 import { trKey } from './i18n';
-import { assertAccountKind, persistAccountKind } from './accountKind';
+import { persistAccountKind } from './accountKind';
 import {
   PENDING_GOOGLE_KIND_KEY,
   googleRedirectTo,
@@ -13,7 +13,7 @@ import {
   resolveGoogleAccountKind,
 } from './googleAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AppMode } from './appMode';
+import { resolveAppMode, type AppMode } from './appMode';
 
 /**
  * Where Supabase activation / reset emails redirect after click.
@@ -355,10 +355,8 @@ export async function completeGoogleSignIn(
     await persistAccountKind(finalKind);
   }
 
-  const check = await assertAccountKind(expectedKind);
-  if (!check.ok) {
-    return { session: null, error: check.error };
-  }
+  // Login neutru, ca la parola: zona vine din tipul real al contului, fara delogare.
+  await resolveAppMode(user.id);
   return { session: result.session, error: null };
 }
 
