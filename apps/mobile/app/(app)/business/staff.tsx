@@ -527,6 +527,7 @@ function BusinessStaffScreen() {
             placeholder="07…"
             icon="call-outline"
             keyboardType="phone-pad"
+            autoComplete="off"
             maxLength={MAX_STAFF_PHONE_LENGTH}
           />
           <View
@@ -620,7 +621,7 @@ function BusinessStaffScreen() {
             />
             {photoBusy ? (
               <View style={styles.photoBusy}>
-                <ActivityIndicator />
+                <ActivityIndicator accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" />
                 <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
                   {tr('team.photoLoading')}
                 </Text>

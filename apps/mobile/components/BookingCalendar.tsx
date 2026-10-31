@@ -46,6 +46,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
     >
       <View style={styles.header}>
         <Pressable
+          android_ripple={{ color: t.colors.accentSoft, borderless: true }}
           accessibilityRole="button"
           accessibilityLabel={tr('calendar.prevMonth')}
           accessibilityState={{ disabled: !prevOn }}
@@ -60,6 +61,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
           {names.months[view.month]} {view.year}
         </Text>
         <Pressable
+          android_ripple={{ color: t.colors.accentSoft, borderless: true }}
           accessibilityRole="button"
           accessibilityLabel={tr('calendar.nextMonth')}
           accessibilityState={{ disabled: !nextOn }}
@@ -90,8 +92,10 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
             return (
               <View key={ymd} style={styles.cell}>
                 <Pressable
+                  android_ripple={{ color: t.colors.accentSoft, borderless: false }}
                   accessibilityRole="button"
-                  accessibilityLabel={ymd}
+                  accessibilityLabel={`${Number(ymd.slice(8))} ${names.months[Number(ymd.slice(5, 7)) - 1]} ${ymd.slice(0, 4)}`}
+                  hitSlop={4}
                   accessibilityState={{ disabled, selected }}
                   disabled={disabled}
                   onPress={() => onChange(ymd)}
@@ -136,12 +140,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xs,
   },
-  arrow: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  arrow: { width: spacing.touchTarget, height: spacing.touchTarget, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: fontSize.md, fontWeight: '800' },
   // Antetul și grila folosesc aceeași celulă: 7 coloane egale.
   row: { flexDirection: 'row' },
-  cell: { flex: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', minHeight: 40 },
+  cell: { flex: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', minHeight: 44 },
   weekday: { fontSize: fontSize.sm, fontWeight: '700' },
-  day: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  day: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { fontSize: fontSize.md },
 });

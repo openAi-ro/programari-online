@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
+import { useTheme } from '@/components/ui';
 import { radius } from '@/constants/theme';
 import { trKey, useLanguage } from '@/lib/i18n';
 
@@ -94,6 +95,7 @@ function parsePinMessage(raw: string): { latitude: number; longitude: number } |
 }
 
 function WebOsmMap({ latitude, longitude, onPick, height }: Props) {
+  const t = useTheme();
   const { lang } = useLanguage();
   const hasPin =
     latitude != null &&
@@ -119,7 +121,7 @@ function WebOsmMap({ latitude, longitude, onPick, height }: Props) {
   }, [onPick]);
 
   return (
-    <View style={[styles.wrap, { height }]}>
+    <View style={[styles.wrap, { height, borderColor: t.colors.borderStrong }]}>
       {/* eslint-disable-next-line react/no-danger */}
       <iframe
         title={trKey('map.osmIframe')}
@@ -135,6 +137,7 @@ function WebOsmMap({ latitude, longitude, onPick, height }: Props) {
  * Coordonatele se salvează pe business în app (nu ca pin public pe Google Maps).
  */
 export function OsmMapPicker(props: Props) {
+  const t = useTheme();
   if (Platform.OS === 'web') {
     return <WebOsmMap {...props} />;
   }
@@ -161,7 +164,7 @@ export function OsmMapPicker(props: Props) {
   }
 
   return (
-    <View style={[styles.wrap, { height: height ?? 260 }]}>
+    <View style={[styles.wrap, { height: height ?? 260, borderColor: t.colors.borderStrong }]}>
       <WebView
         ref={webRef}
         originWhitelist={['*']}
@@ -171,7 +174,7 @@ export function OsmMapPicker(props: Props) {
         domStorageEnabled
         mixedContentMode="always"
         setSupportMultipleWindows={false}
-        style={styles.web}
+        style={[styles.web, { backgroundColor: t.colors.surfaceMuted }]}
       />
     </View>
   );
@@ -182,7 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+
   },
-  web: { flex: 1, backgroundColor: '#e8f5f3' },
+  web: { flex: 1 },
 });

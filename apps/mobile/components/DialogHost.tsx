@@ -40,6 +40,7 @@ export function DialogHost() {
               const color = a.style === 'destructive' ? t.colors.danger : a.style === 'cancel' ? t.colors.textMuted : t.colors.accent;
               return (
                 <Pressable
+                  android_ripple={{ color: t.colors.accentSoft, borderless: false }}
                   key={a.text}
                   onPress={() => choose(a)}
                   accessibilityRole="button"
@@ -65,6 +66,6 @@ const styles = StyleSheet.create({
   title: { fontSize: fontSize.lg, fontWeight: '700' },
   message: { fontSize: fontSize.md, lineHeight: 21 },
   actions: { gap: spacing.sm, marginTop: spacing.sm },
-  action: { minHeight: spacing.touchTarget, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  action: { minHeight: spacing.touchTarget, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, overflow: 'hidden' },
   actionText: { fontSize: fontSize.md },
 });

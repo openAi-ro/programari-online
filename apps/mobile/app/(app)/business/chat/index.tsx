@@ -62,7 +62,7 @@ function BusinessChatListScreen() {
               <View style={styles.flex}>
                 <Text style={[styles.name, { color: t.colors.text }]} numberOfLines={1}>{labels[item.client_user_id] ?? tr('wl.client')}</Text>
                 <Text style={[styles.preview, { color: t.colors.textMuted }]} numberOfLines={1}>{latest[item.id] ? chatMessagePreview(latest[item.id]!, { image: tr('chat.photoLabel'), video: tr('chat.videoLabel') }) : tr('chat.openConvo')}</Text>
-                {(unread[item.id] ?? 0) > 0 ? (<View style={[styles.unreadBadge, { backgroundColor: t.colors.danger }]}><Text style={styles.unreadText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{formatBadgeCount(unread[item.id] ?? 0)}</Text></View>) : null}
+                {(unread[item.id] ?? 0) > 0 ? (<View style={[styles.unreadBadge, { backgroundColor: t.colors.danger }]}><Text style={[styles.unreadText, { color: t.colors.onAccent }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>{formatBadgeCount(unread[item.id] ?? 0)}</Text></View>) : null}
               </View>
             </Pressable>
           )}
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700' },
   preview: { fontSize: 13 },
   unreadBadge: { alignSelf: 'flex-start', minWidth: 20, minHeight: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, marginTop: 4 },
-  unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  unreadText: { fontSize: 12, fontWeight: '800' },
 });
 
 export default managerOnly(BusinessChatListScreen);

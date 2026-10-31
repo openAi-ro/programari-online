@@ -20,7 +20,7 @@ export default function Root({ children }: { children: ReactNode }) {
 
         {/* PWA / installable */}
         <link rel="manifest" href="/manifest.webmanifest" />
-        <meta name="theme-color" content="#0D9488" />
+        <meta name="theme-color" content="#0f766e" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />

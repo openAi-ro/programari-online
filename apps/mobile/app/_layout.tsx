@@ -93,7 +93,7 @@ export default function RootLayout() {
           paddingHorizontal: 32,
         }}
       >
-        <ActivityIndicator size="large" color={palette.accent500} />
+        <ActivityIndicator size="large" color={palette.accent500} accessibilityLabel={trKey('common.loading')} accessibilityRole="progressbar" />
         <Text
           style={{
             color: t.colors.text,
@@ -260,7 +260,7 @@ function RootLayoutNav() {
           backgroundColor: t.colors.bg,
         }}
       >
-        <ActivityIndicator size="large" color={palette.accent500} />
+        <ActivityIndicator size="large" color={palette.accent500} accessibilityLabel={trKey('common.loading')} accessibilityRole="progressbar" />
       </View>
     );
   }

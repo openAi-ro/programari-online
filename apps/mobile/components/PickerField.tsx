@@ -66,6 +66,7 @@ export function PickerField({
     <View style={styles.wrap}>
       <Text style={[styles.label, { color: t.colors.textMuted }]}>{label}</Text>
       <Pressable
+        android_ripple={{ color: t.colors.accentSoft, borderless: false }}
         onPress={() => !disabled && setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -150,6 +151,7 @@ export function PickerField({
                 const active = item === value;
                 return (
                   <Pressable
+                    android_ripple={{ color: t.colors.accentSoft, borderless: false }}
                     onPress={() => {
                       onChange(item);
                       close();
@@ -190,6 +192,7 @@ const styles = StyleSheet.create({
   wrap: { gap: 6 },
   label: { fontSize: fontSize.sm, fontWeight: '600' },
   box: {
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/components/ui';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { trKey } from '@/lib/i18n';
 
 type Props = {
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     overflow: 'hidden',
   },
-  fallback: { color: '#FFFFFF', fontWeight: '700' },
+  fallback: { color: palette.white, fontWeight: '700' },
   name: { fontSize: fontSize.sm, fontWeight: '600', textAlign: 'center', lineHeight: 17 },
 });
 

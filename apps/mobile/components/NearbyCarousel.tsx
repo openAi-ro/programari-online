@@ -183,7 +183,7 @@ export function NearbyCarousel() {
 
       {locState === 'locating' ? (
         <View style={styles.locating}>
-          <ActivityIndicator color={t.colors.accent} />
+          <ActivityIndicator color={t.colors.accent} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" />
           <Text style={[styles.muted, { color: t.colors.textMuted }]}>{tr('nearby.locating')}</Text>
         </View>
       ) : null}

@@ -323,6 +323,7 @@ function QuickAddBody({
                   label={tr('qa.phone')}
                   placeholder="07xx xxx xxx"
                   keyboardType="phone-pad"
+                  autoComplete="off"
                   value={phone}
                   onChangeText={setPhone}
                   testID="qa-phone"

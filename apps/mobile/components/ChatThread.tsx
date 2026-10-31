@@ -78,7 +78,7 @@ function Bubble({
       ) : null}
       {message.body ? (
         <View style={[styles.bubble, { backgroundColor: isMe ? t.colors.accent : t.colors.bgElevated }]}>
-          <Text style={[styles.bubbleText, { color: isMe ? '#fff' : t.colors.text }]}>{message.body}</Text>
+          <Text style={[styles.bubbleText, { color: isMe ? t.colors.onAccent : t.colors.text }]}>{message.body}</Text>
         </View>
       ) : null}
       <Text style={[styles.bubbleTime, { color: t.colors.textMuted, textAlign: isMe ? 'right' : 'left' }]}>{time}</Text>
@@ -287,13 +287,14 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
       ) : null}
       <Pressable
+        android_ripple={{ color: t.colors.accentSoft, borderless: true }}
         style={[styles.sendBtn, { backgroundColor: t.colors.bgElevated, opacity: attaching || sending ? 0.6 : 1 }]}
         onPress={openAttachMenu}
         disabled={attaching || sending}
         accessibilityRole="button"
         accessibilityLabel={tr('chat.attachA11y')}
       >
-        {attaching ? <ActivityIndicator color={t.colors.textMuted} /> : <Ionicons name="attach-outline" size={20} color={t.colors.text} />}
+        {attaching ? <ActivityIndicator color={t.colors.textMuted} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : <Ionicons name="attach-outline" size={20} color={t.colors.text} />}
       </Pressable>
       <TextInput
         style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
@@ -309,6 +310,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       />
       {dictation.supported ? (
         <Pressable
+          android_ripple={{ color: t.colors.accentSoft, borderless: true }}
           style={[styles.sendBtn, { backgroundColor: dictation.listening ? t.colors.danger : t.colors.bgElevated }]}
           onPress={dictation.toggle}
           disabled={sending}
@@ -316,10 +318,11 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
           accessibilityState={{ selected: dictation.listening }}
           accessibilityLabel={dictation.listening ? tr('chat.micStopA11y') : tr('chat.micA11y')}
         >
-          <Ionicons name={dictation.listening ? 'stop' : 'mic-outline'} size={18} color={dictation.listening ? '#fff' : t.colors.text} />
+          <Ionicons name={dictation.listening ? 'stop' : 'mic-outline'} size={18} color={dictation.listening ? t.colors.onAccent : t.colors.text} />
         </Pressable>
       ) : null}
       <Pressable
+        android_ripple={{ color: t.colors.accentSoft, borderless: true }}
         style={[
           styles.sendBtn,
           {
@@ -329,12 +332,14 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         ]}
         onPress={onSend}
         disabled={!canSend}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !canSend }}
         accessibilityLabel={tr('chat.sendMessageA11y')}
       >
         <Ionicons
           name="send-outline"
           size={16}
-          color={canSend ? '#fff' : t.colors.textMuted}
+          color={canSend ? t.colors.onAccent : t.colors.textMuted}
         />
       </Pressable>
     </View>
@@ -392,7 +397,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
             keyboardDismissMode="interactive"
             onEndReached={() => { void loadOlder(); }}
             onEndReachedThreshold={0.3}
-            ListFooterComponent={loadingOlder ? <ActivityIndicator style={styles.olderSpinner} color={t.colors.textMuted} /> : null}
+            ListFooterComponent={loadingOlder ? <ActivityIndicator style={styles.olderSpinner} color={t.colors.textMuted} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : null}
           />
         )}
       </View>
@@ -418,5 +423,5 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
   micError: { width: '100%', fontSize: 12 },
   input: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, maxHeight: 76 },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  sendBtn: { width: spacing.touchTarget, height: spacing.touchTarget, borderRadius: spacing.touchTarget / 2, justifyContent: 'center', alignItems: 'center' },
 });

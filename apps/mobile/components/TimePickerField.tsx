@@ -77,6 +77,7 @@ export function TimePickerField({
 
   const field = (
     <Pressable
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       onPress={openPicker}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
@@ -116,6 +117,7 @@ export function TimePickerField({
           </Text>
           {children}
           <Pressable
+            android_ripple={{ color: t.colors.accentSoft, borderless: false }}
             accessibilityRole="button"
             onPress={onDone}
             style={({ pressed }) => [
@@ -132,6 +134,7 @@ export function TimePickerField({
 
   const cell = (text: string, selected: boolean, onPress: () => void) => (
     <Pressable
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       key={text}
       onPress={onPress}
       accessibilityRole="button"
@@ -209,6 +212,7 @@ const styles = StyleSheet.create({
   wrap: { gap: 6 },
   label: { fontSize: fontSize.sm, fontWeight: '600' },
   field: {
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -240,6 +244,7 @@ const styles = StyleSheet.create({
   modalGrabber: { width: 40, height: 4, borderRadius: 2 },
   modalTitle: { fontSize: fontSize.lg, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm },
   modalBtn: {
+    overflow: 'hidden',
     marginTop: spacing.md,
     borderRadius: radius.md,
     paddingVertical: 15,
@@ -251,9 +256,10 @@ const styles = StyleSheet.create({
   gridLabel: { fontSize: fontSize.xs, fontWeight: '700', textTransform: 'uppercase' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   cell: {
+    overflow: 'hidden',
     width: '15%',
     flexGrow: 1,
-    minHeight: 40,
+    minHeight: spacing.touchTarget,
     borderWidth: 1,
     borderRadius: radius.sm,
     alignItems: 'center',

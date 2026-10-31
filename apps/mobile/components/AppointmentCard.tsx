@@ -277,6 +277,7 @@ export function AppointmentCard({
 
         {compact ? (
           <Pressable
+            android_ripple={{ color: t.colors.accentSoft, borderless: false }}
             onPress={() => setExpanded((v) => !v)}
             accessibilityRole="button"
             hitSlop={6}
@@ -547,6 +548,7 @@ export function AppointmentCard({
               <View style={styles.modalHead}>
                 <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>{tr('appt.postpone')}</Text>
                 <Pressable
+                  android_ripple={{ color: t.colors.accentSoft, borderless: true }}
                   onPress={() => !postponeBusy && setPostponeOpen(false)}
                   accessibilityRole="button"
                   accessibilityLabel={tr('common.close')}
@@ -897,6 +899,7 @@ export function AppointmentCard({
             </View>
           ) : (
             <Pressable
+              android_ripple={{ color: t.colors.accentSoft, borderless: false }}
               onPress={() => setConfirming(true)}
               accessibilityRole="button"
               hitSlop={6}

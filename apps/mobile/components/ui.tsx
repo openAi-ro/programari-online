@@ -511,6 +511,7 @@ export function Callout({
       </View>
       {onClose ? (
         <Pressable
+          android_ripple={{ color: t.colors.accentSoft, borderless: true }}
           onPress={onClose}
           hitSlop={12}
           accessibilityRole="button"
@@ -591,6 +592,7 @@ export function Field({ label, hint, error, icon, style, secureTextEntry, ...inp
         />
         {isPassword ? (
           <Pressable
+            android_ripple={{ color: t.colors.accentSoft, borderless: true }}
             onPress={() => setPasswordVisible((v) => !v)}
             accessibilityRole="button"
             accessibilityLabel={passwordVisible ? tr('auth.hidePassword') : tr('auth.showPassword')}
@@ -742,11 +744,13 @@ export function Toggle({
       accessibilityState={{ checked: value, disabled }}
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
-      hitSlop={6}
+      android_ripple={{ color: t.colors.accentSoft, borderless: true }}
+      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
       style={({ pressed }) => [
         styles.toggleTrack,
         {
-          backgroundColor: value ? t.colors.accent : t.colors.borderStrong,
+          backgroundColor: value ? t.colors.accent : t.colors.surfaceMuted,
+          borderColor: value ? t.colors.accent : t.colors.textMuted,
           opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
         },
       ]}
@@ -755,8 +759,10 @@ export function Toggle({
         style={[
           styles.toggleThumb,
           {
-            backgroundColor: t.colors.onAccent,
-            marginLeft: value ? 18 : 0,
+            backgroundColor: value ? t.colors.onAccent : t.colors.textMuted,
+            width: value ? 24 : 16,
+            height: value ? 24 : 16,
+            alignSelf: value ? 'flex-end' : 'flex-start',
           },
         ]}
       />
@@ -782,6 +788,7 @@ export function Segmented<T extends string>({
         const active = opt.value === value;
         return (
           <Pressable
+            android_ripple={{ color: t.colors.accentSoft, borderless: false }}
             key={opt.value}
             onPress={() => onChange(opt.value)}
             accessibilityRole="tab"
@@ -970,7 +977,7 @@ export function LoadingScreen({ label }: { label?: string }) {
   const t = useTheme();
   return (
     <View style={[styles.centered, { backgroundColor: t.colors.bg }]}>
-      <ActivityIndicator size="large" color={t.colors.accent} />
+      <ActivityIndicator size="large" color={t.colors.accent} accessibilityLabel={trKey('common.loading')} accessibilityRole="progressbar" />
       <Text style={[styles.loadingText, { color: t.colors.textMuted }]}>{label ?? trKey('common.loading')}</Text>
     </View>
   );
@@ -1179,6 +1186,7 @@ export function Banner({
 
   return (
     <Pressable
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       onPress={onPress}
       disabled={!onPress}
       style={({ pressed }) => [
@@ -1420,15 +1428,14 @@ const styles = StyleSheet.create({
   },
 
   toggleTrack: {
-    width: 44,
-    height: 26,
+    width: 52,
+    height: 32,
     borderRadius: radius.pill,
-    padding: 3,
+    borderWidth: 2,
+    paddingHorizontal: 4,
     justifyContent: 'center',
   },
   toggleThumb: {
-    width: 20,
-    height: 20,
     borderRadius: radius.pill,
   },
 
@@ -1440,6 +1447,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   segmentedItem: {
+    overflow: 'hidden',
     flex: 1,
     flexBasis: '30%',
     minWidth: 0,

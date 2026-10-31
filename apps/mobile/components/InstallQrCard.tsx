@@ -161,6 +161,6 @@ const styles = StyleSheet.create({
   steps: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.xs },
   stepsTitle: { fontSize: fontSize.sm, fontWeight: '800', marginBottom: spacing.xs },
   step: { fontSize: fontSize.sm, lineHeight: 20 },
-  actions: { flexDirection: 'row', gap: spacing.sm, width: '100%' },
-  action: { flex: 1 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, width: '100%' },
+  action: { flexGrow: 1, flexBasis: 150 },
 });

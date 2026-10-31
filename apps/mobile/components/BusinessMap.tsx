@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { palette } from '@/constants/theme';
 
 export type BusinessMapPoint = {
   publicCode: string;
@@ -35,7 +36,7 @@ export function BusinessMap({ points, center, onSelect, height = 260 }: Props) {
         ? `map.fitBounds(L.latLngBounds([${points.map((p) => `[${p.latitude},${p.longitude}]`).join(',')}]));`
         : `map.setView([${c.latitude},${c.longitude}],13);`;
     const me = center
-      ? `L.circleMarker([${center.latitude},${center.longitude}],{radius:7,color:'#2563eb'}).addTo(map);`
+      ? `L.circleMarker([${center.latitude},${center.longitude}],{radius:7,color:'${palette.accent700}'}).addTo(map);`
       : '';
     return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>

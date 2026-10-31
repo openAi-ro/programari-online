@@ -352,6 +352,8 @@ function BusinessPageSettingsScreen() {
         label={tr('pageEdit.contactPhone')}
         placeholder={tr('pageEdit.contactPhonePh')}
         keyboardType="phone-pad"
+        autoComplete="tel"
+        textContentType="telephoneNumber"
         value={contactPhone}
         onChangeText={setContactPhone}
       />

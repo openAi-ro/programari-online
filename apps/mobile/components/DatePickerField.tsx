@@ -95,6 +95,7 @@ export function DatePickerField({
 
   const field = (children: React.ReactNode, onPress?: () => void) => (
     <Pressable
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole="button"
@@ -221,6 +222,7 @@ export function DatePickerField({
                 style={{ alignSelf: 'center' }}
               />
               <Pressable
+                android_ripple={{ color: t.colors.accentSoft, borderless: false }}
                 style={({ pressed }) => [
                   styles.modalBtn,
                   {
@@ -245,6 +247,7 @@ const styles = StyleSheet.create({
   wrap: { gap: 6 },
   label: { fontSize: fontSize.sm, fontWeight: '600' },
   field: {
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -283,6 +286,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   modalBtn: {
+    overflow: 'hidden',
     marginTop: spacing.md,
     borderRadius: radius.md,
     paddingVertical: 15,

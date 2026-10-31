@@ -17,7 +17,7 @@ import {
   Toggle,
   useTheme,
 } from '@/components/ui';
-import { fontSize, palette, radius, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import {
   DEFAULT_AUTO_APPROVE_RETURNING,
   DEFAULT_BREAK_HOURS,
@@ -1170,9 +1170,7 @@ function BusinessSetupScreen() {
       </Text>
 
       <DatePickerField label={tr('setup.oneDay')} value={blockDateDraft} onChange={setBlockDateDraft} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={tr('setup.blockDayBtn')}
+      <Button label={tr('setup.blockDayBtn')} icon="lock-closed-outline" variant="secondary" size="md"
         onPress={() => {
           if (!blockedDates.includes(blockDateDraft)) {
             setBlockedDates([...blockedDates, blockDateDraft].sort());
@@ -1181,17 +1179,7 @@ function BusinessSetupScreen() {
             setMessage(tr('setup.dayAlreadyBlocked', { date: blockDateDraft }));
           }
         }}
-        style={({ pressed }) => [
-          styles.blockBtn,
-          styles.blockBtnDay,
-          { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
-        ]}
-      >
-        <Ionicons name="lock-closed-outline" size={18} color={palette.white} />
-        <Text style={styles.blockBtnText} numberOfLines={1}>
-          {tr('setup.blockDayBtn')}
-        </Text>
-      </Pressable>
+      />
 
       <DatePickerField
         label={tr('setup.leaveFrom')}
@@ -1209,9 +1197,7 @@ function BusinessSetupScreen() {
         onChange={setBlockRangeEnd}
         minimumDate={parseYmdLocal(blockRangeStart)}
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={tr('setup.blockLeaveBtn')}
+      <Button label={tr('setup.blockLeaveBtn')} icon="calendar-outline" variant="secondary" size="md"
         onPress={() => {
           const range = eachYmdInclusive(blockRangeStart, blockRangeEnd);
           if (range.length === 0) return;
@@ -1230,17 +1216,7 @@ function BusinessSetupScreen() {
               : tr('setup.rangeBlocked', { from: range[0], to: range[range.length - 1] })
           );
         }}
-        style={({ pressed }) => [
-          styles.blockBtn,
-          styles.blockBtnLeave,
-          { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
-        ]}
-      >
-        <Ionicons name="calendar-outline" size={18} color={palette.white} />
-        <Text style={styles.blockBtnText} numberOfLines={1}>
-          {tr('setup.blockLeaveBtn')}
-        </Text>
-      </Pressable>
+      />
 
       {blockedDates.length > 0 ? (
         <View style={styles.chipWrap}>
@@ -1303,38 +1279,6 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: fontSize.sm, fontWeight: '600' },
   hint: { fontSize: fontSize.sm, lineHeight: 18 },
-  blockBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: 12,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
-    minHeight: 44,
-  },
-  blockBtnDay: {
-    backgroundColor: palette.sky600,
-    shadowColor: palette.sky500,
-    shadowOpacity: 0.45,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  blockBtnLeave: {
-    backgroundColor: palette.danger600,
-    shadowColor: palette.danger600,
-    shadowOpacity: 0.45,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  blockBtnText: {
-    color: palette.white,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
 
 });
 
