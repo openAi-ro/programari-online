@@ -260,11 +260,11 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
             style={[styles.pendingRemove, { backgroundColor: t.colors.text }]}
             onPress={() => setPending(null)}
             disabled={attaching}
-            hitSlop={8}
+            hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel={tr('chat.attachRemoveA11y')}
           >
-            <Ionicons name="close" size={14} color={t.colors.bg} />
+            <Ionicons name="close" size={18} color={t.colors.bg} />
           </Pressable>
         </View>
         <Text style={[styles.pendingHint, { color: t.colors.textMuted }]}>
@@ -272,7 +272,6 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         </Text>
       </View>
     ) : null}
-    <View style={styles.inputRow}>
       {dictation.error ? (
         <Text style={[styles.micError, { color: t.colors.danger }]}>
           {tr(
@@ -286,18 +285,20 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       ) : !dictation.supported && Platform.OS === 'web' ? (
         <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
       ) : null}
+    <View style={styles.inputRow}>
       <Pressable
         android_ripple={{ color: t.colors.accentSoft, borderless: true }}
-        style={[styles.sendBtn, { backgroundColor: t.colors.bgElevated, opacity: attaching || sending ? 0.6 : 1 }]}
+        style={[styles.sendBtn, { backgroundColor: t.colors.bgElevated, borderWidth: 1.5, borderColor: t.colors.accent, opacity: attaching || sending ? 0.6 : 1 }]}
         onPress={openAttachMenu}
         disabled={attaching || sending}
         accessibilityRole="button"
         accessibilityLabel={tr('chat.attachA11y')}
+        accessibilityState={{ disabled: attaching || sending }}
       >
-        {attaching ? <ActivityIndicator color={t.colors.textMuted} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : <Ionicons name="attach-outline" size={20} color={t.colors.text} />}
+        {attaching ? <ActivityIndicator color={t.colors.accent} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : <Ionicons name="attach-outline" size={20} color={t.colors.accent} />}
       </Pressable>
       <TextInput
-        style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.bgElevated }]}
+        style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border, borderWidth: 1 }]}
         placeholder={pending ? tr('chat.captionPlaceholder') : tr('chat.writeMessage')}
         placeholderTextColor={t.colors.textMuted}
         value={draft}
@@ -311,14 +312,14 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       {dictation.supported ? (
         <Pressable
           android_ripple={{ color: t.colors.accentSoft, borderless: true }}
-          style={[styles.sendBtn, { backgroundColor: dictation.listening ? t.colors.danger : t.colors.bgElevated }]}
+          style={[styles.sendBtn, dictation.listening ? { backgroundColor: t.colors.danger } : { backgroundColor: t.colors.bgElevated, borderWidth: 1.5, borderColor: t.colors.accent }]}
           onPress={dictation.toggle}
           disabled={sending}
           accessibilityRole="button"
           accessibilityState={{ selected: dictation.listening }}
           accessibilityLabel={dictation.listening ? tr('chat.micStopA11y') : tr('chat.micA11y')}
         >
-          <Ionicons name={dictation.listening ? 'stop' : 'mic-outline'} size={18} color={dictation.listening ? t.colors.onAccent : t.colors.text} />
+          <Ionicons name={dictation.listening ? 'stop' : 'mic-outline'} size={20} color={dictation.listening ? t.colors.onAccent : t.colors.accent} />
         </Pressable>
       ) : null}
       <Pressable
@@ -326,8 +327,8 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         style={[
           styles.sendBtn,
           {
-            backgroundColor: canSend ? t.colors.accent : t.colors.bgElevated,
-            opacity: canSend ? 1 : 0.6,
+            backgroundColor: canSend ? t.colors.accent : t.colors.surfaceMuted,
+            opacity: 1,
           },
         ]}
         onPress={onSend}
@@ -338,7 +339,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       >
         <Ionicons
           name="send-outline"
-          size={16}
+          size={20}
           color={canSend ? t.colors.onAccent : t.colors.textMuted}
         />
       </Pressable>
@@ -418,10 +419,10 @@ const styles = StyleSheet.create({
   centerRow: { marginTop: spacing.lg },
   olderSpinner: { paddingVertical: spacing.sm },
   pendingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.sm },
-  pendingRemove: { position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  pendingRemove: { position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   pendingHint: { flex: 1, fontSize: 13 },
-  inputRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
+  inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
   micError: { width: '100%', fontSize: 12 },
-  input: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, maxHeight: 76 },
+  input: { flex: 1, minWidth: 0, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, maxHeight: 76 },
   sendBtn: { width: spacing.touchTarget, height: spacing.touchTarget, borderRadius: spacing.touchTarget / 2, justifyContent: 'center', alignItems: 'center' },
 });

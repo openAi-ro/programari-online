@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter, useSegments } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DatePickerField } from '@/components/DatePickerField';
@@ -61,6 +61,8 @@ export default function BusinessCalendarScreen() {
   const back = useBack();
   const tr = useT();
   const router = useRouter();
+  const segments = useSegments();
+  const inTabs = (segments as readonly string[]).includes('(tabs)');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
@@ -195,13 +197,23 @@ export default function BusinessCalendarScreen() {
     setBusiness({ ...business, blocked_dates: next });
   }
 
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading && !business) {
     return <SkeletonScreen title={tr('cal.title')} onBack={back} blocks={5} label={tr('cal.loading')} />;
   }
 
   if (!business) {
     return (
-      <Screen title={tr('cal.title')} onBack={back}>
+      <Screen aboveTabBar={inTabs} title={tr('cal.title')} onBack={back}>
         <EmptyState
           icon="calendar-outline"
           title={tr('svc.setupFirst')}
@@ -214,8 +226,10 @@ export default function BusinessCalendarScreen() {
   return (
     <View style={styles.screenWrap}>
     <Screen
+      aboveTabBar={inTabs}
       title={tr('cal.title')}
       subtitle={business.name}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={t.colors.accent} colors={[t.colors.accent]} progressBackgroundColor={t.colors.bgElevated} />}
       onBack={back}
     >
       {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
@@ -233,7 +247,7 @@ export default function BusinessCalendarScreen() {
       {staffList.length > 1 ? (
         <View style={styles.filters}>
           <Pressable
-            onPress={() => setStaffFilter('all')}
+            accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: false }} hitSlop={{ top: 4, bottom: 4 }} accessibilityState={{ selected: staffFilter === 'all' }} onPress={() => setStaffFilter('all')}
             style={[
               styles.chip,
               {
@@ -257,7 +271,7 @@ export default function BusinessCalendarScreen() {
             return (
               <Pressable
                 key={s.id}
-                onPress={() => setStaffFilter(s.id)}
+                accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: false }} hitSlop={{ top: 4, bottom: 4 }} accessibilityState={{ selected: on }} onPress={() => setStaffFilter(s.id)}
                 style={[
                   styles.chip,
                   {
@@ -315,6 +329,7 @@ export default function BusinessCalendarScreen() {
           const contact = appointmentContactParts(a).join(' · ');
           return (
             <Pressable
+              accessibilityRole="button"
               key={a.id}
               onPress={() => {
                 if (viewMode === 'week') {
@@ -479,6 +494,9 @@ const styles = StyleSheet.create({
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
+    minHeight: 40,
+    justifyContent: 'center',
+    overflow: 'hidden',
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
     borderWidth: 1,

@@ -174,6 +174,7 @@ export function BusinessTabBar({
               style={[styles.label, { color }]}
               numberOfLines={1}
               ellipsizeMode="tail"
+              maxFontSizeMultiplier={1.3}
             >
               {tr(tab.labelKey)}
             </Text>

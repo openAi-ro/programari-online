@@ -198,7 +198,7 @@ export default function CategoryResultsScreen() {
   if (!category) {
     return (
       <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-        <Screen title={tr('cat.unknownTitle')} subtitle={tr('cat.unknownSub')} onBack={back}>
+        <Screen aboveTabBar title={tr('cat.unknownTitle')} subtitle={tr('cat.unknownSub')} onBack={back}>
           <EmptyState
             icon="grid-outline"
             title={tr('cat.invalid')}
@@ -249,7 +249,7 @@ export default function CategoryResultsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-      <Screen title={catName} subtitle={subtitle} onBack={back} scroll={false}>
+      <Screen aboveTabBar title={catName} subtitle={subtitle} onBack={back} scroll={false}>
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}

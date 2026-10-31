@@ -149,6 +149,7 @@ export function ClientTabBar({
               style={[styles.label, { color, fontSize: labelSize }]}
               numberOfLines={1}
               ellipsizeMode="tail"
+              maxFontSizeMultiplier={1.3}
             >
               {tr(tab.labelKey)}
             </Text>

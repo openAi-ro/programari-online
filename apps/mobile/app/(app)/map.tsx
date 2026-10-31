@@ -99,6 +99,7 @@ export default function NearMeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <Screen
+        aboveTabBar
         title={tr('browse.nearMe')}
         subtitle={
           coords

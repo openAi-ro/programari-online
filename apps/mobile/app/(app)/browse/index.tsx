@@ -82,7 +82,7 @@ function CategoryTile({
         style={[
           styles.catCountBadge,
           {
-            backgroundColor: count > 0 ? t.colors.accent : 'rgba(15,23,42,0.55)',
+            backgroundColor: count > 0 ? palette.accent700 : 'rgba(15,23,42,0.55)',
           },
         ]}
       >
@@ -92,7 +92,7 @@ function CategoryTile({
         style={[
           styles.catLabelWrap,
           {
-            backgroundColor: selected ? 'rgba(37,99,235,0.88)' : 'rgba(15,23,42,0.62)',
+            backgroundColor: selected ? palette.accent700 : 'rgba(15,23,42,0.62)',
           },
         ]}
       >
@@ -314,6 +314,7 @@ export default function BrowseScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
       <Screen
+        aboveTabBar
         title={tr('fav.searchBiz')}
         subtitle={tr('browse.browseSub')}
         onBack={back}

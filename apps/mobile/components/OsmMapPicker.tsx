@@ -185,7 +185,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
-
   },
   web: { flex: 1 },
 });

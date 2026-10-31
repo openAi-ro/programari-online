@@ -653,7 +653,7 @@ function ClientHome({
 
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
-    <Screen bottomInset={bottomInset}>
+    <Screen aboveTabBar bottomInset={bottomInset}>
       <View style={styles.hero}>
         <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>{tr('home.clientAccount')}</Text>
         <Text style={[styles.heroTitle, { color: t.colors.text }]} numberOfLines={1}>
@@ -916,7 +916,7 @@ function BusinessHome({
   );
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
-    <Screen bottomInset={bottomInset}>
+    <Screen aboveTabBar bottomInset={bottomInset}>
       <View style={styles.hero}>
         <Text style={[styles.heroLabel, { color: t.colors.textMuted }]}>{tr('home.businessAccount')}</Text>
         <Text style={[styles.heroTitle, { color: t.colors.text }]} numberOfLines={1}>

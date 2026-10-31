@@ -992,6 +992,8 @@ export default function BookScreen() {
           <View style={styles.serviceList}>
             {tipOptions(combo.price).map((o) => (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: tipRon === o.amount }}
                 key={o.percent}
                 onPress={() => {
                   setTipRon(o.amount);
@@ -1091,6 +1093,8 @@ export default function BookScreen() {
               const on = serviceIds.includes(s.id);
               return (
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
                   key={s.id}
                   onPress={() => {
                     setServiceIds((ids) => toggleServiceId(ids, s.id));

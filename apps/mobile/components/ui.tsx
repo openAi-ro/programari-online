@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
   type PressableStateCallbackType,
+  type RefreshControlProps,
   type StyleProp,
   type TextInputProps,
   type TextStyle,
@@ -69,6 +70,7 @@ type ScreenProps = {
   scroll?: boolean;
   /** Spațiu suplimentar jos, util când există un buton ancorat. */
   bottomInset?: number;
+  aboveTabBar?: boolean;
   footer?: React.ReactNode;
   /**
    * Ridică conținutul / footer-ul deasupra tastaturii (client + business).
@@ -77,6 +79,8 @@ type ScreenProps = {
   keyboardAvoid?: boolean;
   /** Ref opțional la ScrollView-ul intern, pentru derulare programatică la o secțiune. */
   scrollRef?: React.RefObject<ScrollView | null>;
+  /** Control de reimprospatare la tragerea in jos, transmis pe ScrollView. */
+  refreshControl?: React.ReactElement<RefreshControlProps>;
   /** Conținut lat (până la 1100px) pe ecrane mari; implicit coloana de telefon (560px). */
   wide?: boolean;
 };
@@ -89,9 +93,11 @@ export function Screen({
   headerRight,
   scroll = true,
   bottomInset = spacing['3xl'],
+  aboveTabBar = false,
   footer,
   keyboardAvoid = true,
   scrollRef,
+  refreshControl,
   wide = false,
 }: ScreenProps) {
   const t = useTheme();
@@ -106,21 +112,25 @@ export function Screen({
     keyboardAvoid,
   });
 
+  // Fara footer, continutul nu trebuie sa ajunga sub bara de navigare Android (edge-to-edge).
+  const contentBottom = footer || aboveTabBar ? bottomInset : Math.max(bottomInset, insets.bottom + spacing.lg);
+
   const body = scroll ? (
     <ScrollView
       ref={scrollRef}
       style={styles.flex}
-      contentContainerStyle={[styles.scrollContent, shellStyle, { paddingBottom: bottomInset }]}
+      contentContainerStyle={[styles.scrollContent, shellStyle, { paddingBottom: contentBottom }]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
       automaticallyAdjustKeyboardInsets={keyboardAvoid}
+      refreshControl={refreshControl}
       removeClippedSubviews={false}
       showsVerticalScrollIndicator={false}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.flex, shellStyle, { paddingBottom: bottomInset }]}>{children}</View>
+    <View style={[styles.flex, shellStyle, { paddingBottom: contentBottom }]}>{children}</View>
   );
 
   const content = (
@@ -133,11 +143,11 @@ export function Screen({
                 <IconBadge icon="chevron-back" onPress={onBack} accessibilityLabel={tr('common.back')} />
               ) : null}
               <View style={styles.headerTitles}>
-                <Text style={[styles.headerTitle, { color: t.colors.text }]} numberOfLines={1}>
+                <Text maxFontSizeMultiplier={1.3} style={[styles.headerTitle, { color: t.colors.text }]} numberOfLines={1}>
                   {title}
                 </Text>
                 {subtitle ? (
-                  <Text
+                  <Text maxFontSizeMultiplier={1.3}
                     style={[styles.headerSubtitle, { color: t.colors.textMuted }]}
                     numberOfLines={1}
                   >
@@ -1203,7 +1213,7 @@ export function Banner({
         ) : null}
       </View>
       {actionLabel ? (
-        <View style={[styles.bannerPill, { backgroundColor: map.border }]}>
+        <View style={[styles.bannerPill, { backgroundColor: map.fg }]}>
           <Text style={[styles.bannerPillText, { color: t.colors.onAccent }]}>{actionLabel}</Text>
         </View>
       ) : null}
@@ -1499,6 +1509,7 @@ const styles = StyleSheet.create({
   emptyAction: { marginTop: spacing.xl, alignSelf: 'stretch' },
 
   banner: {
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,

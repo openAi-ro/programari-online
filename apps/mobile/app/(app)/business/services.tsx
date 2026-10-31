@@ -337,7 +337,7 @@ function BusinessServicesScreen() {
               },
             ]}
           >
-            <Pressable onPress={() => startEdit(s)} style={styles.rowText}>
+            <Pressable accessibilityRole="button" onPress={() => startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
               {s.description ? (
                 <Text style={[styles.rowDesc, { color: t.colors.textMuted }]} numberOfLines={2}>
@@ -350,13 +350,13 @@ function BusinessServicesScreen() {
               </Text>
             </Pressable>
             <View style={styles.rowRight}>
-              <Pressable onPress={() => void moveService(s, -1)} hitSlop={8} accessibilityLabel={tr('common.moveUp')}>
+              <Pressable onPress={() => void moveService(s, -1)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.moveUp')}>
                 <Ionicons name="arrow-up" size={18} color={t.colors.textMuted} />
               </Pressable>
-              <Pressable onPress={() => void moveService(s, 1)} hitSlop={8} accessibilityLabel={tr('common.moveDown')}>
+              <Pressable onPress={() => void moveService(s, 1)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.moveDown')}>
                 <Ionicons name="arrow-down" size={18} color={t.colors.textMuted} />
               </Pressable>
-              <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} hitSlop={8} accessibilityLabel={tr('common.deleteHard')}>
+              <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.deleteHard')}>
                 <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
               </Pressable>
               <Toggle
@@ -364,7 +364,7 @@ function BusinessServicesScreen() {
                 onValueChange={() => void toggleActive(s)}
                 accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
               />
-              <Pressable onPress={() => startEdit(s)} hitSlop={8}>
+              <Pressable onPress={() => startEdit(s)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.edit')}>
                 <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
               </Pressable>
             </View>
@@ -392,11 +392,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
   },
-  rowText: { flex: 1, gap: 2 },
+  rowText: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 140, gap: 2 },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowDesc: { fontSize: fontSize.sm, marginTop: 2 },
   rowMeta: { fontSize: fontSize.sm },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  iconBtn: { width: 44, height: spacing.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   confirmBox: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
 });
 

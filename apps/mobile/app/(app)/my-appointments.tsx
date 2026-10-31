@@ -446,7 +446,7 @@ export default function MyAppointmentsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
-    <Screen title={tr('home.cardMyBookings')} subtitle={tr('my.subtitle')} onBack={back} scroll={false}>
+    <Screen aboveTabBar title={tr('home.cardMyBookings')} subtitle={tr('my.subtitle')} onBack={back} scroll={false}>
       <FlatList
         data={shown}
         keyExtractor={(item) => item.id}
@@ -459,6 +459,7 @@ export default function MyAppointmentsScreen() {
             onRefresh={load}
             tintColor={t.colors.accent}
             colors={[t.colors.accent]}
+            progressBackgroundColor={t.colors.bgElevated}
           />
         }
         ListHeaderComponent={
@@ -588,10 +589,10 @@ export default function MyAppointmentsScreen() {
                 <Callout tone="accent" title={tr('my.review')}>
                   {tr('my.pickStars')}
                 </Callout>
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <View style={{ flexDirection: 'row', gap: spacing.xs }}>
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <Pressable key={n} onPress={() => setReviewRating(n)} hitSlop={6}>
-                      <Text style={{ fontSize: 22 }}>{n <= reviewRating ? '★' : '☆'}</Text>
+                    <Pressable key={n} onPress={() => setReviewRating(n)} accessibilityRole="button" accessibilityState={{ selected: n <= reviewRating }} accessibilityLabel={tr('my.starN', { n })} style={{ minWidth: spacing.touchTarget, minHeight: spacing.touchTarget, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 28, color: n <= reviewRating ? t.colors.warning : t.colors.textMuted }}>{n <= reviewRating ? '★' : '☆'}</Text>
                     </Pressable>
                   ))}
                 </View>

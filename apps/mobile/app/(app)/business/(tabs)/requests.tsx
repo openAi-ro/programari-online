@@ -596,7 +596,7 @@ export default function BusinessRequestsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen title={tr('req.title')} subtitle={tr('req.subtitle')} onBack={back} scroll={false}>
+      <Screen aboveTabBar title={tr('req.title')} subtitle={tr('req.subtitle')} onBack={back} scroll={false}>
       <FlatList
         ref={listRef}
         data={shown}
@@ -612,6 +612,7 @@ export default function BusinessRequestsScreen() {
             onRefresh={load}
             tintColor={t.colors.accent}
             colors={[t.colors.accent]}
+            progressBackgroundColor={t.colors.bgElevated}
           />
         }
         ListHeaderComponent={

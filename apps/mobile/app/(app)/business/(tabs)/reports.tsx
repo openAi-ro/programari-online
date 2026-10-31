@@ -95,7 +95,7 @@ function BusinessReportsScreen() {
 
   if (!report) {
     return (
-      <Screen title={tr('rep.title')} onBack={back}>
+      <Screen aboveTabBar title={tr('rep.title')} onBack={back}>
         {error ? <Callout tone="danger">{error}</Callout> : null}
         <EmptyState
           icon="stats-chart-outline"
@@ -112,7 +112,7 @@ function BusinessReportsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen title={tr('rep.title')} subtitle={tr('rep.lastDays').replace('{days}', String(report.days))} onBack={back}>
+      <Screen aboveTabBar title={tr('rep.title')} subtitle={tr('rep.lastDays').replace('{days}', String(report.days))} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
       <Segmented value={String(days)} onChange={(v) => setDays(Number(v))} options={[{ value: '7', label: '7' }, { value: '30', label: '30' }, { value: '90', label: '90' }]} />

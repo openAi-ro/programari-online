@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -128,6 +128,16 @@ function BusinessClientsScreen() {
       });
     }, [load, rows.length])
   );
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const recordKey = (row: BusinessClientRow) => `${row.business_id}:${row.client_user_id}`;
 
@@ -345,7 +355,7 @@ function BusinessClientsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen title={tr('cli.title')} subtitle={tr('cli.subtitle')} onBack={back}>
+      <Screen aboveTabBar title={tr('cli.title')} subtitle={tr('cli.subtitle')} onBack={back} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={t.colors.accent} colors={[t.colors.accent]} progressBackgroundColor={t.colors.bgElevated} />}>
       <Field
         label={tr('cli.search')}
         value={query}
@@ -360,7 +370,7 @@ function BusinessClientsScreen() {
         ].map((chip) => (
           <Pressable
             key={chip.key}
-            onPress={() => setInactiveOnly(chip.key === 'inactive')}
+            accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: false }} hitSlop={{ top: 4, bottom: 4 }} accessibilityState={{ selected: chip.on }} onPress={() => setInactiveOnly(chip.key === 'inactive')}
             style={[
               styles.chip,
               {
@@ -394,7 +404,7 @@ function BusinessClientsScreen() {
                 { backgroundColor: t.colors.surface, borderColor: t.colors.border },
               ]}
             >
-              <Pressable onPress={() => void openClient(row)} style={styles.head}>
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} android_ripple={{ color: t.colors.accentSoft, borderless: false }} onPress={() => void openClient(row)} style={styles.head}>
                 <View style={styles.flex}>
                   <Text style={[styles.name, { color: t.colors.text }]}>
                     {row.display_name || row.contact}
@@ -425,7 +435,7 @@ function BusinessClientsScreen() {
                     multiline
                   />
                   <Pressable
-                    onPress={() => void saveNote(row)}
+                    accessibilityRole="button" accessibilityState={{ disabled: noteBusy, busy: noteBusy }} onPress={() => void saveNote(row)}
                     disabled={noteBusy}
                     style={({ pressed }) => [
                       styles.saveNote,
@@ -536,7 +546,7 @@ function BusinessClientsScreen() {
                     icon={row.blocked ? 'lock-open-outline' : 'ban-outline'}
                     onPress={() => void toggleBlock(row)}
                   />
-                  <Pressable onPress={() => router.push('/(app)/business/calendar' as never)}>
+                  <Pressable accessibilityRole="link" style={{ minHeight: spacing.touchTarget, justifyContent: 'center' }} onPress={() => router.push('/(app)/business/calendar' as never)}>
                     <Text style={[styles.link, { color: t.colors.accent }]}>{tr('cli.openCalendar')}</Text>
                   </Pressable>
                 </View>
@@ -643,6 +653,9 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
+    minHeight: 40,
+    justifyContent: 'center',
+    overflow: 'hidden',
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
     borderWidth: 1,

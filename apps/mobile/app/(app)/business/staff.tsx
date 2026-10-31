@@ -753,7 +753,7 @@ function BusinessStaffScreen() {
             ]}
           >
             <StaffBadge name={s.name} photoUrl={s.photo_url} color={s.color} size={52} />
-            <Pressable onPress={() => void startEdit(s)} style={styles.rowText}>
+            <Pressable accessibilityRole="button" onPress={() => void startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]} numberOfLines={2} ellipsizeMode="tail">
                 {s.name}
               </Text>
@@ -763,13 +763,13 @@ function BusinessStaffScreen() {
               </Text>
             </Pressable>
             <View style={styles.rowActions}>
-            <Pressable onPress={() => void moveStaff(s, -1)} hitSlop={8} accessibilityLabel={tr('common.moveUp')}>
+            <Pressable onPress={() => void moveStaff(s, -1)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.moveUp')}>
               <Ionicons name="arrow-up" size={18} color={t.colors.textMuted} />
             </Pressable>
-            <Pressable onPress={() => void moveStaff(s, 1)} hitSlop={8} accessibilityLabel={tr('common.moveDown')}>
+            <Pressable onPress={() => void moveStaff(s, 1)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.moveDown')}>
               <Ionicons name="arrow-down" size={18} color={t.colors.textMuted} />
             </Pressable>
-            <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} hitSlop={8} accessibilityLabel={tr('common.deleteHard')}>
+            <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.deleteHard')}>
               <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
             </Pressable>
             <Toggle
@@ -777,7 +777,7 @@ function BusinessStaffScreen() {
               onValueChange={() => void toggleActive(s)}
               accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
             />
-            <Pressable onPress={() => void startEdit(s)} hitSlop={8}>
+            <Pressable onPress={() => void startEdit(s)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.edit')}>
               <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
             </Pressable>
             </View>
@@ -842,7 +842,8 @@ const styles = StyleSheet.create({
   dot: { width: 12, height: 12, borderRadius: 6 },
   // Textul ia latimea ramasa; pe ecran ingust actiunile trec pe randul urmator.
   rowText: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 140, gap: 2 },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginLeft: 'auto' },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 'auto' },
+  iconBtn: { width: 44, height: spacing.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowMeta: { fontSize: fontSize.sm },
 });

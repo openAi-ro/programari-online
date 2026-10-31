@@ -1152,6 +1152,8 @@ export default function PublicBookScreen() {
           <View style={styles.serviceList}>
             {tipOptions(combo.price).map((o) => (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: tipRon === o.amount }}
                 key={o.percent}
                 onPress={() => {
                   setTipRon(o.amount);
@@ -1430,7 +1432,7 @@ function CarouselControls({
     <>
       {showArrows ? (
         <>
-          <Pressable
+          <Pressable hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={tr('page.prevPhoto')}
             onPress={() => onGo(index - 1)}
@@ -1438,7 +1440,7 @@ function CarouselControls({
           >
             <Ionicons name="chevron-back" size={20} color={palette.white} />
           </Pressable>
-          <Pressable
+          <Pressable hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={tr('page.nextPhoto')}
             onPress={() => onGo(index + 1)}
@@ -1513,7 +1515,7 @@ function SpecialistCover({
           ))}
         </ScrollView>
       ) : null}
-      <View style={styles.coverBadge} pointerEvents="none">
+      <View style={[styles.coverBadge, { backgroundColor: t.colors.bgElevated, borderRadius: radius.pill }]} pointerEvents="none">
         <Badge tone="accent">{badge}</Badge>
       </View>
       <CarouselControls count={count} index={index} showArrows={isWeb} onGo={go} />
