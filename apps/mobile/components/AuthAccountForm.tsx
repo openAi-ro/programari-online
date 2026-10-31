@@ -45,11 +45,11 @@ const MODE_VALUES: Mode[] = ['login', 'register'];
 
 WebBrowser.maybeCompleteAuthSession();
 
-export function AuthAccountForm({ kind }: { kind: AppMode }) {
+export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppMode; initialMode?: Mode }) {
   const t = useTheme();
   const tr = useT();
   const isBusiness = kind === 'business';
-  const [mode, setMode] = useState<Mode>('register');
+  const [mode, setMode] = useState<Mode>(initialMode);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -247,21 +247,26 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
       <LoginCard heading={isBusiness ? tr('auth.businessAccountTitle') : tr('auth.clientAccountTitle')}>
         <>
             <LoginField
+              label={tr('auth.email')}
+              textContentType="emailAddress"
               icon="mail-outline"
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
               autoCorrect={false}
-              placeholder="Email"
+              placeholder={tr('auth.emailPlaceholder')}
               value={email}
               onChangeText={setEmail}
               editable={!loading}
             />
             <LoginField
+              label={tr('auth.password')}
+              textContentType={mode === 'register' ? 'newPassword' : 'password'}
               icon="lock-closed-outline"
+              keyboardType="default"
               secureTextEntry
               autoComplete={mode === 'register' ? 'new-password' : 'password'}
-              placeholder={tr('auth.password')}
+              placeholder={tr('auth.passwordPlaceholder')}
               value={password}
               onChangeText={setPassword}
               editable={!loading}
@@ -270,10 +275,15 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
             />
             {!isBusiness && mode === 'register' ? (
               <LoginField
+                label={tr('ref.label')}
+                hint={tr('ref.optional')}
+                autoComplete="off"
+                textContentType="none"
                 icon="people-outline"
+                keyboardType="default"
                 autoCapitalize="characters"
                 autoCorrect={false}
-                placeholder={tr('ref.field')}
+                placeholder="ABC123"
                 value={referralInput}
                 onChangeText={setReferralInput}
                 editable={!loading}
@@ -326,6 +336,7 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
               loading={loading}
             />
             <LoginButton
+              tone="secondary"
               label={tr('auth.googleContinue')}
               leading={<GoogleLogo size={18} />}
               onPress={() => void handleGoogleSignIn()}
@@ -334,12 +345,13 @@ export function AuthAccountForm({ kind }: { kind: AppMode }) {
             />
             <LoginButton
               label={tr('auth.recoverPassword')}
-              tone="danger"
+              tone="ghost"
               onPress={() => router.push('/(auth)/forgot-password')}
               disabled={loading}
             />
             {activationEmail ? (
               <LoginButton
+                tone="secondary"
                 label={resendBusy ? tr('common.sending') : tr('auth.resendActivation')}
                 onPress={() => void handleResendActivation()}
                 disabled={loading || resendBusy}

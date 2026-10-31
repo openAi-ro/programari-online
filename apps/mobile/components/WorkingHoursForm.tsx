@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
   dayHint: { fontSize: fontSize.xs },
   times: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   timeCol: { gap: 2, alignItems: 'center' },
-  miniLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+  miniLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
   dash: { fontSize: fontSize.sm, marginBottom: 10 },
   closedText: { width: 72, textAlign: 'right', fontSize: fontSize.md },
   quickAction: {

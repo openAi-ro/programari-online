@@ -162,6 +162,7 @@ export function BusinessTabBar({
               }
               router.replace(tab.href as never);
             }}
+            android_ripple={{ color: t.colors.accentSoft, borderless: false }}
             style={({ pressed }) => [styles.item, { opacity: pressed ? 0.7 : 1 }]}
             hitSlop={4}
           >

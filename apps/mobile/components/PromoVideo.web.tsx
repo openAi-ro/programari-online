@@ -54,7 +54,7 @@ export function PromoVideo({
         playsInline
         aria-label={title ? `${tr('video.play')}: ${title}` : tr('video.play')}
         onError={() => setFailed(true)}
-        style={{ display: 'block', width: '100%', height: 220, objectFit: 'contain', backgroundColor: '#000' }}
+        style={{ display: 'block', width: '100%', height: 220, objectFit: 'contain', backgroundColor: palette.ink950 }}
       />
     </View>
   );

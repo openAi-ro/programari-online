@@ -17,7 +17,7 @@ import {
   Toggle,
   useTheme,
 } from '@/components/ui';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import {
   DEFAULT_AUTO_APPROVE_RETURNING,
   DEFAULT_BREAK_HOURS,
@@ -31,6 +31,7 @@ import {
   DEFAULT_TIMEZONE,
   DEFAULT_WORKING_HOURS,
 } from '@/lib/defaults';
+import { STAFF_COLORS } from '@/lib/defaults';
 import { reverseGeocodeRo } from '@/lib/location';
 import { useBack } from '@/lib/nav';
 import { generatePublicCode } from '@/lib/publicCode';
@@ -636,7 +637,7 @@ function BusinessSetupScreen() {
       const { error: staffErr } = await supabase.from('staff').insert({
         business_id: b.id,
         name: trimmed,
-        color: '#5B6CFF',
+        color: STAFF_COLORS[0],
         sort_order: 0,
       });
       if (staffErr) seedFailed = true;
@@ -1186,7 +1187,7 @@ function BusinessSetupScreen() {
           { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
         ]}
       >
-        <Ionicons name="lock-closed-outline" size={18} color="#ffffff" />
+        <Ionicons name="lock-closed-outline" size={18} color={palette.white} />
         <Text style={styles.blockBtnText} numberOfLines={1}>
           {tr('setup.blockDayBtn')}
         </Text>
@@ -1235,7 +1236,7 @@ function BusinessSetupScreen() {
           { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
         ]}
       >
-        <Ionicons name="calendar-outline" size={18} color="#ffffff" />
+        <Ionicons name="calendar-outline" size={18} color={palette.white} />
         <Text style={styles.blockBtnText} numberOfLines={1}>
           {tr('setup.blockLeaveBtn')}
         </Text>
@@ -1313,23 +1314,23 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   blockBtnDay: {
-    backgroundColor: '#3B82F6',
-    shadowColor: '#60A5FA',
+    backgroundColor: palette.sky600,
+    shadowColor: palette.sky500,
     shadowOpacity: 0.45,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
   blockBtnLeave: {
-    backgroundColor: '#DB2777',
-    shadowColor: '#EC4899',
+    backgroundColor: palette.danger600,
+    shadowColor: palette.danger600,
     shadowOpacity: 0.45,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
   blockBtnText: {
-    color: '#ffffff',
+    color: palette.white,
     fontSize: fontSize.sm,
     fontWeight: '700',
     flexShrink: 1,

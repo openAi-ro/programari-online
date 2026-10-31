@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-import { radius } from '@/constants/theme';
+import { palette, radius } from '@/constants/theme';
 import { getLanguageSync, type AppLanguage } from '@/lib/language';
 import { trKey, useLanguage } from '@/lib/i18n';
 
@@ -113,13 +113,13 @@ function buildGoogleHtml(lat: number, lng: number, hasPin: boolean, apiKey: stri
     .hint {
       position: absolute; z-index: 5; left: 10px; right: 10px; top: 10px;
       background: rgba(255,255,255,0.95); border-radius: 10px; padding: 8px 10px;
-      font: 600 13px/1.35 -apple-system, BlinkMacSystemFont, sans-serif; color: #0f172a;
+      font: 600 13px/1.35 -apple-system, BlinkMacSystemFont, sans-serif; color: ${palette.ink950};
       box-shadow: 0 2px 8px rgba(15,23,42,0.12);
     }
     .err {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      padding: 20px; text-align: center; font: 600 14px/1.4 sans-serif; color: #b91c1c;
-      background: #fef2f2;
+      padding: 20px; text-align: center; font: 600 14px/1.4 sans-serif; color: ${palette.danger700};
+      background: ${palette.danger50};
     }
   </style>
 </head>
@@ -458,10 +458,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#e2e8f0',
+    borderColor: palette.ink300,
+    backgroundColor: palette.ink200,
   },
   map: { flex: 1 },
-  missingTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
-  fallbackHint: { fontSize: 12, lineHeight: 17, color: '#64748b' },
+  missingTitle: { fontSize: 15, fontWeight: '800', color: palette.ink950, marginBottom: 8 },
+  fallbackHint: { fontSize: 12, lineHeight: 17, color: palette.ink500 },
 });

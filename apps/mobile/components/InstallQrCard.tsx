@@ -62,6 +62,7 @@ export function InstallQrCard() {
               label={androidDirect ? tr('install.downloadApk') : tr('install.openLink')}
               variant="secondary"
               size="md"
+              labelNumberOfLines={1}
               icon="logo-android"
               onPress={() => void Linking.openURL(androidUrl)}
             />
@@ -71,6 +72,7 @@ export function InstallQrCard() {
               label={copiedAndroid ? tr('install.copied') : tr('install.copy')}
               variant="secondary"
               size="md"
+              labelNumberOfLines={1}
               icon={copiedAndroid ? 'checkmark' : 'copy-outline'}
               onPress={() => void copyAndroid()}
             />
@@ -117,6 +119,7 @@ export function InstallQrCard() {
               label={tr('install.openSafariLogin')}
               variant="secondary"
               size="md"
+              labelNumberOfLines={1}
               icon="logo-apple"
               onPress={() => void Linking.openURL(iosUrl)}
             />
@@ -126,6 +129,7 @@ export function InstallQrCard() {
               label={copiedIos ? tr('install.copied') : tr('install.copy')}
               variant="secondary"
               size="md"
+              labelNumberOfLines={1}
               icon={copiedIos ? 'checkmark' : 'copy-outline'}
               onPress={() => void copyIos()}
             />

@@ -31,7 +31,7 @@ import {
   SkeletonScreen,
   useTheme,
 } from '@/components/ui';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { setPendingAuthRedirect } from '@/lib/auth-redirect';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { setAppMode } from '@/lib/appMode';
@@ -104,8 +104,8 @@ import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, DayKey, FreeSlot, Service, Staff } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 
-const TEAM_SELECTED = '#2dd4bf';
-const TEAM_SELECTED_BG = 'rgba(45, 212, 191, 0.14)';
+
+
 
 /** Inițialele (max. 2) pentru avatarul fără poză. */
 function initialsOf(name: string): string {
@@ -801,8 +801,8 @@ export default function PublicBookScreen() {
                   teamCellStyle,
                   canPick ? null : styles.teamCardOff,
                   {
-                    backgroundColor: on ? TEAM_SELECTED_BG : t.colors.surface,
-                    borderColor: on ? TEAM_SELECTED : t.colors.border,
+                    backgroundColor: on ? t.colors.accentSoft : t.colors.surface,
+                    borderColor: on ? t.colors.accent : t.colors.border,
                   },
                 ]}
               >
@@ -1436,7 +1436,7 @@ function CarouselControls({
             onPress={() => onGo(index - 1)}
             style={({ pressed }) => [styles.carouselArrow, styles.carouselArrowLeft, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <Ionicons name="chevron-back" size={20} color="#ffffff" />
+            <Ionicons name="chevron-back" size={20} color={palette.white} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -1444,7 +1444,7 @@ function CarouselControls({
             onPress={() => onGo(index + 1)}
             style={({ pressed }) => [styles.carouselArrow, styles.carouselArrowRight, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+            <Ionicons name="chevron-forward" size={20} color={palette.white} />
           </Pressable>
         </>
       ) : null}
@@ -1686,7 +1686,7 @@ const styles = StyleSheet.create({
   },
   teamPhoto: { width: 56, height: 56, borderRadius: 28 },
   teamPhotoFallback: { alignItems: 'center', justifyContent: 'center' },
-  teamInitials: { color: '#ffffff', fontSize: fontSize.md, fontWeight: '800' },
+  teamInitials: { color: palette.white, fontSize: fontSize.md, fontWeight: '800' },
   teamName: { fontSize: fontSize.md, fontWeight: '700', textAlign: 'center' },
   teamSpecialty: { fontSize: fontSize.sm, textAlign: 'center' },
   teamPortfolio: { flexDirection: 'row', gap: spacing.xs },
@@ -1741,7 +1741,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.55)',
   },
-  carouselDotActive: { width: 18, backgroundColor: '#ffffff' },
+  carouselDotActive: { width: 18, backgroundColor: palette.white },
 
   hoursCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.lg, gap: spacing.xs },
   hoursRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },

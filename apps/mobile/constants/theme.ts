@@ -71,8 +71,8 @@ export const spacing = {
   '2xl': 24,
   '3xl': 32,
   '4xl': 48,
-  /** Minimum pressable hit area (a11y / Apple HIG). */
-  touchTarget: 44,
+  /** Minimum pressable hit area (Material 3 / Android). */
+  touchTarget: 48,
 } as const;
 
 export const radius = {
@@ -86,7 +86,7 @@ export const radius = {
 
 export const fontSize = {
   xs: 12,
-  sm: 13,
+  sm: 14,
   md: 15,
   lg: 17,
   xl: 20,
@@ -166,11 +166,11 @@ const light: Theme['colors'] = {
   borderStrong: palette.ink300,
   text: palette.ink950,
   textMuted: palette.ink500,
-  textFaint: palette.ink400,
+  textFaint: palette.ink500,
   onAccent: palette.white,
 
-  accent: palette.accent600,
-  accentPressed: palette.accent700,
+  accent: palette.accent700,
+  accentPressed: '#115e59',
   accentSoft: palette.accent100,
   accentSoftText: palette.accent700,
 
@@ -204,8 +204,8 @@ const dark: Theme['colors'] = {
   borderStrong: palette.ink500,
   text: '#f1f5f9',
   textMuted: palette.ink400,
-  textFaint: palette.ink500,
-  onAccent: palette.white,
+  textFaint: palette.ink400,
+  onAccent: palette.ink950,
 
   accent: palette.accent400,
   accentPressed: palette.accent500,

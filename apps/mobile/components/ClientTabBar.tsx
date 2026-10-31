@@ -70,11 +70,11 @@ const BAR_PAD_X = spacing.xs;
 const ITEM_PAD_X = 0;
 /** Lățimea celei mai lungi etichete („Programări", „Messages") la weight 600 ≈ 5 em; +8% rezervă. */
 const LONGEST_LABEL_EM = 5.4;
-const MIN_LABEL_SIZE = 11;
+const MIN_LABEL_SIZE = 12;
 
 /**
  * Mărimea etichetei din lățimea reală a unui tab: 12 px când încape (≥ ~400 px),
- * coboară în pași de 0,5 px pe ecrane înguste (minim 11 px la 360–390) ca să nu fie tăiată
+ * coboară în pași de 0,5 px pe ecrane înguste (minim 12 px la 360–390) ca să nu fie tăiată
  * („Program…"). adjustsFontSizeToFit nu există pe web, deci nu ne bazăm pe el.
  */
 function labelFontSize(barWidth: number): number {
@@ -137,6 +137,7 @@ export function ClientTabBar({
               if (active) return;
               router.replace(tab.href as never);
             }}
+            android_ripple={{ color: t.colors.accentSoft, borderless: false }}
             style={({ pressed }) => [styles.item, { opacity: pressed ? 0.7 : 1 }]}
             hitSlop={4}
           >

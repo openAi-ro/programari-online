@@ -2,71 +2,28 @@ import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } fro
 import { Ionicons } from '@expo/vector-icons';
 import { useState, type ComponentProps } from 'react';
 
-import { useTheme } from '@/components/ui';
+import { Button, useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
+import { fontSize, radius, spacing } from '@/constants/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-type LoginPalette = {
-  card: string;
-  field: string;
-  button: string;
-  buttonPressed: string;
-  danger: string;
-  dangerPressed: string;
-  text: string;
-  inputText: string;
-  placeholder: string;
-  border: string;
-};
-
-/** Grafică login: card rotund, câmpuri pill, butoane — variante deschisă / închisă. */
-const LOGIN_DARK: LoginPalette = {
-  card: '#171717',
-  field: '#101010',
-  button: '#252525',
-  buttonPressed: '#0f766e',
-  danger: '#c1121f',
-  dangerPressed: '#8f0d17',
-  text: '#ffffff',
-  inputText: '#d3d3d3',
-  placeholder: '#8a8a8a',
-  border: '#2a2a2a',
-};
-
-const LOGIN_LIGHT: LoginPalette = {
-  card: '#ffffff',
-  field: '#f0f2f5',
-  button: '#252525',
-  buttonPressed: '#0f766e',
-  danger: '#c1121f',
-  dangerPressed: '#8f0d17',
-  text: '#0c1222',
-  inputText: '#121a2b',
-  placeholder: '#5a6b84',
-  border: '#e2e8f0',
-};
-
-function useLoginPalette(): LoginPalette {
-  const t = useTheme();
-  return t.scheme === 'dark' ? LOGIN_DARK : LOGIN_LIGHT;
-}
-
-/** Caseta de login: același layout ca în grafică, pe tema deschisă sau închisă. */
+/** Caseta de login: acelasi layout, dar toate culorile vin din tema aplicatiei. */
 export function LoginCard({ heading, children }: { heading: string; children: React.ReactNode }) {
-  const p = useLoginPalette();
+  const t = useTheme();
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: p.card,
-          borderColor: p.border,
+          backgroundColor: t.colors.surface,
+          borderColor: t.colors.border,
           borderWidth: StyleSheet.hairlineWidth,
         },
+        t.shadows.md,
       ]}
     >
-      <Text style={[styles.heading, { color: p.text }]}>{heading}</Text>
+      <Text style={[styles.heading, { color: t.colors.text }]}>{heading}</Text>
       <View style={styles.body}>{children}</View>
     </View>
   );
@@ -74,81 +31,136 @@ export function LoginCard({ heading, children }: { heading: string; children: Re
 
 type LoginFieldProps = TextInputProps & {
   icon: IconName;
+  label?: string;
+  hint?: string;
 };
 
-/** Câmp pill cu iconiță (aspect inset din grafică). */
-export function LoginField({ icon, style, secureTextEntry, ...inputProps }: LoginFieldProps) {
-  const p = useLoginPalette();
+/** Camp pill cu iconita, eticheta vizibila deasupra si ajutor dedesubt. */
+export function LoginField({ icon, label, hint, style, secureTextEntry, ...inputProps }: LoginFieldProps) {
+  const t = useTheme();
   const tr = useT();
   const isPassword = secureTextEntry === true;
   const [passwordVisible, setPasswordVisible] = useState(false);
 
   return (
-    <View
-      style={[
-        styles.field,
-        { backgroundColor: p.field, borderColor: p.border },
-      ]}
-    >
-      <Ionicons name={icon} size={20} color={p.text} />
-      <TextInput
-        style={[styles.input, { color: p.inputText }, style]}
-        placeholderTextColor={p.placeholder}
-        {...inputProps}
-        secureTextEntry={isPassword ? !passwordVisible : secureTextEntry}
-      />
-      {isPassword ? (
-        <Pressable
-          onPress={() => setPasswordVisible((v) => !v)}
-          accessibilityRole="button"
-          accessibilityLabel={passwordVisible ? tr('auth.hidePassword') : tr('auth.showPassword')}
-          hitSlop={8}
-          style={styles.eyeBtn}
-        >
-          <Ionicons
-            name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
-            size={20}
-            color={p.text}
-          />
-        </Pressable>
+    <View style={styles.fieldWrap}>
+      {label ? (
+        <Text style={[styles.fieldLabel, { color: t.colors.text }]}>{label}</Text>
+      ) : null}
+      <View
+        style={[
+          styles.field,
+          { backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border },
+        ]}
+      >
+        <Ionicons name={icon} size={20} color={t.colors.textMuted} />
+        <TextInput
+          style={[styles.input, { color: t.colors.text }, style]}
+          placeholderTextColor={t.colors.textFaint}
+          {...inputProps}
+          secureTextEntry={isPassword ? !passwordVisible : secureTextEntry}
+        />
+        {isPassword ? (
+          <Pressable
+            onPress={() => setPasswordVisible((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? tr('auth.hidePassword') : tr('auth.showPassword')}
+            hitSlop={8}
+            style={styles.eyeBtn}
+          >
+            <Ionicons
+              name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={t.colors.textMuted}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+      {hint ? (
+        <Text style={[styles.fieldHint, { color: t.colors.textMuted }]}>{hint}</Text>
       ) : null}
     </View>
   );
 }
+
+export type LoginButtonTone =
+  | 'default'
+  | 'primary'
+  | 'secondary'
+  | 'outlined'
+  | 'ghost'
+  | 'text'
+  | 'danger';
 
 export type LoginButtonProps = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  tone?: 'default' | 'danger';
-  /** Iconiță în stânga textului (ex. logo Google). */
+  tone?: LoginButtonTone;
+  /** Iconita in stanga textului (ex. logo Google). */
   leading?: React.ReactNode;
 };
 
+function toneToVariant(tone: LoginButtonTone): 'primary' | 'secondary' | 'ghost' | 'danger' {
+  if (tone === 'secondary' || tone === 'outlined') return 'secondary';
+  if (tone === 'ghost' || tone === 'text') return 'ghost';
+  if (tone === 'danger') return 'danger';
+  return 'primary';
+}
+
 export function LoginButton({ label, onPress, disabled, loading, tone = 'default', leading }: LoginButtonProps) {
-  const p = useLoginPalette();
+  const t = useTheme();
+  const variant = toneToVariant(tone);
+
+  if (!leading) {
+    return (
+      <Button
+        label={label}
+        onPress={onPress}
+        disabled={disabled}
+        loading={loading}
+        variant={variant}
+        size="md"
+      />
+    );
+  }
+
+  const palette = {
+    primary: { bg: t.colors.accent, fg: t.colors.onAccent, border: 'transparent' },
+    secondary: { bg: t.colors.surface, fg: t.colors.text, border: t.colors.borderStrong },
+    ghost: { bg: 'transparent', fg: t.colors.accent, border: 'transparent' },
+    danger: { bg: t.colors.danger, fg: t.colors.onAccent, border: 'transparent' },
+  }[variant];
+  const inactive = Boolean(disabled || loading);
+
   return (
     <Pressable
-      onPress={onPress}
-      disabled={disabled || loading}
+      onPress={inactive ? undefined : onPress}
+      disabled={inactive}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: inactive, busy: Boolean(loading) }}
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       style={({ pressed }) => [
-        styles.button,
+        styles.leadingButton,
         {
-          backgroundColor:
-            tone === 'danger'
-              ? pressed && !disabled && !loading ? p.dangerPressed : p.danger
-              : pressed && !disabled && !loading ? p.buttonPressed : p.button,
-          opacity: disabled || loading ? 0.55 : 1,
-          transform: [{ scale: pressed && !disabled && !loading ? 0.98 : 1 }],
+          backgroundColor: palette.bg,
+          borderColor: palette.border,
+          borderWidth: variant === 'secondary' ? 1 : 0,
+          opacity: inactive ? 0.55 : pressed ? 0.85 : 1,
         },
       ]}
     >
       <View style={styles.buttonInner}>
-        {leading && !loading ? leading : null}
-        <Text style={[styles.buttonText, { color: '#ffffff' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{loading ? '…' : label}</Text>
+        {!loading ? leading : null}
+        <Text
+          style={[styles.buttonText, { color: palette.fg }]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {loading ? '…' : label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -169,6 +181,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   body: { gap: 10 },
+  fieldWrap: { gap: spacing.xs },
+  fieldLabel: { fontSize: fontSize.sm, fontWeight: '700' },
+  fieldHint: { fontSize: fontSize.xs, lineHeight: 16 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -177,6 +192,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
+    minHeight: spacing.touchTarget,
   },
   input: {
     flex: 1,
@@ -186,13 +202,19 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: 4,
+    minWidth: spacing.touchTarget,
+    minHeight: spacing.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  button: {
-    borderRadius: 5,
+  leadingButton: {
+    borderRadius: radius.md,
     paddingVertical: 10,
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: spacing.touchTarget,
+    overflow: 'hidden',
   },
   buttonInner: {
     flexDirection: 'row',

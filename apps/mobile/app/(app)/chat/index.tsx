@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Callout, EmptyState, ListLoadingScreen, Screen, useTheme } from '@/components/ui';
-import { spacing } from '@/constants/theme';
+import { palette, spacing } from '@/constants/theme';
 import { fetchLatestMessages, fetchUnreadCounts, listConversations } from '@/lib/chatRpc';
 import { chatMessagePreview } from '@/lib/mediaKeys';
 import { useT } from '@/lib/i18n';
@@ -90,6 +90,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700' },
   preview: { fontSize: 13 },
   unreadBadge: { alignSelf: 'flex-start', minWidth: 20, minHeight: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, marginTop: 4 },
-  unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  unreadText: { color: palette.white, fontSize: 11, fontWeight: '800' },
 });
 

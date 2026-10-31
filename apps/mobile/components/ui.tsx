@@ -205,6 +205,7 @@ export function IconBadge({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       hitSlop={4}
       style={({ pressed }) => [
         styles.iconBadge,
@@ -284,6 +285,7 @@ export function Button({
       disabled={inactive}
       accessibilityRole="button"
       accessibilityState={{ disabled: inactive, busy: loading }}
+      android_ripple={{ color: t.colors.accentSoft, borderless: false }}
       hitSlop={size === 'sm' ? { top: 6, bottom: 6, left: 4, right: 4 } : undefined}
       style={({ pressed }: PressableStateCallbackType) => [
         styles.button,
@@ -418,6 +420,7 @@ export function Card({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
+        android_ripple={{ color: t.colors.accentSoft, borderless: false }}
         style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }]}
       >
         {inner}
@@ -664,6 +667,7 @@ export function SettingRow({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
+        android_ripple={{ color: t.colors.accentSoft, borderless: false }}
         style={({ pressed }) => [base, { opacity: pressed ? 0.7 : 1 }]}
       >
         {content}
@@ -1233,6 +1237,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: fontSize.lg, fontWeight: '700', letterSpacing: -0.2 },
   headerSubtitle: { fontSize: fontSize.xs, marginTop: 1 },
   iconBadge: {
+    overflow: 'hidden',
     width: spacing.touchTarget,
     height: spacing.touchTarget,
     borderRadius: radius.sm,
@@ -1307,6 +1312,7 @@ const styles = StyleSheet.create({
   avatarText: { fontWeight: '800' },
 
   card: {
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,

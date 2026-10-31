@@ -1,8 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-import { Screen, useTheme } from '@/components/ui';
+import { Button, Screen, useTheme } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 import { InstallQrCard } from '@/components/InstallQrCard';
 import { fontSize, radius, spacing } from '@/constants/theme';
@@ -26,6 +26,12 @@ export default function LoginScreen() {
         </Text>
       </View>
 
+      <Button
+        label={tr('auth.signIn')}
+        icon="log-in-outline"
+        onPress={() => router.push({ pathname: '/(auth)/client', params: { mode: 'login' } } as never)}
+        style={styles.signInButton}
+      />
       {pendingBook ? (
         <Pressable
           onPress={() => router.replace(pendingBook as never)}
@@ -46,59 +52,27 @@ export default function LoginScreen() {
           </Text>
         </Pressable>
       ) : null}
-      <Pressable
+      <Button
+        label={tr('auth.createClientAccount')}
+        variant="secondary"
+        icon="person-outline"
         onPress={() => router.push('/(auth)/client')}
-        accessibilityRole="button"
-        accessibilityLabel={tr('auth.openClientAccount')}
-        style={({ pressed }) => [
-          styles.roleCard,
-          {
-            backgroundColor: t.colors.surface,
-            borderColor: t.colors.border,
-            opacity: pressed ? 0.85 : 1,
-          },
-          t.shadows.md,
-        ]}
-      >
-        <View style={[styles.roleIcon, { backgroundColor: t.colors.accentSoft }]}>
-          <Ionicons name="person-outline" size={26} color={t.colors.accentSoftText} />
-        </View>
-        <View style={styles.flex}>
-          <Text style={[styles.roleTitle, { color: t.colors.accent }]}>{tr('auth.createClientAccount')}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={t.colors.textFaint} />
-      </Pressable>
-
-      <Pressable
+        style={styles.createButton}
+      />
+      <Button
+        label={tr('auth.createBusinessAccount')}
+        variant="secondary"
+        icon="storefront-outline"
         onPress={() => router.push('/(auth)/business')}
-        accessibilityRole="button"
-        accessibilityLabel={tr('auth.openBusinessAccount')}
-        style={({ pressed }) => [
-          styles.roleCard,
-          {
-            backgroundColor: t.colors.surface,
-            borderColor: t.colors.border,
-            opacity: pressed ? 0.85 : 1,
-          },
-          t.shadows.md,
-        ]}
-      >
-        <View style={[styles.roleIcon, { backgroundColor: t.colors.accentSoft }]}>
-          <Ionicons name="storefront-outline" size={26} color={t.colors.accentSoftText} />
-        </View>
-        <View style={styles.flex}>
-          <Text style={[styles.roleTitle, { color: t.colors.accent }]}>{tr('auth.createBusinessAccount')}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={t.colors.textFaint} />
-      </Pressable>
+        style={styles.createButton}
+      />
 
-      <InstallQrCard />
+      {Platform.OS === 'web' ? <InstallQrCard /> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   hero: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
   logo: {
     width: 64,
@@ -121,23 +95,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     marginTop: spacing.xs,
   },
-  roleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    marginBottom: spacing.md,
-  },
-  roleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roleTitle: { fontSize: fontSize.lg, fontWeight: '800', letterSpacing: -0.3 },
+  signInButton: { marginBottom: spacing.md },
+  createButton: { marginBottom: spacing.md },
   backBook: {
     flexDirection: 'row',
     alignItems: 'center',

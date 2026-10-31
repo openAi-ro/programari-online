@@ -67,7 +67,7 @@ export function PromoVideo({
       {poster ? <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
       <View style={[styles.video, styles.overlay, styles.poster]}>
         <View style={styles.playCircle}>
-          <Ionicons name="play" size={30} color="#FFFFFF" />
+          <Ionicons name="play" size={30} color={palette.white} />
         </View>
         {title ? (
           <Text style={styles.posterTitle} numberOfLines={1}>
@@ -161,7 +161,7 @@ function PromoVideoPlayer({ videoUrl, title }: { videoUrl: string; title?: strin
             hitSlop={8}
             style={[styles.iconBtn, styles.expandBtn]}
           >
-            <Ionicons name="expand" size={18} color="#FFFFFF" />
+            <Ionicons name="expand" size={18} color={palette.white} />
           </Pressable>
         </>
       )}
@@ -218,7 +218,7 @@ function PlayOverlay({
       style={[StyleSheet.absoluteFill, styles.overlay]}
     >
       <View style={styles.playCircle}>
-        <Ionicons name={ended ? 'refresh' : 'play'} size={30} color="#FFFFFF" />
+        <Ionicons name={ended ? 'refresh' : 'play'} size={30} color={palette.white} />
       </View>
     </Pressable>
   );
@@ -271,7 +271,7 @@ function FullscreenBody({
           hitSlop={8}
           style={styles.fsBtn}
         >
-          <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={24} color="#FFFFFF" />
+          <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={24} color={palette.white} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -280,7 +280,7 @@ function FullscreenBody({
           hitSlop={8}
           style={styles.fsBtn}
         >
-          <Ionicons name="close" size={26} color="#FFFFFF" />
+          <Ionicons name="close" size={26} color={palette.white} />
         </Pressable>
       </View>
     </View>
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   },
   fsRoot: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: palette.ink950,
   },
   fsVideo: {
     position: 'absolute',
@@ -357,5 +357,5 @@ const styles = StyleSheet.create({
   },
   fallbackText: { fontSize: fontSize.sm, fontWeight: '700', flexShrink: 1 },
   poster: { gap: spacing.sm, paddingHorizontal: spacing.md },
-  posterTitle: { color: '#FFFFFF', fontSize: fontSize.sm, fontWeight: '700' },
+  posterTitle: { color: palette.white, fontSize: fontSize.sm, fontWeight: '700' },
 });

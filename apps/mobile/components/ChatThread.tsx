@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   bubbleWrap: { alignSelf: 'flex-start', maxWidth: '80%', gap: 2, paddingVertical: spacing.xs },
   bubble: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
-  bubbleTime: { fontSize: 10, marginTop: 1 },
+  bubbleTime: { fontSize: 12, marginTop: 1 },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
   centerRow: { marginTop: spacing.lg },
   olderSpinner: { paddingVertical: spacing.sm },

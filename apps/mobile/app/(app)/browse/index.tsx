@@ -20,7 +20,7 @@ import {
 import { ClientTabBar } from '@/components/ClientTabBar';
 import { PickerField } from '@/components/PickerField';
 import { SalonRow } from '@/components/SalonRow';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { isOpenNow, matchesBusinessQuery, sortBusinesses } from '@/lib/browseList';
 import {
   listPublicBusinesses,
@@ -97,7 +97,7 @@ function CategoryTile({
         ]}
       >
         <Text
-          style={[styles.catLabel, { color: '#ffffff' }]}
+          style={[styles.catLabel, { color: palette.white }]}
           numberOfLines={2}
         >
           {catName}
@@ -127,7 +127,7 @@ function SecretTile({ onPress }: { onPress: () => void }) {
         <Text style={styles.catCountText}>🔒</Text>
       </View>
       <View style={[styles.catLabelWrap, { backgroundColor: 'rgba(15,23,42,0.62)' }]}>
-        <Text style={[styles.catLabel, { color: '#ffffff' }]} numberOfLines={2}>
+        <Text style={[styles.catLabel, { color: palette.white }]} numberOfLines={2}>
           {tr('secret.tile')}
         </Text>
       </View>
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
   catImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#e1e8f1',
+    backgroundColor: palette.ink200,
   },
   catLabelWrap: {
     position: 'absolute',
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   catCountText: {
-    color: '#ffffff',
+    color: palette.white,
     fontSize: fontSize.sm,
     fontWeight: '800',
   },

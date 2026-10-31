@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/components/ui';
+import { palette } from '@/constants/theme';
 
 /** Eticheta unui contor: 1..99, apoi "99+". */
 export function formatBadgeCount(count: number): string {
@@ -16,7 +17,7 @@ export function TabCountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <View style={[styles.tab, { backgroundColor: t.colors.danger }]} pointerEvents="none">
-      <Text style={styles.tabText} numberOfLines={1} allowFontScaling={false}>
+      <Text style={styles.tabText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
         {formatBadgeCount(count)}
       </Text>
     </View>
@@ -36,8 +37,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   tabText: {
-    color: '#fff',
-    fontSize: 10,
+    color: palette.white,
+    fontSize: 12,
     lineHeight: 14,
     fontWeight: '800',
     textAlign: 'center',
