@@ -96,6 +96,11 @@ function QuickAddBody({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const searchSeq = useRef(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollY = useRef(0);
+  const scrollViewH = useRef(0);
+  const contentH = useRef(0);
+  const slotsY = useRef(0);
 
   // Încărcare la montare (= la fiecare deschidere).
   useEffect(() => {
@@ -214,6 +219,13 @@ function QuickAddBody({
     return () => clearTimeout(timer);
   }, [phone, name, picked, business.id]);
 
+  // Ziua aleasa: zona de ore (sau motivul pentru care lipsesc) urca in vedere, ziua ramane deasupra.
+  function pickDay(ymd: string) {
+    setDay(ymd);
+    const target = Math.min(slotsY.current + SLOTS_REVEAL - scrollViewH.current, contentH.current - scrollViewH.current);
+    if (target > scrollY.current) scrollRef.current?.scrollTo({ y: target, animated: true });
+  }
+
   async function save() {
     setError(null);
     setOk(null);
@@ -281,7 +293,22 @@ function QuickAddBody({
               <Ionicons name="close" size={22} color={t.colors.textMuted} />
             </Pressable>
           </View>
-          <ScrollView style={styles.scroll} contentContainerStyle={{ gap: spacing.sm }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.scroll}
+            contentContainerStyle={{ gap: spacing.sm }}
+            keyboardShouldPersistTaps="handled"
+            scrollEventThrottle={64}
+            onScroll={(e) => {
+              scrollY.current = e.nativeEvent.contentOffset.y;
+            }}
+            onLayout={(e) => {
+              scrollViewH.current = e.nativeEvent.layout.height;
+            }}
+            onContentSizeChange={(_w, h) => {
+              contentH.current = h;
+            }}
+          >
             {error ? <Callout tone="danger" onClose={() => setError(null)}>{error}</Callout> : null}
             {ok ? <Callout tone="success" onClose={() => setOk(null)}>{ok}</Callout> : null}
 
@@ -396,51 +423,58 @@ function QuickAddBody({
             <SectionTitle>{tr('qa.day')}</SectionTitle>
             <BookingCalendar
               value={day}
-              onChange={setDay}
+              onChange={pickDay}
               minYmd={today}
               maxYmd={maxYmd}
               blockedDates={business.blocked_dates ?? []}
               schedules={[schedule.workingHours]}
             />
 
-            <SectionTitle>{tr('req.freeSlot')}</SectionTitle>
-            {serviceIds.length === 0 ? (
-              <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.pickServiceFirst')}</Text>
-            ) : slotsLoading ? (
-              <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('req.calcSlots')}</Text>
-            ) : slots.length === 0 ? (
-              <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('cal.noSlots', { date: day })}</Text>
-            ) : (
-              <View style={styles.wrap}>
-                {slots.map((s) => {
-                  const on = slot?.startUtc === s.startUtc;
-                  return (
-                    <Pressable
-                      key={s.startUtc}
-                      onPress={() => setSlot(s)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: on }}
-                      style={[
-                        styles.slot,
-                        on
-                          ? { backgroundColor: t.colors.accent, borderColor: t.colors.accentPressed }
-                          : { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          fontSize: fontSize.sm,
-                          color: on ? t.colors.onAccent : t.colors.text,
-                          fontWeight: on ? '800' : '700',
-                        }}
+            <View
+              style={{ gap: spacing.sm }}
+              onLayout={(e) => {
+                slotsY.current = e.nativeEvent.layout.y;
+              }}
+            >
+              <SectionTitle>{tr('req.freeSlot')}</SectionTitle>
+              {serviceIds.length === 0 ? (
+                <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.pickServiceFirst')}</Text>
+              ) : slotsLoading ? (
+                <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('req.calcSlots')}</Text>
+              ) : slots.length === 0 ? (
+                <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('cal.noSlots', { date: day })}</Text>
+              ) : (
+                <View style={styles.wrap}>
+                  {slots.map((s) => {
+                    const on = slot?.startUtc === s.startUtc;
+                    return (
+                      <Pressable
+                        key={s.startUtc}
+                        onPress={() => setSlot(s)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        style={[
+                          styles.slot,
+                          on
+                            ? { backgroundColor: t.colors.accent, borderColor: t.colors.accentPressed }
+                            : { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong },
+                        ]}
                       >
-                        {s.labelLocal}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
+                        <Text
+                          style={{
+                            fontSize: fontSize.sm,
+                            color: on ? t.colors.onAccent : t.colors.text,
+                            fontWeight: on ? '800' : '700',
+                          }}
+                        >
+                          {s.labelLocal}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
 
             <Field label={tr('qa.note')} placeholder={tr('qa.notePh')} value={note} onChangeText={setNote} multiline maxLength={500} />
           </ScrollView>
@@ -474,12 +508,15 @@ function QuickAddBody({
   );
 }
 
+/** cat din zona de ore trebuie sa se vada dupa alegerea zilei: titlul + ~2 randuri de ore */
+const SLOTS_REVEAL = 132;
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: spacing.md, paddingTop: spacing.md },
   card: { borderRadius: radius.lg, borderWidth: 1, padding: spacing.lg, gap: spacing.md, maxHeight: '100%', width: '100%', maxWidth: 640, alignSelf: 'center' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   title: { flex: 1, fontSize: fontSize.lg, fontWeight: '800' },
-  scroll: { maxHeight: 560, flexShrink: 1 },
+  scroll: { flexShrink: 1 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1 },
   slot: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 2 },
