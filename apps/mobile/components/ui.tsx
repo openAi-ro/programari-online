@@ -754,7 +754,6 @@ export function Toggle({
       accessibilityState={{ checked: value, disabled }}
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
-      android_ripple={{ color: t.colors.accentSoft, borderless: true }}
       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
       style={({ pressed }) => [
         styles.toggleTrack,
