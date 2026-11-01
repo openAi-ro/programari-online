@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import { readLocalFileBytes, signChatFiles, uploadChatFile } from '@/lib/mediaUp
 import { pickerDurationToMs } from '@/lib/videoRules';
 import { mergeMessages } from '@/lib/chatPaging';
 import { useDictation } from '@/lib/useDictation';
+import { COMPOSER_MIN_HEIGHT, composerInputHeight, composerMaxHeight } from '@/lib/chatComposer';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
@@ -95,6 +97,10 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const [counterpartyName, setCounterpartyName] = useState('Chat');
   const [counterpartyTz, setCounterpartyTz] = useState('Europe/Bucharest');
   const [draft, setDraft] = useState('');
+  const inputRef = useRef<TextInput>(null);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const inputMaxHeight = composerMaxHeight(windowHeight);
+  const [webInputHeight, setWebInputHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [sending, setSending] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -105,7 +111,26 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const [viewer, setViewer] = useState<{ kind: ChatAttachmentKind; url: string } | null>(null);
   // Microfon (doar web): dictarea completează câmpul, trimiterea rămâne manuală.
   const dictation = useDictation(draft, setDraft);
-  const userIdRef = useRef<string | null>(null);
+  // Pe web textarea nu creste singur: ii masuram continutul la fiecare schimbare de text sau de latime.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = inputRef.current as unknown as {
+      scrollHeight: number;
+      offsetHeight: number;
+      clientHeight: number;
+      scrollTop: number;
+      style: { height: string };
+    } | null;
+    if (!el || typeof el.scrollHeight !== 'number') return;
+    const previous = el.style.height;
+    el.style.height = '0px';
+    const borders = el.offsetHeight - el.clientHeight;
+    const content = el.scrollHeight + borders;
+    el.style.height = previous;
+    setWebInputHeight(content);
+    // Textul dictat se adauga la final: il tinem in vedere si dupa ce caseta a atins inaltimea maxima.
+    if (dictation.listening) el.scrollTop = el.scrollHeight;
+  }, [draft, windowWidth, dictation.listening]);  const userIdRef = useRef<string | null>(null);
   const counterpartyNameRef = useRef<string>('Chat');
   const seenIdsRef = useRef<Set<string>>(new Set());
   const loadingOlderRef = useRef(false);
@@ -300,14 +325,18 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
         {attaching ? <ActivityIndicator color={t.colors.accent} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : <Ionicons name="attach-outline" size={20} color={t.colors.accent} />}
       </Pressable>
       <TextInput
-        style={[styles.input, { color: t.colors.text, backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border, borderWidth: 1 }]}
+        ref={inputRef}
+        style={[
+          styles.input,
+          { color: t.colors.text, backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.border, borderWidth: 1, maxHeight: inputMaxHeight },
+          Platform.OS === 'web' ? { height: composerInputHeight(webInputHeight, windowHeight) } : null,
+        ]}
         placeholder={pending ? tr('chat.captionPlaceholder') : tr('chat.writeMessage')}
         placeholderTextColor={t.colors.textMuted}
         value={draft}
         onChangeText={setDraft}
         editable={!sending}
         multiline
-        numberOfLines={2}
         maxLength={4000}
         autoCorrect={false}
       />
@@ -423,6 +452,6 @@ const styles = StyleSheet.create({
   pendingHint: { flex: 1, fontSize: 13 },
   inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
   micError: { width: '100%', fontSize: 12 },
-  input: { flex: 1, minWidth: 0, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, maxHeight: 76 },
+  input: { flex: 1, minWidth: 0, minHeight: COMPOSER_MIN_HEIGHT, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, fontSize: 15, lineHeight: 20, textAlignVertical: 'top' },
   sendBtn: { width: spacing.touchTarget, height: spacing.touchTarget, borderRadius: spacing.touchTarget / 2, justifyContent: 'center', alignItems: 'center' },
 });
