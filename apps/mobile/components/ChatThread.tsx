@@ -315,14 +315,15 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     <View style={styles.inputRow}>
       <Pressable
         android_ripple={{ color: t.colors.accentSoft, borderless: true }}
-        style={[styles.sendBtn, { backgroundColor: t.colors.bgElevated, borderWidth: 1.5, borderColor: t.colors.accent, opacity: attaching || sending ? 0.6 : 1 }]}
+        style={[styles.iconBtn, { opacity: attaching || sending ? 0.6 : 1 }]}
+        hitSlop={ICON_HIT_SLOP}
         onPress={openAttachMenu}
         disabled={attaching || sending}
         accessibilityRole="button"
         accessibilityLabel={tr('chat.attachA11y')}
         accessibilityState={{ disabled: attaching || sending }}
       >
-        {attaching ? <ActivityIndicator color={t.colors.accent} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : <Ionicons name="attach-outline" size={20} color={t.colors.accent} />}
+        {attaching ? <ActivityIndicator color={t.colors.accent} accessibilityLabel={tr('common.loading')} accessibilityRole="progressbar" /> : <Ionicons name="attach-outline" size={20} color={t.colors.text} />}
       </Pressable>
       <TextInput
         ref={inputRef}
@@ -342,24 +343,20 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       />
       {dictation.supported ? (
         <Pressable
-          style={[styles.sendBtn, dictation.listening ? { backgroundColor: t.colors.danger } : { backgroundColor: t.colors.bgElevated, borderWidth: 1.5, borderColor: t.colors.accent }]}
+          style={styles.iconBtn}
+          hitSlop={ICON_HIT_SLOP}
           onPress={dictation.toggle}
           disabled={sending}
           accessibilityRole="button"
           accessibilityState={{ selected: dictation.listening }}
           accessibilityLabel={dictation.listening ? tr('chat.micStopA11y') : tr('chat.micA11y')}
         >
-          <Ionicons name={dictation.listening ? 'mic' : 'mic-outline'} size={20} color={dictation.listening ? t.colors.onAccent : t.colors.accent} />
+          <Ionicons name={dictation.listening ? 'mic' : 'mic-outline'} size={18} color={dictation.listening ? t.colors.danger : t.colors.text} />
         </Pressable>
       ) : null}
       <Pressable
-        style={[
-          styles.sendBtn,
-          {
-            backgroundColor: canSend ? t.colors.accent : t.colors.surfaceMuted,
-            opacity: 1,
-          },
-        ]}
+        style={styles.iconBtn}
+        hitSlop={ICON_HIT_SLOP}
         onPress={onSend}
         disabled={!canSend}
         accessibilityRole="button"
@@ -368,8 +365,8 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       >
         <Ionicons
           name="send-outline"
-          size={20}
-          color={canSend ? t.colors.onAccent : t.colors.textMuted}
+          size={16}
+          color={canSend ? t.colors.accent : t.colors.textMuted}
         />
       </Pressable>
     </View>
@@ -435,6 +432,9 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     </Screen>
   );
 }
+/** Iconitele au 32x48; cu 4px in laterale zona de atingere ajunge la 40x48. */
+const ICON_HIT_SLOP = { left: 4, right: 4 };
+
 const styles = StyleSheet.create({
   body: { flex: 1, width: '100%' },
   messages: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.sm },
@@ -450,8 +450,8 @@ const styles = StyleSheet.create({
   pendingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.sm },
   pendingRemove: { position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   pendingHint: { flex: 1, fontSize: 13 },
-  inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', width: '100%' },
+  inputRow: { flexDirection: 'row', gap: spacing.xs, alignItems: 'flex-end', marginHorizontal: -spacing.sm },
   micError: { width: '100%', fontSize: 12 },
   input: { flex: 1, minWidth: 0, minHeight: COMPOSER_MIN_HEIGHT, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, fontSize: 15, lineHeight: 20, textAlignVertical: 'top' },
-  sendBtn: { width: spacing.touchTarget, height: spacing.touchTarget, borderRadius: spacing.touchTarget / 2, justifyContent: 'center', alignItems: 'center' },
+  iconBtn: { width: 32, height: COMPOSER_MIN_HEIGHT, justifyContent: 'center', alignItems: 'center' },
 });
