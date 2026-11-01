@@ -282,6 +282,8 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
                 : 'chat.micFailed'
           )}
         </Text>
+      ) : dictation.listening ? (
+        <Text style={[styles.micError, { color: t.colors.danger }]} accessibilityLiveRegion="polite">{tr('chat.micListening')}</Text>
       ) : !dictation.supported && Platform.OS === 'web' ? (
         <Text style={[styles.micError, { color: t.colors.textMuted }]}>{tr('chat.micUnsupported')}</Text>
       ) : null}
@@ -311,7 +313,6 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
       />
       {dictation.supported ? (
         <Pressable
-          android_ripple={{ color: t.colors.accentSoft, borderless: true }}
           style={[styles.sendBtn, dictation.listening ? { backgroundColor: t.colors.danger } : { backgroundColor: t.colors.bgElevated, borderWidth: 1.5, borderColor: t.colors.accent }]}
           onPress={dictation.toggle}
           disabled={sending}
@@ -319,11 +320,10 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
           accessibilityState={{ selected: dictation.listening }}
           accessibilityLabel={dictation.listening ? tr('chat.micStopA11y') : tr('chat.micA11y')}
         >
-          <Ionicons name={dictation.listening ? 'stop' : 'mic-outline'} size={20} color={dictation.listening ? t.colors.onAccent : t.colors.accent} />
+          <Ionicons name={dictation.listening ? 'mic' : 'mic-outline'} size={20} color={dictation.listening ? t.colors.onAccent : t.colors.accent} />
         </Pressable>
       ) : null}
       <Pressable
-        android_ripple={{ color: t.colors.accentSoft, borderless: true }}
         style={[
           styles.sendBtn,
           {
