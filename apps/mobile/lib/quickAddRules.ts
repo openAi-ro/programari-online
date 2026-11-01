@@ -84,22 +84,6 @@ export function buildQuickAddPayload(
   };
 }
 
-/** Toggle-ul „Anunță clientul" se blochează doar pentru o oră deja trecută; fără oră aleasă rămâne liber. */
-export function canNotifyClient(slotEndUtc: string | null, now: Date = new Date()): boolean {
-  return !slotEndUtc || Date.parse(slotEndUtc) > now.getTime();
-}
-
-/** Zile de la (azi - pastDays) la (azi + futureDays), YYYY-MM-DD, pentru selectorul de zi. */
-export function quickAddDays(todayYmd: string, pastDays: number, futureDays: number): string[] {
-  const base = new Date(`${todayYmd}T12:00:00Z`);
-  const out: string[] = [];
-  for (let i = -pastDays; i <= futureDays; i += 1) {
-    const d = new Date(base.getTime() + i * 86_400_000);
-    out.push(d.toISOString().slice(0, 10));
-  }
-  return out;
-}
-
 /**
  * Cum apare clientul pe cardul din calendar: numele întâi (guest_name al programării,
  * altfel numele din fișa business_clients), apoi telefonul și emailul. Fără nume → doar contactul.

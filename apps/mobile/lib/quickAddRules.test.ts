@@ -6,8 +6,6 @@ import {
   appointmentClientParts,
   appointmentContactParts,
   buildQuickAddPayload,
-  canNotifyClient,
-  quickAddDays,
   quickAddQueryReady,
   type BusinessClientContact,
 } from './quickAddRules';
@@ -54,14 +52,6 @@ const acct: BusinessClientContact = { businessClientId: null, clientUserId: 'u1'
 r = buildQuickAddPayload({ ...base, picked: acct });
 assert(r.error === null && r.payload?.p_client_user_id === 'u1' && r.payload.p_client_id === null, 'picked account → p_client_user_id');
 
-const now = new Date('2026-10-28T12:00:00Z');
-assert(canNotifyClient('2026-10-28T12:30:00Z', now), 'future slot can notify');
-assert(!canNotifyClient('2026-10-28T11:30:00Z', now), 'past slot cannot notify');
-assert(canNotifyClient(null, now), 'no slot yet: toggle stays usable');
-
-const days = quickAddDays('2026-10-28', 2, 3);
-assert(days.length === 6 && days[0] === '2026-10-26' && days[5] === '2026-10-31', 'day strip past+future', days.join(','));
-assert(quickAddDays('2026-03-29', 0, 1)[1] === '2026-03-30', 'DST day boundary ok');
 assert(!quickAddQueryReady(' a ') && quickAddQueryReady('07'), 'query needs 2 chars');
 
 assert(

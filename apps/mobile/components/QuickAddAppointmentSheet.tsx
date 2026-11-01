@@ -1,18 +1,19 @@
 /**
  * v101 (3.03): programare rapidă din business. Deschisă din Calendar (FAB) și din Clienți
  * („Programează"). Client după telefon (autocomplete pe server), mai multe servicii,
- * specialist care le face pe toate, zi + slot liber pe durata totală (inclusiv ore trecute),
- * notă și „Anunță clientul" (implicit OPRIT).
+ * specialist care le face pe toate, zi din calendar (doar azi și zilele viitoare, zile închise/blocate gri)
+ * + slot liber pe durata totală (doar ore viitoare), notă și „Anunță clientul" (implicit OPRIT, mereu vizibil sub listă).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BookingCalendar } from '@/components/BookingCalendar';
 import { Button, ButtonRow, Callout, Field, SectionTitle, Toggle, useTheme } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { trKey, useLanguage, useT } from '@/lib/i18n';
-import { calendarNames } from '@/lib/bookingCalendar';
+import { trKey, useT } from '@/lib/i18n';
+import { bookingDateRange } from '@/lib/bookingCalendar';
 import { staffSchedule } from '@/lib/bookingRules';
 import { listBusyRanges } from '@/lib/bookingRpc';
 import {
@@ -25,8 +26,6 @@ import { invokeDecisionNotify } from '@/lib/notify-client';
 import { formatPhoneDisplay } from '@/lib/phone';
 import {
   buildQuickAddPayload,
-  canNotifyClient,
-  quickAddDays,
   quickAddQueryReady,
   type BusinessClientContact,
 } from '@/lib/quickAddRules';
@@ -38,8 +37,6 @@ import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
 
 export type QuickAddStaff = Pick<Staff, 'id' | 'name' | 'working_hours' | 'break_hours'>;
-
-const PAST_DAYS = 14;
 
 type Props = {
   visible: boolean;
@@ -73,10 +70,9 @@ function QuickAddBody({
 }: Props) {
   const t = useTheme();
   const tr = useT();
-  const { lang } = useLanguage();
   const insets = useSafeAreaInsets();
   const tz = business.timezone;
-  const [today] = useState(() => formatInTimeZone(new Date(), tz, 'yyyy-MM-dd'));
+  const [{ minYmd: today, maxYmd }] = useState(() => bookingDateRange(business));
 
   const [staffList, setStaffList] = useState<QuickAddStaff[]>(staffProp ?? []);
   const [services, setServices] = useState<Service[]>([]);
@@ -85,7 +81,7 @@ function QuickAddBody({
   const [isStaffRole, setIsStaffRole] = useState(false);
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [day, setDay] = useState(initialDate ?? today);
+  const [day, setDay] = useState(initialDate && initialDate > today ? initialDate : today);
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slot, setSlot] = useState<FreeSlot | null>(null);
@@ -100,7 +96,6 @@ function QuickAddBody({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const searchSeq = useRef(0);
-  const dayStripRef = useRef<ScrollView>(null);
 
   // Încărcare la montare (= la fiecare deschidere).
   useEffect(() => {
@@ -158,12 +153,9 @@ function QuickAddBody({
     return eligible.find((m) => m.id === staffId) ?? eligible[0] ?? null;
   }, [eligible, staffId, staffList.length]);
 
-  const days = useMemo(() => {
-    const ahead = Math.min(business.max_advance_days ?? 90, 60);
-    return quickAddDays(today, PAST_DAYS, ahead);
-  }, [today, business.max_advance_days]);
+  const schedule = staffSchedule(member, business);
 
-  // Sloturi libere pe durata totală; fără notBefore → și orele trecute (business notează după).
+  // Sloturi libere pe durata totală, doar de acum înainte (fără preaviz minim: business-ul notează direct).
   useEffect(() => {
     setSlot(null);
     if (totals.durationMinutes <= 0 || (staffList.length > 0 && !member)) {
@@ -195,6 +187,7 @@ function QuickAddBody({
               busy,
               bufferMinutes: business.buffer_minutes ?? 0,
               blockedDates: business.blocked_dates ?? [],
+              notBeforeUtc: new Date(),
             })
       );
       setSlotsLoading(false);
@@ -221,13 +214,6 @@ function QuickAddBody({
     return () => clearTimeout(timer);
   }, [phone, name, picked, business.id]);
 
-  const nowMs = Date.now();
-  const hasPastSlots = slots.some((s) => Date.parse(s.startUtc) < nowMs);
-  const notifyAllowed = canNotifyClient(slot?.endUtc ?? null);
-  useEffect(() => {
-    if (!notifyAllowed && notify) setNotify(false);
-  }, [notifyAllowed, notify]);
-
   async function save() {
     setError(null);
     setOk(null);
@@ -249,7 +235,7 @@ function QuickAddBody({
       staffId: member?.id ?? null,
       payload,
       note,
-      notifyClient: notify && notifyAllowed && !isStaffRole,
+      notifyClient: notify && !isStaffRole,
     });
     if (err) {
       setSaving(false);
@@ -257,7 +243,7 @@ function QuickAddBody({
       return;
     }
     // Toggle PORNIT: confirmarea către client (email/WhatsApp) pleacă prin notify-decision.
-    if (appointment?.id && notify && notifyAllowed && !isStaffRole) {
+    if (appointment?.id && notify && !isStaffRole) {
       await invokeDecisionNotify(appointment.id);
     }
     setSaving(false);
@@ -408,27 +394,14 @@ function QuickAddBody({
             ) : null}
 
             <SectionTitle>{tr('qa.day')}</SectionTitle>
-            <ScrollView ref={dayStripRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {days.map((d) => {
-                const on = d === day;
-                const date = new Date(`${d}T12:00:00Z`);
-                return (
-                  <Pressable
-                    key={d}
-                    onPress={() => setDay(d)}
-                    onLayout={on ? (e) => dayStripRef.current?.scrollTo({ x: Math.max(0, e.nativeEvent.layout.x - 48), animated: false }) : undefined}
-                    style={[chip(on), styles.dayChip]}
-                    accessibilityRole="button"
-                    accessibilityLabel={d}
-                  >
-                    <Text style={[chipText(on), { fontSize: fontSize.xs }]}>
-                      {d === today ? tr('qa.today') : calendarNames(lang).weekdays[(date.getUTCDay() + 6) % 7]}
-                    </Text>
-                    <Text style={chipText(on)}>{formatInTimeZone(date, 'UTC', 'dd.MM')}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <BookingCalendar
+              value={day}
+              onChange={setDay}
+              minYmd={today}
+              maxYmd={maxYmd}
+              blockedDates={business.blocked_dates ?? []}
+              schedules={[schedule.workingHours]}
+            />
 
             <SectionTitle>{tr('req.freeSlot')}</SectionTitle>
             {serviceIds.length === 0 ? (
@@ -438,59 +411,48 @@ function QuickAddBody({
             ) : slots.length === 0 ? (
               <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('cal.noSlots', { date: day })}</Text>
             ) : (
-              <>
-                {hasPastSlots ? (
-                  <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.pastSlotsHint')}</Text>
-                ) : null}
-                <View style={styles.wrap}>
-                  {slots.map((s) => {
-                    const on = slot?.startUtc === s.startUtc;
-                    const past = Date.parse(s.startUtc) < nowMs;
-                    return (
-                      <Pressable
-                        key={s.startUtc}
-                        onPress={() => setSlot(s)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: on }}
-                        style={[
-                          styles.slot,
-                          on
-                            ? { backgroundColor: t.colors.accent, borderColor: t.colors.accentPressed }
-                            : past
-                              ? { backgroundColor: t.colors.surfaceMuted, borderColor: t.colors.surfaceMuted }
-                              : { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong },
-                        ]}
+              <View style={styles.wrap}>
+                {slots.map((s) => {
+                  const on = slot?.startUtc === s.startUtc;
+                  return (
+                    <Pressable
+                      key={s.startUtc}
+                      onPress={() => setSlot(s)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                      style={[
+                        styles.slot,
+                        on
+                          ? { backgroundColor: t.colors.accent, borderColor: t.colors.accentPressed }
+                          : { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: fontSize.sm,
+                          color: on ? t.colors.onAccent : t.colors.text,
+                          fontWeight: on ? '800' : '700',
+                        }}
                       >
-                        <Text
-                          style={{
-                            fontSize: fontSize.sm,
-                            color: on ? t.colors.onAccent : past ? t.colors.textFaint : t.colors.text,
-                            fontWeight: on ? '800' : past ? '500' : '700',
-                          }}
-                        >
-                          {s.labelLocal}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </>
+                        {s.labelLocal}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             )}
 
             <Field label={tr('qa.note')} placeholder={tr('qa.notePh')} value={note} onChangeText={setNote} multiline maxLength={500} />
-
-            {isStaffRole ? null : (
+          </ScrollView>
+          {isStaffRole ? null : (
             <View style={styles.notifyRow}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: t.colors.text, fontWeight: '700' }}>{tr('qa.notify')}</Text>
-                <Text style={[styles.hint, { color: t.colors.textMuted }]}>
-                  {notifyAllowed || !slot ? tr('qa.notifyHint') : tr('qa.notifyPast')}
-                </Text>
+                <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.notifyHint')}</Text>
               </View>
-              <Toggle value={notify} onValueChange={setNotify} disabled={!notifyAllowed} accessibilityLabel={tr('qa.notify')} />
+              <Toggle value={notify} onValueChange={setNotify} accessibilityLabel={tr('qa.notify')} />
             </View>
-            )}
-          </ScrollView>
+          )}
           <ButtonRow>
             <View style={styles.flex}>
               <Button label={tr('common.close')} variant="secondary" size="sm" disabled={saving} onPress={onClose} />
@@ -517,10 +479,9 @@ const styles = StyleSheet.create({
   card: { borderRadius: radius.lg, borderWidth: 1, padding: spacing.lg, gap: spacing.md, maxHeight: '100%', width: '100%', maxWidth: 640, alignSelf: 'center' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   title: { flex: 1, fontSize: fontSize.lg, fontWeight: '800' },
-  scroll: { maxHeight: 560 },
+  scroll: { maxHeight: 560, flexShrink: 1 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1 },
-  dayChip: { alignItems: 'center', minWidth: 58, borderRadius: radius.md },
   slot: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 2 },
   hint: { fontSize: fontSize.xs },
   pickedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1 },
