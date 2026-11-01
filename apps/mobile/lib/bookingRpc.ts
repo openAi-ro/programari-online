@@ -29,7 +29,7 @@ export async function ensureMyProfile(): Promise<
   // omise. Citim profilul și scriem doar ce lipsește — nu ștergem phone salvat în Setări.
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, email, phone')
+    .select('id, phone')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -45,8 +45,7 @@ export async function ensureMyProfile(): Promise<
     return { ok: true, userId: user.id };
   }
 
-  const patch: { email?: string | null; phone?: string | null } = {};
-  if (!existing.email && user.email) patch.email = user.email;
+  const patch: { phone?: string | null } = {};
   if (!existing.phone && user.phone) patch.phone = user.phone;
   if (Object.keys(patch).length > 0) {
     const { error: upErr } = await supabase

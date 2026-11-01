@@ -129,6 +129,12 @@ export function isDuplicateSignupUser(user: { identities?: { id?: string }[] | n
 export function mapAuthError(error: AuthError | Error | null | undefined): string | null {
   if (!error) return null;
   const raw = (error.message || '').toLowerCase();
+  const code = (error as { code?: string }).code;
+  if (code === 'reauthentication_needed' || raw.includes('reauthentication')) {
+    return trKey('auth.errReauthNeeded');
+  }
+  if (code === 'current_password_required') return trKey('set.currentPassNeeded');
+  if (code === 'current_password_invalid') return trKey('set.currentPassWrong');
   if (
     raw.includes('unsupported phone provider') ||
     raw.includes('phone provider') ||
@@ -249,8 +255,11 @@ export async function resetPasswordForEmail(email: string) {
 }
 
 /** Setează parola nouă după ce sesiunea de recovery e activă. */
-export async function updatePassword(newPassword: string) {
-  return supabase.auth.updateUser({ password: newPassword });
+export async function updatePassword(newPassword: string, currentPassword?: string) {
+  return supabase.auth.updateUser({
+    password: newPassword,
+    ...(currentPassword ? { current_password: currentPassword } : {}),
+  });
 }
 
 export const PENDING_REFERRAL_KEY = 'auth.referralCode';

@@ -415,7 +415,6 @@ export default function SettingsScreen() {
         .upsert(
           {
             id: user.id,
-            email: user.email ?? null,
             phone: user.phone ?? null,
             avatar_url: url,
           },
@@ -755,7 +754,6 @@ export default function SettingsScreen() {
       notify_reminders: notifyReminders,
       notify_decision: notifyDecision,
       notify_whatsapp: whatsappEnabled,
-      ...(email ? { email } : {}),
     };
 
     const profileSelect =
@@ -1117,8 +1115,13 @@ export default function SettingsScreen() {
           return;
         }
       }
-      const { error: updErr } = await updatePassword(newPassword);
+      const { error: updErr } = await updatePassword(
+        newPassword,
+        hasPassword ? currentPassword : undefined
+      );
       if (updErr) {
+        // Cont cu parolă dar fără identitate „email” (ex. Google + parolă veche): arătăm câmpul.
+        if (updErr.code === 'current_password_required') setHasPassword(true);
         setError(mapAuthError(updErr) ?? updErr.message);
         return;
       }

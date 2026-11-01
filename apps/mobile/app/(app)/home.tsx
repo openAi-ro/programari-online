@@ -198,14 +198,13 @@ export default function HomeScreen() {
             avatar_url: null,
           };
         } else {
-          const patch: { email?: string | null; phone?: string | null } = {};
-          if (!existingProf.email && user.email) patch.email = user.email;
+          const patch: { phone?: string | null } = {};
           if (!existingProf.phone && user.phone) patch.phone = user.phone;
           if (Object.keys(patch).length > 0) {
             await supabase.from('profiles').update(patch).eq('id', user.id);
           }
           profileRow = {
-            email: patch.email ?? existingProf.email ?? null,
+            email: existingProf.email ?? null,
             phone: patch.phone ?? existingProf.phone ?? null,
             display_name: existingProf.display_name ?? null,
             avatar_url: existingProf.avatar_url ?? null,

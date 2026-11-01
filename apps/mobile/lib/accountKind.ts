@@ -15,7 +15,7 @@ export async function persistAccountKind(kind: AppMode): Promise<void> {
 
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, email, phone')
+    .select('id, phone')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -32,11 +32,9 @@ export async function persistAccountKind(kind: AppMode): Promise<void> {
 
   const patch: {
     account_kind: AppMode;
-    email?: string | null;
     phone?: string | null;
   } = { account_kind: kind };
   // Nu suprascriem un telefon deja salvat din Setări.
-  if (!existing.email && user.email) patch.email = user.email;
   if (!existing.phone && user.phone) patch.phone = user.phone;
 
   const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);

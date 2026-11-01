@@ -37,7 +37,7 @@
 
 <h2>3. Cum folosim datele</h2>
 <ul>
-<li>Crearea contului și autentificarea (inclusiv cod OTP pe WhatsApp sau email și „Continuă cu Google”).</li>
+<li>Crearea contului și autentificarea (email și parolă sau „Continuă cu Google”).</li>
 <li>Rezervarea, confirmarea, mutarea și anularea programărilor și comunicarea cu business-ul.</li>
 <li>Trimiterea notificărilor despre programări: push, WhatsApp și email.</li>
 <li>Sincronizarea cu Google Calendar, dacă business-ul o activează.</li>
@@ -55,8 +55,9 @@
 <li><strong>Business-ul la care faci programarea</strong> – vede numele, datele de contact, programările, mesajele, fișa ta și pozele înainte/după.</li>
 <li><strong>Supabase</strong> – găzduirea bazei de date, autentificare, stocarea fișierelor și funcțiile de server.</li>
 <li><strong>Expo (EAS)</strong> – găzduirea site-ului, actualizările aplicației și livrarea notificărilor push, prin Google Firebase Cloud Messaging și Apple Push Notification Service.</li>
-<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – livrarea codurilor de autentificare și a mesajelor despre programări pe WhatsApp (numărul de telefon și conținutul mesajului).</li>
-<li><strong>Resend</strong> – trimiterea emailurilor (adresa de email și conținutul mesajului).</li>
+<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – livrarea mesajelor despre programări pe WhatsApp (numărul de telefon și conținutul mesajului).</li>
+<li><strong>Brevo</strong> – trimiterea emailurilor (adresa de email și conținutul mesajului).</li>
+<li><strong>Furnizorul modelului de inteligență artificială</strong> folosit de asistentul din aplicație (mesajele trimise asistentului sunt procesate de acesta).</li>
 <li><strong>Google</strong> – autentificarea cu Google și Google Calendar, dacă le folosești.</li>
 <li><strong>Stripe</strong> – procesarea plăților pentru avansuri.</li>
 </ul>
@@ -65,7 +66,7 @@
 <h2>6. Temei legal (GDPR)</h2>
 <ul>
 <li><strong>Executarea contractului</strong> (art. 6 alin. 1 lit. b) – contul, programările, mesajele, notificările despre programări și plățile.</li>
-<li><strong>Consimțământ</strong> (art. 6 alin. 1 lit. a, și art. 9 alin. 2 lit. a pentru datele de sănătate din fișă, cum ar fi alergiile și afecțiunile) – codul OTP pe WhatsApp, fișa clientului, pozele înainte/după, locația, notificările push și Google Calendar. Poți retrage consimțământul oricând, fără să fie afectată legalitatea prelucrării de până atunci.</li>
+<li><strong>Consimțământ</strong> (art. 6 alin. 1 lit. a, și art. 9 alin. 2 lit. a pentru datele de sănătate din fișă, cum ar fi alergiile și afecțiunile) – fișa clientului, pozele înainte/după, locația, notificările push și Google Calendar. Poți retrage consimțământul oricând, fără să fie afectată legalitatea prelucrării de până atunci.</li>
 <li><strong>Interes legitim</strong> (art. 6 alin. 1 lit. f) – securitatea, prevenirea abuzurilor și remedierea erorilor.</li>
 <li><strong>Obligație legală</strong> (art. 6 alin. 1 lit. c) – păstrarea evidențelor de plată.</li>
 </ul>
@@ -73,7 +74,6 @@
 <h2>7. Cât timp păstrăm datele</h2>
 <ul>
 <li>Datele contului, programările, mesajele, fișa și pozele: cât timp contul este activ. Se șterg când îți ștergi contul.</li>
-<li>Codurile OTP sunt stocate doar ca hash (SHA-256) și expiră automat după aproximativ 10 minute.</li>
 <li>Jurnalul tehnic al notificărilor trimise (canal, status, eroare), folosit pentru depanare: cât timp contul este activ.</li>
 <li>Evidențele de plată: cât timp o cere legislația fiscală și contabilă.</li>
 <li>Copiile de siguranță ale bazei de date se rescriu automat; datele șterse dispar din ele în cel mult 30 de zile.</li>
@@ -128,7 +128,7 @@
 
 <h2>3. How we use the data</h2>
 <ul>
-<li>Creating the account and signing in (including OTP codes via WhatsApp or email and "Continue with Google").</li>
+<li>Creating the account and signing in (email and password or "Continue with Google").</li>
 <li>Booking, confirming, moving and cancelling appointments and communicating with the business.</li>
 <li>Sending booking notifications: push, WhatsApp and email.</li>
 <li>Syncing with Google Calendar, if the business turns it on.</li>
@@ -146,8 +146,9 @@
 <li><strong>The business you book with</strong> – sees your name, contact details, bookings, messages, client record and before/after photos.</li>
 <li><strong>Supabase</strong> – database hosting, authentication, file storage and server functions.</li>
 <li><strong>Expo (EAS)</strong> – website hosting, app updates and push notification delivery, via Google Firebase Cloud Messaging and Apple Push Notification Service.</li>
-<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – delivering sign-in codes and booking messages over WhatsApp (phone number and message content).</li>
-<li><strong>Resend</strong> – sending emails (email address and message content).</li>
+<li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – delivering booking messages over WhatsApp (phone number and message content).</li>
+<li><strong>Brevo</strong> – sending emails (email address and message content).</li>
+<li><strong>The artificial intelligence model provider</strong> used by the in-app assistant (messages sent to the assistant are processed by it).</li>
 <li><strong>Google</strong> – Google sign-in and Google Calendar, if you use them.</li>
 <li><strong>Stripe</strong> – processing deposit payments.</li>
 </ul>
@@ -156,7 +157,7 @@
 <h2>6. Legal basis (GDPR)</h2>
 <ul>
 <li><strong>Performance of a contract</strong> (Art. 6(1)(b)) – the account, bookings, messages, booking notifications and payments.</li>
-<li><strong>Consent</strong> (Art. 6(1)(a), and Art. 9(2)(a) for health data in the client record, such as allergies and conditions) – WhatsApp OTP, the client record, before/after photos, location, push notifications and Google Calendar. You can withdraw consent at any time, without affecting the lawfulness of processing before withdrawal.</li>
+<li><strong>Consent</strong> (Art. 6(1)(a), and Art. 9(2)(a) for health data in the client record, such as allergies and conditions) – the client record, before/after photos, location, push notifications and Google Calendar. You can withdraw consent at any time, without affecting the lawfulness of processing before withdrawal.</li>
 <li><strong>Legitimate interest</strong> (Art. 6(1)(f)) – security, abuse prevention and fixing errors.</li>
 <li><strong>Legal obligation</strong> (Art. 6(1)(c)) – keeping payment records.</li>
 </ul>
@@ -164,7 +165,6 @@
 <h2>7. How long we keep data</h2>
 <ul>
 <li>Account data, bookings, messages, the client record and photos: while the account is active. They are deleted when you delete your account.</li>
-<li>OTP codes are stored only as a hash (SHA-256) and expire automatically after about 10 minutes.</li>
 <li>The technical log of sent notifications (channel, status, error), used for troubleshooting: while the account is active.</li>
 <li>Payment records: as long as tax and accounting law requires.</li>
 <li>Database backups are overwritten automatically; deleted data disappears from them within 30 days.</li>

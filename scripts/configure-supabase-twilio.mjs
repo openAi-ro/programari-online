@@ -73,7 +73,7 @@ for (const [key, value] of secrets) {
 }
 
 console.log('\nDeploy funcții WhatsApp...');
-for (const fn of ['test-whatsapp', 'auth-whatsapp-otp', 'auth-whatsapp-verify']) {
+for (const fn of ['test-whatsapp']) {
   const extra = fn.startsWith('auth-') ? ['--no-verify-jwt'] : [];
   const deploy = spawnSync(
     'supabase',

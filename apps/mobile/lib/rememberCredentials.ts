@@ -38,10 +38,6 @@ async function setItem(key: string, value: string, secure: boolean): Promise<voi
     await SecureStore.setItemAsync(key, value);
     return;
   }
-  if (Platform.OS === 'web') {
-    webStore()?.setItem(key, value);
-    return;
-  }
   await AsyncStorage.setItem(key, value);
 }
 
@@ -49,9 +45,6 @@ async function getItem(key: string, secure: boolean): Promise<string | null> {
   if (secure) {
     const SecureStore = await import('expo-secure-store');
     return SecureStore.getItemAsync(key);
-  }
-  if (Platform.OS === 'web') {
-    return webStore()?.getItem(key) ?? null;
   }
   return AsyncStorage.getItem(key);
 }
