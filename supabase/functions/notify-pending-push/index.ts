@@ -37,6 +37,7 @@ import {
   type WaTemplateRef,
 } from '../_shared/notify.ts';
 import { notifyLocale, parseNotifyLang } from '../_shared/notify.ts';
+import { sendWebPushToUser } from '../_shared/webPush.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -372,6 +373,23 @@ Deno.serve(async (req) => {
     }
   }
 
+  // --- Web Push pentru PWA instalată (iOS-2), alături de Expo push ---
+  let sentWebPush = 0;
+  if (!businessCreated) {
+    const webPush = await sendWebPushToUser(admin, business.owner_user_id, {
+      title: pushTitle,
+      body: bodyText,
+      tag: `booking-${record.id}`,
+      data: {
+        screen: 'requests',
+        appointmentId: record.id,
+        businessId: record.business_id,
+        ...(rescheduleRequested ? { filter: 'decide' } : {}),
+      },
+    });
+    sentWebPush = webPush.sent;
+  }
+
   // --- Owner WhatsApp / email (profile loaded above; even when no push tokens) ---
 
   const msg: { subject: string; text: string; wa?: WaTemplateRef } = requestCopy
@@ -437,6 +455,7 @@ Deno.serve(async (req) => {
   return jsonResponse({
     ok: true,
     sent_push: sentPush,
+    sent_web_push: sentWebPush,
     sent_whatsapp: sentWhatsapp,
     sent_email: sentEmail,
     reason,

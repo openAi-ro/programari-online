@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentUser } from './currentUser';
 import { createThrottledLoader } from './throttledLoader';
 import type { ChatConversation, ChatMessage } from './types';
 import { CHAT_PAGE_SIZE, olderThanFilter, pageFromNewestFirst, type ChatCursor } from './chatPaging';
@@ -73,6 +74,9 @@ export async function ensureChatConversationForClient(
 
 /** Unread message count per conversation for the current user (v38). */
 export async function fetchUnreadCounts(): Promise<Record<string, number>> {
+  // Fără sesiune RPC-ul răspunde 401 (iOS-8): badge-ul rămâne 0, fără cerere.
+  const user = await getCurrentUser();
+  if (!user) return {};
   const { data, error } = await supabase.rpc('chat_unread_counts');
   if (error || !Array.isArray(data)) return {};
   const out: Record<string, number> = {};

@@ -452,6 +452,6 @@ const styles = StyleSheet.create({
   pendingHint: { flex: 1, fontSize: 13 },
   inputRow: { flexDirection: 'row', gap: spacing.xs, alignItems: 'flex-end', marginHorizontal: -spacing.sm },
   micError: { width: '100%', fontSize: 12 },
-  input: { flex: 1, minWidth: 0, minHeight: COMPOSER_MIN_HEIGHT, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, fontSize: 15, lineHeight: 20, textAlignVertical: 'top' },
+  input: { flex: 1, minWidth: 0, minHeight: COMPOSER_MIN_HEIGHT, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, fontSize: 16, lineHeight: 20, textAlignVertical: 'top' },
   iconBtn: { width: 32, height: COMPOSER_MIN_HEIGHT, justifyContent: 'center', alignItems: 'center' },
 });

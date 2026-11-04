@@ -43,6 +43,7 @@ import { invokeRefundDeposit } from '@/lib/payments';
 import { formatRon } from '@/lib/format';
 import { sessionsLeft } from '@/lib/packages';
 import { canCheckIn } from '@/lib/checkin';
+import { needsMovedAck } from '@/lib/moveAck';
 import { shareText } from '@/lib/shareBusiness';
 import { makeReferralCode } from '@/lib/referral';
 import { getPublicWebOrigin } from '@/lib/webBase';
@@ -138,7 +139,7 @@ export default function MyAppointmentsScreen() {
       .order('start_at', { ascending: false });
 
     if (err) {
-      setError(err.message, { sticky: true });
+      setError(trKey('my.loadFail'), { sticky: true });
       setLoading(false);
       return;
     }
@@ -286,6 +287,22 @@ export default function MyAppointmentsScreen() {
     await load();
   }
   const [checkInBusyId, setCheckInBusyId] = useState<string | null>(null);
+  const [ackBusyId, setAckBusyId] = useState<string | null>(null);
+
+  // F-12: clientul confirmă că a văzut mutarea făcută de salon (v105).
+  async function ackMoved(id: string) {
+    setAckBusyId(id);
+    setError(null);
+    const { error: err } = await supabase.rpc('ack_moved_appointment', {
+      p_appointment_id: id,
+    });
+    setAckBusyId(null);
+    if (err) {
+      setError(mapBookingRpcError(err.message));
+      return;
+    }
+    await load();
+  }
   const [seriesTarget, setSeriesTarget] = useState<Row | null>(null);
   const [tickNow, setTickNow] = useState(() => new Date());
 
@@ -474,9 +491,17 @@ export default function MyAppointmentsScreen() {
               ]}
             />
             {error ? (
+              <>
               <Callout onClose={() => setError(null)} tone="danger" title={tr('chat.errorTitle')}>
                 {error}
               </Callout>
+              <Button
+                label={tr('common.retry')}
+                icon="refresh-outline"
+                variant="secondary"
+                onPress={() => void load()}
+              />
+              </>
             ) : null}
             {success ? (
               <Callout onClose={() => setSuccess(null)} tone="success">
@@ -655,6 +680,19 @@ export default function MyAppointmentsScreen() {
           />
         }
         renderItem={({ item }) => (
+          <>
+            {needsMovedAck(item) ? (
+              <View style={{ marginBottom: spacing.sm }}>
+                <Callout tone="accent" title={tr('my.movedByBusiness')} />
+                <Button
+                  label={ackBusyId === item.id ? tr('cli.saving') : tr('my.movedAck')}
+                  variant="secondary"
+                  icon="checkmark-circle-outline"
+                  loading={ackBusyId === item.id}
+                  onPress={() => void ackMoved(item.id)}
+                />
+              </View>
+            ) : null}
           <AppointmentCard
             appointment={item}
             businessName={item.business_profiles?.name}
@@ -773,6 +811,7 @@ export default function MyAppointmentsScreen() {
                 : undefined
             }
           />
+          </>
         )}
       />
     </Screen>

@@ -197,7 +197,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
+    // 16px: sub 16px Safari iOS face zoom automat la focus (iOS-5).
+    fontSize: 16,
     paddingVertical: 4,
   },
   eyeBtn: {

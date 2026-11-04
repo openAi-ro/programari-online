@@ -50,6 +50,7 @@ import {
   staffServicesMap,
   type StaffServiceRow,
 } from '@/lib/staffServices';
+import { unionStaffSlots } from '@/lib/anyStaff';
 import { discountedPrice, isOffpeakStart } from '@/lib/offpeak';
 import { parseTipInput, tipOptions } from '@/lib/tip';
 import { normalizeRepeatSelection } from '@/lib/recurringRules';
@@ -122,6 +123,9 @@ export default function BookScreen() {
   const [services, setServices] = useState<Service[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [staffId, setStaffId] = useState<string | null>(null);
+  // Oricine disponibil (F-11): ora se ia din reuniunea sloturilor echipei.
+  const [staffAny, setStaffAny] = useState(false);
+  const [freeStaffByStart, setFreeStaffByStart] = useState<Record<string, string[]>>({});
   // staff_services (v67): specialistul fără rânduri face tot.
   const [staffServices, setStaffServices] = useState<Record<string, string[]>>({});
   const [serviceIds, setServiceIds] = useState<string[]>([]);
@@ -151,6 +155,8 @@ export default function BookScreen() {
   const [tipCustom, setTipCustom] = useState('');
 
   const isReschedule = Boolean(rescheduleId);
+  // Specialistul efectiv: null = Oricine (sau firma fără echipă, ca înainte).
+  const effStaffId = staffAny && !isReschedule ? null : staffId;
   const combo = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
   const offpeakPct = business?.offpeak_discount_percent ?? 0;
   const selectedOffpeak =
@@ -163,13 +169,13 @@ export default function BookScreen() {
       offpeakPct
     );
   const selectedStaff = useMemo(
-    () => staffList.find((s) => s.id === staffId) ?? null,
-    [staffList, staffId]
+    () => staffList.find((s) => s.id === effStaffId) ?? null,
+    [staffList, effStaffId]
   );
   // Doar serviciile pe care le face specialistul ales (pasul specialist vine înaintea serviciilor).
   const offeredServices = useMemo(
-    () => (staffId ? services.filter((s) => staffOffersService(staffServices, staffId, s.id)) : services),
-    [services, staffServices, staffId]
+    () => (effStaffId ? services.filter((s) => staffOffersService(staffServices, effStaffId, s.id)) : services),
+    [services, staffServices, effStaffId]
   );
   useEffect(() => {
     if (offeredServices.length === 0) return;
@@ -190,12 +196,12 @@ export default function BookScreen() {
     if (!business || !stepsReady) return;
     const first = firstBookableDateForStaff(
       business,
-      selectedStaff ? [selectedStaff] : [],
+      staffAny ? [...staffList] : selectedStaff ? [selectedStaff] : [],
       durationMinutes
     );
     const kept = pickedDate.current;
     setDateLocal(kept && kept >= first ? kept : first);
-  }, [business, stepsReady, selectedStaff, durationMinutes]);
+  }, [business, stepsReady, selectedStaff, staffAny, staffList, durationMinutes]);
 
   const hasStaffChoice = staffList.length > 1;
   const hasServices = services.length > 0;
@@ -464,6 +470,48 @@ export default function BookScreen() {
     setOnWaitlist(false);
 
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
+
+    // Oricine: reuniunea sloturilor libere ale echipei (ca pe pagina publică).
+    if (staffAny && !isReschedule && staffList.length > 0) {
+      const perStaff: { staffId: string; slots: FreeSlot[] }[] = [];
+      for (const m of staffList) {
+        const { busy: memberBusy, error: memberErr } = await listBusyRanges({
+          businessId: business.id,
+          fromIso: startUtc.toISOString(),
+          toIso: endUtc.toISOString(),
+          staffId: m.id,
+        });
+        if (!slotsRequests.isCurrent(req)) return;
+        if (memberErr) {
+          setError(memberErr);
+          setSlots([]);
+          setFreeStaffByStart({});
+          setSlotsLoading(false);
+          return;
+        }
+        const memberHours = staffSchedule(m, business);
+        perStaff.push({
+          staffId: m.id,
+          slots: generateFreeSlots({
+            dateLocal,
+            timezone: business.timezone,
+            sessionDurationMinutes: durationMinutes,
+            workingHours: memberHours.workingHours,
+            breakHours: memberHours.breakHours,
+            busy: memberBusy,
+            bufferMinutes: business.buffer_minutes ?? 0,
+            blockedDates: business.blocked_dates ?? [],
+            notBeforeUtc: notBeforeUtc(business),
+          }),
+        });
+      }
+      if (!slotsRequests.isCurrent(req)) return;
+      const union = unionStaffSlots(perStaff);
+      setSlots(union.slots);
+      setFreeStaffByStart(union.staffByStart);
+      setSlotsLoading(false);
+      return;
+    }
     const [{ busy: rawBusy, error: err }, currentRes] = await Promise.all([
       listBusyRanges({
         businessId: business.id,
@@ -509,8 +557,9 @@ export default function BookScreen() {
       notBeforeUtc: notBeforeUtc(business),
     });
     setSlots(free);
+    setFreeStaffByStart({});
     setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, selectedStaff, slotsRequests]);
+  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, staffAny, staffList, isReschedule, selectedStaff, slotsRequests]);
 
   useEffect(() => {
     // Nu reincarca pe 'confirm': loadSlots() reseteaza ora aleasa si blocheaza trimiterea.
@@ -531,6 +580,16 @@ export default function BookScreen() {
     setBooking(true);
     setError(null);
     setMessage(null);
+
+    // Oricine: la ora aleasă merge primul specialist liber (ordinea echipei).
+    const bookStaffId =
+      staffAny && !isReschedule ? (freeStaffByStart[selected.startUtc]?.[0] ?? null) : staffId;
+    if (staffAny && !isReschedule && staffList.length > 0 && !bookStaffId) {
+      setBooking(false);
+      setError(trKey('book.errSlotTaken'));
+      await loadSlots();
+      return;
+    }
 
     if (isReschedule && rescheduleId) {
       const { data, error: err } = await supabase.rpc('reschedule_appointment', {
@@ -566,7 +625,7 @@ export default function BookScreen() {
               startAt: selected.startUtc,
               endAt: selected.endUtc,
               serviceIds,
-              staffId,
+              staffId: bookStaffId,
               repeatCount,
             })
           : await createRecurringAppointments({
@@ -574,7 +633,7 @@ export default function BookScreen() {
         startAt: selected.startUtc,
         endAt: selected.endUtc,
         serviceId,
-        staffId,
+        staffId: bookStaffId,
         repeatCount,
       });
       setBooking(false);
@@ -605,14 +664,14 @@ export default function BookScreen() {
             startAt: selected.startUtc,
             endAt: selected.endUtc,
             serviceIds,
-            staffId,
+            staffId: bookStaffId,
           })
         : await createAppointmentIfFree({
       businessId: business.id,
       startAt: selected.startUtc,
       endAt: selected.endUtc,
       serviceId,
-      staffId,
+      staffId: bookStaffId,
     });
 
     setBooking(false);
@@ -799,7 +858,7 @@ export default function BookScreen() {
   const addr = formatAddress(locationFromBusiness(business));
   const canAdvance =
     step === 'staff'
-      ? Boolean(staffId)
+      ? staffAny || Boolean(staffId)
       : step === 'service'
         ? serviceIds.length > 0 || services.length === 0
         : step === 'date'
@@ -1041,12 +1100,34 @@ export default function BookScreen() {
         <>
           <SectionTitle>{tr('book.pickStaff')}</SectionTitle>
           <View style={styles.staffGrid}>
+            {!isReschedule ? (
+              <Pressable
+                key="__any"
+                onPress={() => {
+                  setStaffAny(true);
+                  setSelected(null);
+                }}
+                style={({ pressed }) => [styles.staffCell, { opacity: pressed ? 0.85 : 1 }]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: staffAny }}
+                accessibilityLabel={tr('pub.anyStaffHint')}
+              >
+                <StaffBadge
+                  name={tr('pub.anyStaff')}
+                  photoUrl={null}
+                  color={t.colors.accent}
+                  size={64}
+                  selected={staffAny}
+                />
+              </Pressable>
+            ) : null}
             {staffList.map((s) => {
               const on = s.id === staffId;
               return (
                 <Pressable
                   key={s.id}
                   onPress={() => {
+                    setStaffAny(false);
                     setStaffId(s.id);
                     setSelected(null);
                   }}
@@ -1235,7 +1316,7 @@ export default function BookScreen() {
             ]}
           >
             <ConfirmLine label={tr('book.salon')} value={business.name} />
-            {selectedStaff ? <ConfirmLine label={tr('book.stepStaff')} value={selectedStaff.name} /> : null}
+            {(selectedStaff || (staffAny && !isReschedule)) ? <ConfirmLine label={tr('book.stepStaff')} value={selectedStaff ? selectedStaff.name : tr('pub.anyStaff')} /> : null}
             {combo.count > 0 ? (
               <ConfirmLine
                 label={tr('book.stepService')}
@@ -1440,7 +1521,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    fontSize: fontSize.md,
+    // 16px: sub 16px Safari iOS face zoom automat la focus (iOS-5).
+    fontSize: 16,
     fontWeight: '600',
   },
   serviceDesc: { fontSize: fontSize.sm, opacity: 0.9 },

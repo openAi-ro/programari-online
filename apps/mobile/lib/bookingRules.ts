@@ -277,6 +277,9 @@ export function mapBookingRpcError(message: string): string {
   if (message.includes('invalid_rating')) {
     return trKey('book.errBadRating');
   }
+  if (/gen_random_bytes|No function matches|does not exist|permission denied|internal error|PGRST|schema cache|42883|42501|42702|42P/i.test(message)) {
+    return trKey('book.errNotSaved');
+  }
   return message;
 }
 

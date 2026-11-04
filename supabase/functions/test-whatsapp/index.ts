@@ -2,6 +2,8 @@
  * Edge Function: test-whatsapp
  *
  * Sends a test WhatsApp message to the authenticated user's profile phone.
+ * Always an approved Meta template (free text is dropped by Meta outside the 24h window,
+ * error 131047): WHATSAPP_TPL_TEST, else WHATSAPP_TPL_CONFIRMED with sample vars.
  * Requires WHATSAPP_* or TWILIO_* secrets on Supabase (otherwise stub log).
  *
  * POST {} with user JWT
@@ -13,6 +15,8 @@ import {
   messageTest,
   parseNotifyLang,
   sendWhatsApp,
+  waTemplateName,
+  type WaTemplateRef,
   whatsappUserHint,
 } from '../_shared/notify.ts';
 import { normalizePhoneE164 } from '../_shared/phone.ts';
@@ -88,8 +92,24 @@ Deno.serve(async (req) => {
     );
   }
 
+  const template: WaTemplateRef | null = waTemplateName('TEST')
+    ? { key: 'TEST', vars: ['Programari'] }
+    : waTemplateName('CONFIRMED')
+      ? { key: 'CONFIRMED', vars: ['Programari', 'test'] }
+      : null;
+  if (!template) {
+    return jsonResponse({
+      ok: false,
+      error: 'whatsapp_template_missing',
+      hint:
+        lang === 'en'
+          ? 'No approved WhatsApp template is configured on the server (WHATSAPP_TPL_TEST / WHATSAPP_TPL_CONFIRMED).'
+          : 'Nu e configurat niciun șablon WhatsApp aprobat pe server (WHATSAPP_TPL_TEST / WHATSAPP_TPL_CONFIRMED).',
+    });
+  }
+
   const copy = messageTest(lang);
-  const result = await sendWhatsApp(phone, copy.text);
+  const result = await sendWhatsApp(phone, copy.text, { template });
 
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (serviceKey) {
@@ -132,6 +152,8 @@ Deno.serve(async (req) => {
       ? lang === 'en'
         ? 'WhatsApp is not configured on the server — the message was only logged (WHATSAPP_STUB). Set the Meta or Twilio secrets.'
         : 'WhatsApp nu e configurat pe server — mesajul a fost doar logat (WHATSAPP_STUB). Setează secrets Meta sau Twilio.'
-      : undefined,
+      : lang === 'en'
+        ? 'Sent to WhatsApp; Meta confirms delivery within seconds.'
+        : 'Trimis spre WhatsApp; livrarea o confirmă Meta în câteva secunde.',
   });
 });

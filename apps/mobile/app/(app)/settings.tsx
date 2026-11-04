@@ -49,6 +49,11 @@ import {
 } from '@/lib/notifications';
 import { invokeTestWhatsApp } from '@/lib/notify-client';
 import {
+  hasWebPushSubscription,
+  isWebPushConfigured,
+  registerWebPushAsync,
+} from '@/lib/webPush';
+import {
   formatPhoneDisplay,
   isValidRoMobile,
   normalizePhoneE164,
@@ -100,6 +105,8 @@ export default function SettingsScreen() {
   const [pushTestBusy, setPushTestBusy] = useState(false);
   const [diagBusy, setDiagBusy] = useState(false);
   const [diag, setDiag] = useState<PushDiagnostics | null>(null);
+  const [webPushBusy, setWebPushBusy] = useState(false);
+  const [webPushOn, setWebPushOn] = useState(false);
   const [waBusy, setWaBusy] = useState(false);
   const [notifyReminders, setNotifyReminders] = useState(true);
   const [notifyDecision, setNotifyDecision] = useState(true);
@@ -1143,6 +1150,36 @@ export default function SettingsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    void hasWebPushSubscription().then(setWebPushOn);
+  }, []);
+
+  async function handleEnableWebPush() {
+    setWebPushBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await registerWebPushAsync();
+      if (result.ok) {
+        setWebPushOn(true);
+        setMessage(trKey('set.webPushOn'));
+      } else if (result.reason === 'vapid_missing') {
+        setError(trKey('set.webPushNoVapid'));
+      } else if (result.reason === 'ios_needs_install') {
+        setError(trKey('set.webPushNeedsInstall'));
+      } else if (result.reason === 'permission_denied') {
+        setError(trKey('set.webPushDenied'));
+      } else if (result.reason === 'push_unsupported' || result.reason === 'not_web') {
+        setError(trKey('set.webPushUnsupported'));
+      } else {
+        setError(trKey('set.webPushFailed'));
+      }
+    } finally {
+      setWebPushBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={{ flex: 1 }}>
@@ -1566,6 +1603,36 @@ export default function SettingsScreen() {
             : tr('set.notifSaveClient', { save: tr('set.saveProfile') })}
         </Text>
       </View>
+
+      {Platform.OS === 'web' ? (
+        <>
+          <SectionTitle>{tr('set.webPushTitle')}</SectionTitle>
+          <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
+            <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
+              {tr('set.webPushDesc')}
+            </Text>
+            {webPushOn ? (
+              <Text style={[styles.panelText, { color: t.colors.text }]}>
+                {tr('set.webPushOn')}
+              </Text>
+            ) : isWebPushConfigured() ? (
+              <Button
+                label={tr('set.webPushEnable')}
+                variant="secondary"
+                size="md"
+                icon="notifications-outline"
+                loading={webPushBusy}
+                disabled={webPushBusy || !profile}
+                onPress={() => void handleEnableWebPush()}
+              />
+            ) : (
+              <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
+                {tr('set.webPushNoVapid')}
+              </Text>
+            )}
+          </View>
+        </>
+      ) : null}
 
       <SectionTitle>{tr('set.pushTitle')}</SectionTitle>
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>

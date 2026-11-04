@@ -133,6 +133,9 @@ export type Appointment = {
   reschedule_requested_at?: string | null;
   /** v87: motivul anularii de catre salon (vazut de client). */
   cancel_reason?: string | null;
+  /** v105: salonul a mutat programarea (banner F-12); gol dupa confirmarea clientului. */
+  moved_by_business_at?: string | null;
+  moved_seen_at?: string | null;
   created_at: string;
   updated_at: string;
 };

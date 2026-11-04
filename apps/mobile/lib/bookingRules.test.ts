@@ -2,7 +2,8 @@
  * Run: npx tsx lib/bookingRules.test.ts
  * from apps/mobile
  */
-import { firstBookableDateForStaff, firstBookableDateYmd, maxBookingDate } from './bookingRules';
+import { firstBookableDateForStaff, firstBookableDateYmd, mapBookingRpcError, maxBookingDate } from './bookingRules';
+import { trKey } from './i18n';
 import { addOneDay, formatInTimeZone } from './timezone';
 import type { BusinessProfile, DayKey, Staff, WorkingHours } from './types';
 
@@ -119,6 +120,16 @@ const forAnyone = firstBookableDateForStaff(bizHours, [staffLate, staffAlways], 
 assert(forAnyone === salonFirst, 'Oricine disponibil -> cea mai devreme zi din echipă', `expected ${salonFirst}, got ${forAnyone}`);
 const forNoTeam = firstBookableDateForStaff(bizHours, [], 60);
 assert(forNoTeam === salonFirst, 'fără echipă -> programul salonului', `expected ${salonFirst}, got ${forNoTeam}`);
+
+const rawDb = 'function gen_random_bytes(integer) does not exist';
+assert(
+  mapBookingRpcError(rawDb) === trKey('book.errNotSaved'),
+  'eroare tehnica DB -> mesaj generic'
+);
+assert(
+  !mapBookingRpcError(rawDb).includes('gen_random_bytes'),
+  'mesajul tehnic nu se afiseaza brut'
+);
 
 console.log(`bookingRules: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

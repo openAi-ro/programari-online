@@ -40,6 +40,18 @@ import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type Mode = 'login' | 'register';
 
+/** PWA instalată pe ecranul de start (iOS standalone / display-mode standalone). */
+function isStandalonePwa(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  if (nav.standalone === true) return true;
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches;
+  } catch {
+    return false;
+  }
+}
+
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -61,6 +73,7 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
   const [referralInput, setReferralInput] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [standalonePwa] = useState(isStandalonePwa);
 
   useEffect(() => {
     // Datele salvate precompleteaza doar ecranul de login; nu schimba niciodata modul.
@@ -340,14 +353,18 @@ export function AuthAccountForm({ kind, initialMode = 'register' }: { kind: AppM
                 </Text>
               </Text>
             ) : null}
-            <LoginButton
-              tone="secondary"
-              label={tr('auth.googleContinue')}
-              leading={<GoogleLogo size={18} />}
-              onPress={() => void handleGoogleSignIn()}
-              disabled={loading || googleBusy}
-              loading={googleBusy}
-            />
+            {standalonePwa ? (
+              <Callout tone="accent">{tr('auth.googleStandaloneHint')}</Callout>
+            ) : (
+              <LoginButton
+                tone="secondary"
+                label={tr('auth.googleContinue')}
+                leading={<GoogleLogo size={18} />}
+                onPress={() => void handleGoogleSignIn()}
+                disabled={loading || googleBusy}
+                loading={googleBusy}
+              />
+            )}
             {mode === 'login' ? (
             <LoginButton
               label={tr('auth.forgotPassword')}

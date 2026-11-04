@@ -8,9 +8,26 @@
                  "scheme":  "programari",
                  "userInterfaceStyle":  "automatic",
                  "ios":  {
-                             "supportsTablet":  true,
+                             "supportsTablet":  false,
                              "bundleIdentifier":  "com.programari.app",
                              "buildNumber":  "3",
+                             "associatedDomains":  [
+                                                       "applinks:programari.expo.app"
+                                                   ],
+                             "privacyManifests":  {
+                                                      "NSPrivacyAccessedAPITypes":  [
+                                                                                        {
+                                                                                            "NSPrivacyAccessedAPIType":  "NSPrivacyAccessedAPICategoryUserDefaults",
+                                                                                            "NSPrivacyAccessedAPITypeReasons":  [
+                                                                                                                                    "CA92.1"
+                                                                                                                                ]
+                                                                                        }
+                                                                                    ],
+                                                      "NSPrivacyCollectedDataTypes":  [
+
+                                                                                      ],
+                                                      "NSPrivacyTracking":  false
+                                                  },
                              "infoPlist":  {
                                                "ITSAppUsesNonExemptEncryption":  false
                                            }
@@ -93,9 +110,9 @@
                                  [
                                      "expo-splash-screen",
                                      {
-                                         "image":  "./assets/images/splash-icon.png",
+                                         "image":  "./assets/images/logo-varianta-1.png",
                                          "resizeMode":  "contain",
-                                         "backgroundColor":  "#F0FDFA",
+                                         "backgroundColor":  "#f1f5f9",
                                          "imageWidth":  200
                                      }
                                  ],
@@ -108,7 +125,7 @@
                                "router":  {
 
                                           },
-                               "displayVersion":  "3.13",
+                               "displayVersion":  "3.14",
                                "webBaseUrl":  "https://programari.expo.app",
                                "installUrl":  "https://expo.dev/accounts/promixt/projects/programari/builds/4a07edea-1504-4892-adc5-fe8d685c428d",
                                "eas":  {

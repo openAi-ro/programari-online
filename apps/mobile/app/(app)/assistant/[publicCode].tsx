@@ -318,6 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    fontSize: fontSize.md,
+    // 16px: sub 16px Safari iOS face zoom automat la focus (iOS-5).
+    fontSize: 16,
   },
 });

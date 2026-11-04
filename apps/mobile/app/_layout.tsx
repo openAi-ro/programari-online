@@ -5,12 +5,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import { useEffect, useMemo, useReducer, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
 import 'react-native-reanimated';
 import type { Session } from '@supabase/supabase-js';
 import { useColorScheme } from '@/components/useColorScheme';
+import { BootLoading } from '@/components/BootLoading';
 import { DialogHost } from '@/components/DialogHost';
-import { buildTheme, palette } from '@/constants/theme';
+import { buildTheme } from '@/constants/theme';
 import {
   attachNotificationResponseListener,
   configureNotificationPresentation,
@@ -81,39 +81,8 @@ export default function RootLayout() {
   }
 
   if (!updatesReady) {
-    const t = buildTheme(scheme);
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: t.colors.bg,
-          gap: 12,
-          paddingHorizontal: 32,
-        }}
-      >
-        <ActivityIndicator size="large" color={palette.accent500} accessibilityLabel={trKey('common.loading')} accessibilityRole="progressbar" />
-        <Text
-          style={{
-            color: t.colors.text,
-            fontSize: 16,
-            fontWeight: '700',
-            textAlign: 'center',
-          }}
-        >
-          {trKey('root.downloadingTitle')}
-        </Text>
-        <Text
-          style={{
-            color: t.colors.textMuted,
-            fontSize: 13,
-            textAlign: 'center',
-          }}
-        >
-          {trKey('root.downloadingBody')}
-        </Text>
-      </View>
+      <BootLoading label={trKey('root.downloadingTitle')} sublabel={trKey('root.downloadingBody')} />
     );
   }
 
@@ -250,19 +219,7 @@ function RootLayoutNav() {
   }, [scheme]);
 
   if (session === undefined) {
-    const t = buildTheme(scheme);
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: t.colors.bg,
-        }}
-      >
-        <ActivityIndicator size="large" color={palette.accent500} accessibilityLabel={trKey('common.loading')} accessibilityRole="progressbar" />
-      </View>
-    );
+    return <BootLoading />;
   }
 
   return (

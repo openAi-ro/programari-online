@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Programări - varianta 3">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="472" cy="472" r="336" fill="#ffffff" stroke="url(#g)" stroke-width="64"/>
+  <line x1="472" y1="472" x2="472" y2="306" stroke="#0f766e" stroke-width="48" stroke-linecap="round"/>
+  <line x1="472" y1="472" x2="600" y2="548" stroke="#0f766e" stroke-width="48" stroke-linecap="round"/>
+  <circle cx="472" cy="472" r="38" fill="#f97316"/>
+  <circle cx="728" cy="728" r="132" fill="#f97316"/>
+  <polyline points="660,728 712,780 800,680" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -5,7 +5,7 @@
  * Nu intercepteaza Supabase, Google, Expo sau alte origini.
  */
 
-const CACHE_VERSION = 'programari-shell-v4';
+const CACHE_VERSION = 'programari-shell-v5';
 const OFFLINE_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -105,6 +105,48 @@ self.addEventListener('fetch', (event) => {
 
   if (url.pathname === '/sw.js') return;
   event.respondWith(networkFirst(req, { store: false, fallback: () => Response.error() }));
+});
+
+// Web Push (iOS-2): PWA instalată pe iPhone primește alerte prin PushManager.
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : '' };
+  }
+  const title = payload.title || 'Programări';
+  const options = {
+    body: payload.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: payload.data || {},
+    tag: payload.tag || undefined,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  let target = '/';
+  if (data.screen === 'requests') target = '/(app)/business/(tabs)/requests';
+  else if (data.screen === 'calendar') target = '/(app)/business/(tabs)/calendar';
+  else if (data.screen === 'my-appointments') target = '/(app)/my-appointments';
+  else if (data.screen === 'chat' && data.conversationId) {
+    target = data.isClient ? `/(app)/chat/${data.conversationId}` : `/(app)/business/chat/${data.conversationId}`;
+  }
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate(target).catch(() => undefined);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
 });
 
 function offlineFallback() {

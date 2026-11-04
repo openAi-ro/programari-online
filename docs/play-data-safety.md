@@ -3,6 +3,22 @@
 Working notes for the Data safety form in Play Console. Nothing here has been submitted.
 Update this file whenever the app starts collecting or storing something new.
 
+## Answers for Rafael to check in Play Console (audit F-8, 2026-11-02)
+
+- Messages (Play category "Messages"): Collected Yes, **Shared Yes**.
+  The in-app assistant sends the user's messages to OpenAI (`api.openai.com`)
+  and shows the answer. Declare the AI provider under Messages > Shared.
+- Audio: dictation is transcribed by the phone's or browser's speech service
+  (Google on Android, Apple on iOS), off-device. The app never stores audio;
+  only the resulting text is sent as a chat message. The Audio category stays
+  declared as before.
+- Phone number: collected (account + WhatsApp notifications) and shared with
+  Meta (WhatsApp Cloud API) and, only where configured, Twilio.
+- Guest rate limiting keeps only an HMAC hash of the IP (v104, secret pepper
+  on the server, never the plain IP) and rows are deleted after 2 days (v94).
+  This is a security log, not advertising or analytics.
+- No analytics, crash reporting or device IDs are collected (verified from code).
+
 ## Changes from the R2 media migration (2026-10-27)
 
 | Data type (Play category) | Collected | Shared | Purpose | Optional | Where it is stored |

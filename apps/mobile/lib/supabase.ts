@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import { createClient, type SupportedStorage } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { createWebAuthStorage } from './webAuthStorage';
+
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
@@ -30,21 +32,11 @@ function createAuthStorage(): SupportedStorage {
   if (isWebSsr()) {
     return memoryStorage;
   }
-  // On web, AsyncStorage's native module is null; use localStorage instead.
+  // On web, AsyncStorage's native module is null; use localStorage + cookie (iOS-1).
   if (Platform.OS === 'web') {
     try {
       if (typeof window.localStorage !== 'undefined') {
-        return {
-          getItem: (key: string) => Promise.resolve(window.localStorage.getItem(key)),
-          setItem: (key: string, value: string) => {
-            window.localStorage.setItem(key, value);
-            return Promise.resolve();
-          },
-          removeItem: (key: string) => {
-            window.localStorage.removeItem(key);
-            return Promise.resolve();
-          },
-        };
+        return createWebAuthStorage();
       }
     } catch {
       // localStorage unavailable (private mode / SSR edge)

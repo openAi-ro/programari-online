@@ -15,7 +15,7 @@ export default function Root({ children }: { children: ReactNode }) {
         {/* Traducere proprie RO/EN (lib/i18n): oprim traducerea automată a browserului. */}
         <meta name="google" content="notranslate" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
         {headNodes}
 
         {/* PWA / installable */}

@@ -23,6 +23,7 @@ import {
   parseNotifyLang,
 } from '../_shared/notify.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
+import { sendWebPushToUser } from '../_shared/webPush.ts';
 
 type AppointmentRow = {
   id: string;
@@ -185,6 +186,7 @@ Deno.serve(async (req) => {
 
   // popup push catre client (aprobat/respins) — sound+priority high via shared helper
   let pushSent = 0;
+  let webPushSent = 0;
   if (live.client_user_id && wantsDecision) {
     try {
       const { sent } = await sendExpoPushToUser(admin, live.client_user_id, {
@@ -196,6 +198,18 @@ Deno.serve(async (req) => {
       pushSent = sent;
     } catch (e) {
       console.error('client decision push failed', e);
+    }
+    // Web Push pentru clientul pe PWA instalată (iOS-2).
+    try {
+      const webPush = await sendWebPushToUser(admin, live.client_user_id, {
+        title: copy.subject,
+        body: copy.text,
+        tag: `decision-${live.id}`,
+        data: { screen: 'my-appointments', appointmentId: live.id },
+      });
+      webPushSent = webPush.sent;
+    } catch (e) {
+      console.error('client decision web push failed', e);
     }
   }
 
@@ -213,5 +227,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'update_failed', results }, 500);
   }
 
-  return jsonResponse({ ok: true, status: live.status, results, pushSent });
+  return jsonResponse({ ok: true, status: live.status, results, pushSent, webPushSent });
 });

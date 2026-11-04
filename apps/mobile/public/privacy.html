@@ -22,6 +22,7 @@
 <li><strong>Poze:</strong> pozele înainte/după ale clienților (doar cu acordul clientului), pozele echipei, logo-ul și pozele/videoul de prezentare ale business-ului, poza de profil.</li>
 <li><strong>Locație:</strong> locația aproximativă sau precisă a dispozitivului, doar când îți dai permisiunea, ca să găsești business-uri în apropiere sau să completezi automat adresa business-ului. Nu urmărim locația în fundal.</li>
 <li><strong>Date de dispozitiv:</strong> tokenul pentru notificări push, limba și tipul de dispozitiv.</li>
+<li><strong>Adresa IP (doar la programări fără cont):</strong> ca să limităm abuzurile, păstrăm temporar doar o amprentă anonimă a adresei IP (HMAC cu cheie secretă, niciodată adresa în clar).</li>
 <li><strong>Plăți:</strong> pentru avansuri, datele cardului sunt introduse direct la Stripe; noi primim doar statusul plății, suma și un identificator al tranzacției. Nu vedem și nu stocăm datele cardului.</li>
 </ul>
 
@@ -57,7 +58,7 @@
 <li><strong>Expo (EAS)</strong> – găzduirea site-ului, actualizările aplicației și livrarea notificărilor push, prin Google Firebase Cloud Messaging și Apple Push Notification Service.</li>
 <li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – livrarea mesajelor despre programări pe WhatsApp (numărul de telefon și conținutul mesajului).</li>
 <li><strong>Brevo</strong> – trimiterea emailurilor (adresa de email și conținutul mesajului).</li>
-<li><strong>Furnizorul modelului de inteligență artificială</strong> folosit de asistentul din aplicație (mesajele trimise asistentului sunt procesate de acesta).</li>
+<li><strong>OpenAI</strong> – furnizorul modelului de inteligență artificială folosit de asistentul din aplicație: mesajele pe care i le trimiți asistentului sunt procesate de OpenAI ca să-ți răspundă.</li>
 <li><strong>Google</strong> – autentificarea cu Google și Google Calendar, dacă le folosești.</li>
 <li><strong>Stripe</strong> – procesarea plăților pentru avansuri.</li>
 </ul>
@@ -75,6 +76,7 @@
 <ul>
 <li>Datele contului, programările, mesajele, fișa și pozele: cât timp contul este activ. Se șterg când îți ștergi contul.</li>
 <li>Jurnalul tehnic al notificărilor trimise (canal, status, eroare), folosit pentru depanare: cât timp contul este activ.</li>
+<li>Amprenta anonimă a adresei IP pentru programările fără cont: cel mult 2 zile, apoi se șterge automat.</li>
 <li>Evidențele de plată: cât timp o cere legislația fiscală și contabilă.</li>
 <li>Copiile de siguranță ale bazei de date se rescriu automat; datele șterse dispar din ele în cel mult 30 de zile.</li>
 </ul>
@@ -113,6 +115,7 @@
 <li><strong>Photos:</strong> clients' before/after photos (only with the client's consent), team photos, the business logo and showcase photos/video, profile photo.</li>
 <li><strong>Location:</strong> the device's approximate or precise location, only when you grant permission, to find nearby businesses or auto-fill the business address. We do not track location in the background.</li>
 <li><strong>Device data:</strong> push notification token, language and device type.</li>
+<li><strong>IP address (guest bookings only):</strong> to limit abuse, we temporarily keep only an anonymous fingerprint of the IP address (HMAC with a secret key, never the plain address).</li>
 <li><strong>Payments:</strong> for deposits, card details are entered directly with Stripe; we only receive the payment status, amount and a transaction ID. We never see or store card details.</li>
 </ul>
 
@@ -148,7 +151,7 @@
 <li><strong>Expo (EAS)</strong> – website hosting, app updates and push notification delivery, via Google Firebase Cloud Messaging and Apple Push Notification Service.</li>
 <li><strong>Meta Platforms (WhatsApp Cloud API)</strong> – delivering booking messages over WhatsApp (phone number and message content).</li>
 <li><strong>Brevo</strong> – sending emails (email address and message content).</li>
-<li><strong>The artificial intelligence model provider</strong> used by the in-app assistant (messages sent to the assistant are processed by it).</li>
+<li><strong>OpenAI</strong> – the artificial intelligence model provider used by the in-app assistant: messages you send to the assistant are processed by OpenAI to answer you.</li>
 <li><strong>Google</strong> – Google sign-in and Google Calendar, if you use them.</li>
 <li><strong>Stripe</strong> – processing deposit payments.</li>
 </ul>
@@ -166,6 +169,7 @@
 <ul>
 <li>Account data, bookings, messages, the client record and photos: while the account is active. They are deleted when you delete your account.</li>
 <li>The technical log of sent notifications (channel, status, error), used for troubleshooting: while the account is active.</li>
+<li>The anonymous IP fingerprint for guest bookings: at most 2 days, then deleted automatically.</li>
 <li>Payment records: as long as tax and accounting law requires.</li>
 <li>Database backups are overwritten automatically; deleted data disappears from them within 30 days.</li>
 </ul>

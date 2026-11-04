@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.com.programari.app"],
+        "components": [
+          { "/": "/b/*", "comment": "Paginile publice ale firmelor deschid aplicația." },
+          { "/": "/auth/callback", "comment": "Revenirea după autentificare." }
+        ]
+      }
+    ]
+  }
+}

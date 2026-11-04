@@ -34,6 +34,7 @@ import { canConfirmAttendance, mapBookingRpcError, visitsUntilFree } from '@/lib
 import { extractPublicCode } from '@/lib/bookingLink';
 import { presentLocalBookingNotification } from '@/lib/notifications';
 import { statusMeta } from '@/lib/status';
+import { needsMovedAck } from '@/lib/moveAck';
 import { trKey, useT, type TrKey } from '@/lib/i18n';
 import {
   getFavoriteIds,
@@ -73,6 +74,8 @@ type NextAppointment = {
   staffId: string | null;
   staffName: string | null;
   attendanceConfirmed: boolean;
+  movedByBusinessAt?: string | null;
+  movedSeenAt?: string | null;
 };
 
 type LoyaltyCard = {
@@ -121,6 +124,7 @@ export default function HomeScreen() {
   const [pendingCount, setPendingCount] = useState(0);
   const [nextApt, setNextApt] = useState<NextAppointment | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [loyalty, setLoyalty] = useState<LoyaltyCard[]>([]);
   const [recentBusinesses, setRecentBusinesses] = useState<RecentBusiness[]>([]);
   const [favoriteIds, setFavoriteIdsState] = useState<string[]>([]);
@@ -237,7 +241,7 @@ export default function HomeScreen() {
 
           const myOrFilter = orParts.length ? orParts.join(',') : null;
           const cols =
-            'id, business_id, start_at, end_at, status, client_user_id, no_show, service_id, service_name, staff_id, staff_name, attendance_confirmed';
+            'id, business_id, start_at, end_at, status, client_user_id, no_show, service_id, service_name, staff_id, staff_name, attendance_confirmed, moved_by_business_at, moved_seen_at';
 
           // Limit: upcoming window + recent history (not full appointment list).
           const lookbackIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -271,6 +275,8 @@ export default function HomeScreen() {
             staff_id?: string | null;
             staff_name?: string | null;
             attendance_confirmed?: boolean;
+            moved_by_business_at?: string | null;
+            moved_seen_at?: string | null;
           };
           if (upcomingRes.error || recentRes.error) {
             if (!cancelled) setLoadError(trKey('home.loadFail'));
@@ -409,6 +415,8 @@ export default function HomeScreen() {
               staffId: first.staff_id ?? null,
               staffName: first.staff_name ?? null,
               attendanceConfirmed: Boolean(first.attendance_confirmed),
+              movedByBusinessAt: first.moved_by_business_at ?? null,
+              movedSeenAt: first.moved_seen_at ?? null,
             };
           }
 
@@ -477,7 +485,7 @@ export default function HomeScreen() {
       return () => {
         cancelled = true;
       };
-    }, [])
+    }, [reloadKey])
   );
 
   // Popup in notification bar for business — also when on Home, not only Cereri.
@@ -560,6 +568,10 @@ export default function HomeScreen() {
         favoriteIds={favoriteIds}
         pendingClientCount={pendingClientCount}
         loadError={loadError}
+        onRetryLoad={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
         onToggleFavorite={(id) => void toggleFavorite(id)}
         onAttendanceConfirmed={() =>
           setNextApt((prev) =>
@@ -602,6 +614,7 @@ function ClientHome({
   favoriteIds,
   pendingClientCount,
   loadError,
+  onRetryLoad,
   onToggleFavorite,
   onAttendanceConfirmed,
 }: {
@@ -613,6 +626,7 @@ function ClientHome({
   favoriteIds: string[];
   pendingClientCount: number;
   loadError: string | null;
+  onRetryLoad: () => void;
   onToggleFavorite: (businessId: string) => void;
   onAttendanceConfirmed: () => void;
 }) {
@@ -666,7 +680,17 @@ function ClientHome({
 
       {canSwitch ? <AppModeSwitch target="business" /> : null}
 
-      {loadError ? <Callout tone="danger" title={loadError} /> : null}
+      {loadError ? (
+        <>
+          <Callout tone="danger" title={loadError} />
+          <Button
+            label={tr('common.retry')}
+            icon="refresh-outline"
+            variant="secondary"
+            onPress={onRetryLoad}
+          />
+        </>
+      ) : null}
 
       {next && nextStatus ? (
         <View
@@ -709,6 +733,14 @@ function ClientHome({
             <Badge tone={nextStatus.tone} icon={nextStatus.icon}>
               {nextStatus.label}
             </Badge>
+            {needsMovedAck({
+              moved_by_business_at: next.movedByBusinessAt,
+              moved_seen_at: next.movedSeenAt,
+            }) ? (
+              <Badge tone="accent" icon="swap-horizontal-outline">
+                {tr('my.movedBadge')}
+              </Badge>
+            ) : null}
           </View>
 
           <View>

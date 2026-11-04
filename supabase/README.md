@@ -186,3 +186,20 @@ select cron.schedule(
 | Aprobat | Programarea ta la [business] pe [dată/oră] a fost confirmată. |
 | Respins | Programarea ta la [business] pe [dată/oră] a fost respinsă. Slotul a fost eliberat. |
 | Reminder | Salut! Ai o programare la [business] în 30 de minute ([oră], [timezone]). |
+
+
+## Regulă obligatorie: GRANT la tabele noi (din 30.10.2026)
+
+Supabase nu mai dă automat acces Data API (supabase-js / PostgREST / GraphQL) la tabelele **noi** din schema `public`. Tabelele existente nu sunt afectate.
+
+Orice migrație care creează un tabel nou în `public` trebuie să conțină, în aceeași migrație:
+
+```sql
+alter table public.tabela_noua enable row level security;
+-- doar dacă tabela are date publice (citite fără login):
+grant select on public.tabela_noua to anon;
+grant select, insert, update, delete on public.tabela_noua to authenticated;
+grant select, insert, update, delete on public.tabela_noua to service_role;
+```
+
+Fără GRANT, aplicația primește `permission denied`. Regula se aplică și la `supabase db reset`, la proiecte noi și la preview branches. După migrație, verifică din aplicație că tabela se citește.

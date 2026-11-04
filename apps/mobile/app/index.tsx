@@ -2,7 +2,7 @@ import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
-import { LoadingScreen } from '@/components/ui';
+import { BootLoading } from '@/components/BootLoading';
 import { useT } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
@@ -21,7 +21,7 @@ export default function Index() {
   }, []);
 
   if (session === undefined) {
-    return <LoadingScreen label={tr('common.loading')} />;
+    return <BootLoading label={tr('common.loading')} />;
   }
 
   if (!session) {

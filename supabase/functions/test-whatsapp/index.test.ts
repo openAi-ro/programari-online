@@ -10,6 +10,7 @@ let handler: Handler | null = null;
 Deno.env.set('SUPABASE_URL', 'https://fake.supabase.local');
 Deno.env.set('SUPABASE_ANON_KEY', 'anon-fake');
 Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', 'service-fake');
+Deno.env.set('WHATSAPP_TPL_CONFIRMED', 'programare_confirmata');
 await import('./index.ts');
 
 const logRows: unknown[] = [];
@@ -53,7 +54,7 @@ Deno.test('stub mode: app gets ok:false + stub + configuration hint (no fake suc
   assertEquals(metaCalls.length, 0);
 });
 
-Deno.test('free-form mode: Meta accepts -> ok:true with wamid, logged', async () => {
+Deno.test('template mode: no TEST template -> CONFIRMED fallback, ok:true with wamid, logged', async () => {
   Deno.env.set('WHATSAPP_PROVIDER', 'meta');
   Deno.env.set('WHATSAPP_ACCESS_TOKEN', 'tok-fake');
   Deno.env.set('WHATSAPP_PHONE_NUMBER_ID', '123456789');
@@ -63,9 +64,36 @@ Deno.test('free-form mode: Meta accepts -> ok:true with wamid, logged', async ()
   assertEquals(r.status, 200);
   assertEquals(r.body.ok, true);
   assertEquals(r.body.result.messageId, 'wamid.TEST');
-  assertEquals(metaCalls[0].type, 'text');
+  assertEquals(metaCalls[0].type, 'template');
+  const tpl = metaCalls[0].template as { name: string; components: { parameters: { text: string }[] }[] };
+  assertEquals(tpl.name, 'programare_confirmata');
+  assertEquals(tpl.components[0].parameters.map((p) => p.text), ['Programari', 'test']);
   assertEquals((logRows[0] as { status: string; type: string; wamid: string }).status, 'accepted');
   assertEquals((logRows[0] as { wamid: string }).wamid, 'wamid.TEST');
+});
+
+Deno.test('template mode: WHATSAPP_TPL_TEST preferred when set', async () => {
+  Deno.env.set('WHATSAPP_TPL_TEST', 'mesaj_test_notificari');
+  metaCalls = [];
+  metaResponse = { status: 200, body: { messages: [{ id: 'wamid.T2' }] } };
+  try {
+    const r = await call();
+    assertEquals(r.body.ok, true);
+    const tpl = metaCalls[0].template as { name: string; components: { parameters: { text: string }[] }[] };
+    assertEquals(tpl.name, 'mesaj_test_notificari');
+    assertEquals(tpl.components[0].parameters.map((p) => p.text), ['Programari']);
+  } finally { Deno.env.delete('WHATSAPP_TPL_TEST'); }
+});
+
+Deno.test('no template configured -> no free-form send, clear error', async () => {
+  Deno.env.delete('WHATSAPP_TPL_CONFIRMED');
+  metaCalls = [];
+  try {
+    const r = await call();
+    assertEquals(r.body.ok, false);
+    assertEquals(r.body.error, 'whatsapp_template_missing');
+    assertEquals(metaCalls.length, 0);
+  } finally { Deno.env.set('WHATSAPP_TPL_CONFIRMED', 'programare_confirmata'); }
 });
 
 Deno.test('bogus phone-number-id: app receives the real Meta error (200 body, ok:false, code 100)', async () => {
