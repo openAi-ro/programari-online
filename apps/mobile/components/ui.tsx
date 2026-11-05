@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ComponentProps } from 'react';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import { buildTheme, fontSize, radius, spacing, type Theme } from '@/constants/theme';
+import { buildTheme, fontSize, palette, radius, spacing, type Theme } from '@/constants/theme';
 import { computeFooterPaddingBottom } from '@/lib/keyboardPad';
 import { trKey, useT } from '@/lib/i18n';
 
@@ -731,9 +731,12 @@ export function Badge({
 }
 
 /**
- * Comutator propriu. `Switch` din react-native-web ignoră `thumbColor` și
- * desenează un thumb teal, deci îl construim din View-uri ca să arate la fel
- * pe web, iOS și Android.
+ * Comutator propriu după grafica din buton.css: cadru deschis cu umbră dublă,
+ * șină roșie la oprit și verde la pornit, buton metalic rotund care depășește
+ * șina. `Switch` din react-native-web ignoră culorile, deci îl construim din
+ * View-uri ca să arate la fel pe web, iOS și Android. Fără android_ripple:
+ * fundalul se schimbă cu starea, iar ripple-ul borderless ascundea butonul
+ * pe Android (vezi commitul f0c0c52).
  */
 export function Toggle({
   value,
@@ -747,6 +750,10 @@ export function Toggle({
   disabled?: boolean;
 }) {
   const t = useTheme();
+  const dark = t.scheme === 'dark';
+  const chrome = dark ? palette.white : t.colors.bgElevated;
+  const chromeBorder = dark ? palette.ink300 : t.colors.border;
+  const chromeCore = dark ? palette.ink200 : t.colors.surfaceMuted;
   return (
     <Pressable
       onPress={() => !disabled && onValueChange(!value)}
@@ -754,27 +761,37 @@ export function Toggle({
       accessibilityState={{ checked: value, disabled }}
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
-      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+      hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
       style={({ pressed }) => [
-        styles.toggleTrack,
+        styles.toggleBorder,
         {
-          backgroundColor: value ? t.colors.accent : t.colors.surfaceMuted,
-          borderColor: value ? t.colors.accent : t.colors.textMuted,
-          opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
+          backgroundColor: chrome,
+          borderColor: chromeBorder,
+          shadowColor: chrome,
+          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
         },
       ]}
     >
       <View
         style={[
-          styles.toggleThumb,
-          {
-            backgroundColor: value ? t.colors.onAccent : t.colors.textMuted,
-            width: value ? 24 : 16,
-            height: value ? 24 : 16,
-            alignSelf: value ? 'flex-end' : 'flex-start',
-          },
+          styles.toggleTrack,
+          { backgroundColor: value ? '#13d162' : '#d13613' },
         ]}
-      />
+      >
+        <View
+          style={[
+            styles.toggleThumb,
+            {
+              backgroundColor: chrome,
+              borderColor: chromeBorder,
+              alignSelf: value ? 'flex-end' : 'flex-start',
+            },
+          ]}
+        >
+          <View style={[styles.toggleThumbRing, { borderColor: chromeBorder }]} />
+          <View style={[styles.toggleThumbCore, { backgroundColor: chromeCore }]} />
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -1437,16 +1454,62 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
 
-  toggleTrack: {
-    width: 52,
-    height: 32,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    paddingHorizontal: 4,
-    justifyContent: 'center',
+  // Cadru exterior după buton.css (.toggle-border), scalat la pagina aplicației.
+  toggleBorder: {
+    flexShrink: 0,
+    overflow: 'visible',
+    borderWidth: 1,
+    borderRadius: 130,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 0,
+    shadowOpacity: 1,
+    elevation: 1,
   },
+  // Șina după buton.css (label), scalată: roșu oprit / verde pornit.
+  toggleTrack: {
+    overflow: 'visible',
+    width: 46,
+    height: 16,
+    borderRadius: 80,
+    paddingHorizontal: 0,
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 5,
+    shadowOpacity: 0.3,
+    elevation: 0,
+  },
+  // Butonul metalic (.handle), scalat: depășește șina cu 4px sus și 5px lateral.
   toggleThumb: {
-    borderRadius: radius.pill,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginVertical: -4,
+    marginHorizontal: -5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 2, height: 3 },
+    shadowRadius: 3,
+    shadowOpacity: 0.4,
+    elevation: 4,
+  },
+  toggleThumbRing: {
+    position: 'absolute',
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 1,
+    opacity: 0.55,
+  },
+  toggleThumbCore: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    opacity: 0.7,
   },
 
   segmented: {

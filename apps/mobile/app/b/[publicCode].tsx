@@ -20,6 +20,7 @@ import { BookingCalendar } from '@/components/BookingCalendar';
 import { LocationCard } from '@/components/LocationCard';
 import { PromoVideo } from '@/components/PromoVideo';
 import { SlotPicker } from '@/components/SlotPicker';
+import { StaffSlotsCard } from '@/components/StaffSlotsCard';
 import {
   Badge,
   Button,
@@ -42,21 +43,14 @@ import { getPublicWebOrigin } from '@/lib/webBase';
 import {
   firstBookableDateForStaff,
   mapBookingRpcError,
-  notBeforeUtc,
   staffSchedule,
   toYmd,
 } from '@/lib/bookingRules';
-import {
-  bookWithFirstFreeStaff,
-  bookingStaffCandidates,
-  unionStaffSlots,
-} from '@/lib/anyStaff';
 import {
   createAppointmentIfFree,
   createAppointmentMultiIfFree,
   createGuestAppointment,
   createGuestAppointmentMulti,
-  listBusyRanges,
   notifyAfterBooking,
 } from '@/lib/bookingRpc';
 import { comboTotals, toggleServiceIdKeepOne } from '@/lib/serviceCombo';
@@ -95,10 +89,9 @@ import { markWaitlistBooked } from '@/lib/notify-client';
 import { normalizeWalkinContact } from '@/lib/walkinRules';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { parseTipInput, tipOptions } from '@/lib/tip';
-import { generateFreeSlots } from '@/lib/slots';
 import { normalizePortfolioUrls } from '@/lib/staffPortfolio';
 import { createRequestTracker } from '@/lib/latestRequest';
-import { localDayBoundsUtc } from '@/lib/timezone';
+import { loadStaffDaySlots } from '@/lib/staffDaySlots';
 import { fireAndForget } from '@/lib/fireAndForget';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, DayKey, FreeSlot, Service, Staff } from '@/lib/types';
@@ -139,8 +132,10 @@ export default function PublicBookScreen() {
   const [staffId, setStaffId] = useState<string | null>(null);
   // Telefoanele marcate publice de firmă (RPC get_public_staff_phones): staff_id -> telefon.
   const [staffPhones, setStaffPhones] = useState<Record<string, string>>({});
-  // Oricine: pentru fiecare oră liberă, specialiștii liberi atunci (în ordinea echipei).
-  const [freeStaffByStart, setFreeStaffByStart] = useState<Record<string, string[]>>({});
+  // Oricine: câte un calendar pe specialist eligibil (ziua lui și orele lui libere).
+  const [staffDays, setStaffDays] = useState<Record<string, StaffDay>>({});
+  // Oricine: specialistul pe al cărui calendar s-a ales ora (la el merge programarea).
+  const [pickedStaffId, setPickedStaffId] = useState<string | null>(null);
   // Serviciile alese (combinat, v71): durate și prețuri adunate; primul = serviciul principal.
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [rating, setRating] = useState<{ avg_rating: number | null; review_count: number } | null>(
@@ -193,6 +188,8 @@ export default function PublicBookScreen() {
   }, [staffId, staffServices, serviceIds]);
   const durationMinutes =
     combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
+  // „Oricine disponibil” cu echipă: calendare separate, câte unul pe specialist eligibil.
+  const anyMode = !staffId && staffList.length > 0;
 
   // Data implicită urmează alegerea: specialistul ales sau, la „Oricine disponibil”,
   // prima zi în care lucrează măcar un specialist eligibil pentru serviciile alese.
@@ -343,94 +340,83 @@ export default function PublicBookScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(0, guestFormY.current - 12), animated: true });
   }
 
-  function selectSlot(slot: FreeSlot) {
+  function selectSlot(slot: FreeSlot, memberId: string | null = null) {
     setSelected(slot);
+    setPickedStaffId(memberId);
     if (session) return;
     if (selected) scrollToGuestForm();
     else guestFormScrollPending.current = true;
   }
 
+  // Un singur calendar: specialistul ales sau firma fără echipă.
   const loadSlots = useCallback(async () => {
-    if (!business) return;
+    if (!business || anyMode) return;
     const req = slotsRequests.start();
     setSlotsLoading(true);
     setSelected(null);
-    const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
-    const slotInput = {
+    const { slots: free, error: err } = await loadStaffDaySlots({
+      business,
+      member: selectedStaff,
       dateLocal,
-      timezone: business.timezone,
-      sessionDurationMinutes: durationMinutes,
-      bufferMinutes: business.buffer_minutes ?? 0,
-      blockedDates: business.blocked_dates ?? [],
-      notBeforeUtc: notBeforeUtc(business),
-    };
-
-    // Oricine disponibil: reuniunea sloturilor libere ale fiecărui specialist activ.
-    if (!staffId && staffList.length > 0) {
-      const results = await Promise.all(
-        eligibleStaff.map((member) =>
-          listBusyRanges({
-            businessId: business.id,
-            fromIso: startUtc.toISOString(),
-            toIso: endUtc.toISOString(),
-            staffId: member.id,
-          })
-        )
-      );
-      if (!slotsRequests.isCurrent(req)) return;
-      const failed = results.find((r) => r.error);
-      if (failed?.error) {
-        setError(failed.error);
-        setSlots([]);
-        setFreeStaffByStart({});
-        setSlotsLoading(false);
-        return;
-      }
-      const union = unionStaffSlots(
-        eligibleStaff.map((member, i) => {
-          const hours = staffSchedule(member, business);
-          return {
-            staffId: member.id,
-            slots: generateFreeSlots({
-              ...slotInput,
-              workingHours: hours.workingHours,
-              breakHours: hours.breakHours,
-              busy: results[i].busy,
-            }),
-          };
-        })
-      );
-      setSlots(union.slots);
-      setFreeStaffByStart(union.staffByStart);
-      setSlotsLoading(false);
-      return;
-    }
-
-    const { busy, error: err } = await listBusyRanges({
-      businessId: business.id,
-      fromIso: startUtc.toISOString(),
-      toIso: endUtc.toISOString(),
-      staffId,
+      durationMinutes,
     });
     if (!slotsRequests.isCurrent(req)) return;
-    if (err) {
-      setError(err);
-      setSlots([]);
-      setSlotsLoading(false);
+    if (err) setError(err);
+    setSlots(free);
+    setSlotsLoading(false);
+  }, [business, anyMode, dateLocal, durationMinutes, selectedStaff, slotsRequests]);
+
+  // Oricine: orele unui specialist pentru ziua aleasă în calendarul lui.
+  // Doar ultima cerere a fiecărui calendar are voie să scrie starea.
+  const staffDayRequests = useRef<Record<string, number>>({});
+  const loadStaffDay = useCallback(
+    async (member: Staff, ymd: string) => {
+      if (!business) return;
+      const req = (staffDayRequests.current[member.id] ?? 0) + 1;
+      staffDayRequests.current[member.id] = req;
+      setStaffDays((prev) => ({ ...prev, [member.id]: { date: ymd, slots: [], loading: true } }));
+      const { slots: free, error: err } = await loadStaffDaySlots({
+        business,
+        member,
+        dateLocal: ymd,
+        durationMinutes,
+      });
+      if (staffDayRequests.current[member.id] !== req) return;
+      if (err) setError(err);
+      setStaffDays((prev) => ({ ...prev, [member.id]: { date: ymd, slots: free, loading: false } }));
+    },
+    [business, durationMinutes]
+  );
+
+  // Oricine: la fiecare schimbare de servicii / echipă, fiecare calendar pornește din
+  // prima zi în care lucrează specialistul lui (sau din ziua cerută prin ?date=).
+  useEffect(() => {
+    if (!business || loading || !anyMode) return;
+    slotsRequests.start();
+    setSelected(null);
+    setPickedStaffId(null);
+    const wanted =
+      typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : null;
+    const next: Record<string, StaffDay> = {};
+    for (const member of eligibleStaff) {
+      const first = firstBookableDateForStaff(business, [member], durationMinutes);
+      next[member.id] = { date: wanted && wanted >= first ? wanted : first, slots: [], loading: true };
+    }
+    setStaffDays(next);
+    for (const member of eligibleStaff) void loadStaffDay(member, next[member.id].date);
+  }, [business, loading, anyMode, eligibleStaff, durationMinutes, requestedDate, loadStaffDay, slotsRequests]);
+
+  async function reloadSlots() {
+    if (!anyMode) {
+      await loadSlots();
       return;
     }
-    const hours = staffSchedule(selectedStaff, business);
-    setSlots(
-      generateFreeSlots({
-        ...slotInput,
-        workingHours: hours.workingHours,
-        breakHours: hours.breakHours,
-        busy,
-      })
+    setSelected(null);
+    setPickedStaffId(null);
+    await Promise.all(
+      eligibleStaff.map((member) => loadStaffDay(member, staffDays[member.id]?.date ?? dateLocal))
     );
-    setFreeStaffByStart({});
-    setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, staffId, staffList, eligibleStaff, selectedStaff, slotsRequests]);
+  }
 
   useEffect(() => {
     void loadSlots();
@@ -494,6 +480,16 @@ export default function PublicBookScreen() {
     router.push('/(auth)/client');
   }
 
+  // Oricine: specialistul și ziua orei alese; fără oră aleasă, ziua primului calendar.
+  const pickedId = anyMode && selected ? pickedStaffId : null;
+  const bookStaffId = anyMode ? pickedId : staffId;
+  const bookingDate = pickedId ? staffDays[pickedId]?.date ?? dateLocal : dateLocal;
+  const waitDate = anyMode
+    ? pickedId
+      ? bookingDate
+      : staffDays[eligibleStaff[0]?.id ?? '']?.date ?? dateLocal
+    : dateLocal;
+
   async function handleBook() {
     if (!session) {
       goLogin();
@@ -503,36 +499,34 @@ export default function PublicBookScreen() {
       setError(trKey('book.pickSlot'));
       return;
     }
+    if (anyMode && !bookStaffId) {
+      setError(trKey('book.pickSlot'));
+      return;
+    }
     setBooking(true);
     setError(null);
     setMessage(null);
-    // Oricine: încercăm pe rând specialiștii liberi la ora aleasă (niciodată null când există echipă).
-    const { value: created, error: err } = await bookWithFirstFreeStaff(
-      bookingStaffCandidates(staffId, freeStaffByStart[selected.startUtc], staffList.length),
-      async (candidate) => {
-        const r =
-          serviceIds.length > 1
-            ? await createAppointmentMultiIfFree({
-                businessId: business.id,
-                startAt: selected.startUtc,
-                endAt: selected.endUtc,
-                serviceIds,
-                staffId: candidate,
-              })
-            : await createAppointmentIfFree({
-                businessId: business.id,
-                startAt: selected.startUtc,
-                endAt: selected.endUtc,
-                serviceId: serviceIds[0] ?? null,
-                staffId: candidate,
-              });
-        return { value: r.appointment, error: r.error };
-      }
-    );
+    // Oricine: programarea merge la specialistul pe al cărui calendar s-a ales ora.
+    const { appointment: created, error: err } =
+      serviceIds.length > 1
+        ? await createAppointmentMultiIfFree({
+            businessId: business.id,
+            startAt: selected.startUtc,
+            endAt: selected.endUtc,
+            serviceIds,
+            staffId: bookStaffId,
+          })
+        : await createAppointmentIfFree({
+            businessId: business.id,
+            startAt: selected.startUtc,
+            endAt: selected.endUtc,
+            serviceId: serviceIds[0] ?? null,
+            staffId: bookStaffId,
+          });
     setBooking(false);
     if (err) {
       setError(mapBookingRpcError(err));
-      await loadSlots();
+      await reloadSlots();
       return;
     }
     const appointment = created;
@@ -542,7 +536,7 @@ export default function PublicBookScreen() {
       void markWaitlistBooked({
         businessId: business.id,
         clientUserId: session.user.id,
-        desiredDate: dateLocal,
+        desiredDate: bookingDate,
       }).catch((e) => console.warn('markWaitlistBooked failed', e));
       if (appointment.payment_status === 'unpaid') {
         const pay = await startDepositCheckout(appointment.id, tipRon);
@@ -552,7 +546,7 @@ export default function PublicBookScreen() {
       }
     }
     setSelected(null);
-    await loadSlots();
+    await reloadSlots();
     if (appointment?.loyalty_redeemed) {
       setMessage(trKey('book.giftSent'));
     } else if (appointment?.status === 'approved') {
@@ -591,44 +585,42 @@ export default function PublicBookScreen() {
       setError(mapBookingRpcError(contactErr));
       return;
     }
+    if (anyMode && !bookStaffId) {
+      setError(trKey('book.pickSlot'));
+      return;
+    }
     setBooking(true);
     setError(null);
     setMessage(null);
-    const { value: created, error: err } = await bookWithFirstFreeStaff(
-      bookingStaffCandidates(staffId, freeStaffByStart[selected.startUtc], staffList.length),
-      async (candidate) => {
-        const guest = { name, phone: contact.phone, email: contact.email };
-        const r =
-          serviceIds.length > 1
-            ? await createGuestAppointmentMulti({
-                businessId: business.id,
-                startAt: selected.startUtc,
-                serviceIds,
-                staffId: candidate,
-                ...guest,
-              })
-            : await createGuestAppointment({
-                businessId: business.id,
-                startAt: selected.startUtc,
-                endAt: selected.endUtc,
-                serviceId: serviceIds[0] ?? null,
-                staffId: candidate,
-                ...guest,
-              });
-        return { value: r.appointment, error: r.error };
-      }
-    );
+    const guest = { name, phone: contact.phone, email: contact.email };
+    const { appointment: created, error: err } =
+      serviceIds.length > 1
+        ? await createGuestAppointmentMulti({
+            businessId: business.id,
+            startAt: selected.startUtc,
+            serviceIds,
+            staffId: bookStaffId,
+            ...guest,
+          })
+        : await createGuestAppointment({
+            businessId: business.id,
+            startAt: selected.startUtc,
+            endAt: selected.endUtc,
+            serviceId: serviceIds[0] ?? null,
+            staffId: bookStaffId,
+            ...guest,
+          });
     setBooking(false);
     if (err) {
       setError(mapBookingRpcError(err));
-      await loadSlots();
+      await reloadSlots();
       return;
     }
     setSelected(null);
     setGuestName('');
     setGuestPhone('');
     setGuestEmail('');
-    await loadSlots();
+    await reloadSlots();
     setMessage(
       created?.status === 'approved'
         ? trKey('pub.confirmed')
@@ -647,7 +639,7 @@ export default function PublicBookScreen() {
     setMessage(null);
     const { error: err } = await supabase.rpc('join_waitlist', {
       p_business_id: business.id,
-      p_desired_date: dateLocal,
+      p_desired_date: waitDate,
       // Lista de așteptare ține un singur serviciu: primul ales.
       p_service_id: serviceIds[0] ?? null,
       p_staff_id: staffId,
@@ -686,7 +678,7 @@ export default function PublicBookScreen() {
     );
   }
 
-  const dayBlocked = (business.blocked_dates ?? []).includes(dateLocal);
+  const dayBlocked = (business.blocked_dates ?? []).includes(waitDate);
   // --- Pagina de prezentare (Faza 1): totul derivă din datele deja încărcate. ---
   const pageOn = presentationEnabled(business.website_enabled);
   const category = BROWSE_CATEGORIES.find((c) => c.key === business.category) ?? null;
@@ -745,17 +737,22 @@ export default function PublicBookScreen() {
     { key: 'sat', label: tr('hours.sat') },
     { key: 'sun', label: tr('hours.sun') },
   ];
-  const noSlots = !slotsLoading && slots.length === 0;
+  const anyDays = eligibleStaff.map((m) => staffDays[m.id]);
+  const freeCount = anyMode
+    ? anyDays.reduce((n, d) => n + (d?.slots.length ?? 0), 0)
+    : slots.length;
+  const noSlots = anyMode
+    ? anyDays.length > 0 && anyDays.every((d) => d && !d.loading && d.slots.length === 0)
+    : !slotsLoading && slots.length === 0;
+  const noSlotsLabel = (ymd: string) =>
+    (business.blocked_dates ?? []).includes(ymd)
+      ? tr('book.dayBlocked')
+      : tr('book.noSlots', { date: ymd, h: Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60)) });
   // Pașii se numerotează doar dintre cei afișați (fără servicii -> 1. Dată, 2. Oră).
-  const stepNo = bookingStepNumbers({ service: services.length > 0, date: true, time: true });
-  // Calendar: azi..azi+max_advance_days; zi închisă după programul specialistului ales,
-  // iar la „Oricine” zi deschisă dacă lucrează măcar un specialist.
+  const stepNo = bookingStepNumbers({ service: services.length > 0, date: true, time: !anyMode });
+  // Calendar: azi..azi+max_advance_days; zi închisă după programul specialistului
+  // (calendarul unic: cel ales sau firma fără echipă; la „Oricine”: al fiecărui specialist).
   const { minYmd, maxYmd } = bookingDateRange(business);
-  const calendarSchedules = selectedStaff
-    ? [staffSchedule(selectedStaff, business).workingHours]
-    : (staffList.length > 0 ? eligibleStaff : [null]).map(
-        (m) => staffSchedule(m, business).workingHours
-      );
   // "de la X lei" doar când toate serviciile au preț (minimul > 0).
   const minPrice =
     services.length > 0 ? Math.min(...services.map((s) => Number(s.price) || 0)) : 0;
@@ -993,12 +990,13 @@ export default function PublicBookScreen() {
         <SpecialistCover
           slides={coverSlides}
           wide={isWide}
-          badge={tr('book.freeCount', { n: slots.length })}
+          badge={tr('book.freeCount', { n: freeCount })}
           onImageError={markImageBroken}
+          onImagePress={setLightbox}
         />
       ) : pageOn ? (
         <View style={styles.coverBadgeRow}>
-          <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
+          <Badge tone="accent">{tr('book.freeCount', { n: freeCount })}</Badge>
         </View>
       ) : null}
 
@@ -1039,7 +1037,7 @@ export default function PublicBookScreen() {
             </Text>
           ) : null}
         </View>
-        <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
+        <Badge tone="accent">{tr('book.freeCount', { n: freeCount })}</Badge>
       </View> : null}
 
       {pageOn ? (
@@ -1208,8 +1206,8 @@ export default function PublicBookScreen() {
                 })
               : tr('pub.multiHint')}
           </Text>
-          {staffList.length > 0 && eligibleStaff.length === 0 ? (
-            <Callout tone="warning">{tr('book.errStaffService')}</Callout>
+          {anyMode && eligibleStaff.length === 0 ? (
+            <Callout tone="warning">{tr('pub.anyStaffNone')}</Callout>
           ) : null}
           <View style={styles.serviceList}>
             {services.map((s) => {
@@ -1252,35 +1250,71 @@ export default function PublicBookScreen() {
         </>
       ) : null}
 
-      <SectionTitle>{tr('pub.stepDate', { n: stepNo.date ?? 1 })}</SectionTitle>
-      <BookingCalendar
-        value={dateLocal}
-        onChange={(ymd) => {
-          setSelected(null);
-          setDateLocal(ymd);
-        }}
-        minYmd={minYmd}
-        maxYmd={maxYmd}
-        blockedDates={business.blocked_dates ?? []}
-        schedules={calendarSchedules}
-      />
-
-      <SectionTitle>{tr('pub.stepTime', { n: stepNo.time ?? 1 })}</SectionTitle>
-      {slotsLoading ? (
-        <View style={styles.slotsLoading}>
-          <ActivityIndicator color={t.colors.accent} />
-        </View>
+      {anyMode ? (
+        <>
+          <SectionTitle>{tr('pub.stepStaffTime', { n: stepNo.date ?? 1 })}</SectionTitle>
+          {eligibleStaff.length > 0 ? (
+            <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
+              {tr('pub.anyStaffCalendars')}
+            </Text>
+          ) : null}
+          {eligibleStaff.map((member) => {
+            const day = staffDays[member.id];
+            const ymd = day?.date ?? dateLocal;
+            return (
+              <StaffSlotsCard
+                key={member.id}
+                member={member}
+                slots={day?.slots ?? []}
+                loading={!day || day.loading}
+                selectedStartUtc={pickedId === member.id ? selected?.startUtc : null}
+                onSelect={(slot) => selectSlot(slot, member.id)}
+                emptyLabel={noSlotsLabel(ymd)}
+              >
+                <BookingCalendar
+                  value={ymd}
+                  onChange={(next) => {
+                    if (pickedId === member.id) setSelected(null);
+                    void loadStaffDay(member, next);
+                  }}
+                  minYmd={minYmd}
+                  maxYmd={maxYmd}
+                  blockedDates={business.blocked_dates ?? []}
+                  schedules={[staffSchedule(member, business).workingHours]}
+                />
+              </StaffSlotsCard>
+            );
+          })}
+        </>
       ) : (
-        <SlotPicker
-          slots={slots}
-          selectedStartUtc={selected?.startUtc}
-          onSelect={selectSlot}
-          emptyLabel={
-            dayBlocked
-              ? tr('book.dayBlocked')
-              : tr('book.noSlots', { date: dateLocal, h: Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60)) })
-          }
-        />
+        <>
+          <SectionTitle>{tr('pub.stepDate', { n: stepNo.date ?? 1 })}</SectionTitle>
+          <BookingCalendar
+            value={dateLocal}
+            onChange={(ymd) => {
+              setSelected(null);
+              setDateLocal(ymd);
+            }}
+            minYmd={minYmd}
+            maxYmd={maxYmd}
+            blockedDates={business.blocked_dates ?? []}
+            schedules={[staffSchedule(selectedStaff, business).workingHours]}
+          />
+
+          <SectionTitle>{tr('pub.stepTime', { n: stepNo.time ?? 1 })}</SectionTitle>
+          {slotsLoading ? (
+            <View style={styles.slotsLoading}>
+              <ActivityIndicator color={t.colors.accent} />
+            </View>
+          ) : (
+            <SlotPicker
+              slots={slots}
+              selectedStartUtc={selected?.startUtc}
+              onSelect={selectSlot}
+              emptyLabel={noSlotsLabel(dateLocal)}
+            />
+          )}
+        </>
       )}
 
       {!session && selected ? (
@@ -1361,11 +1395,14 @@ export default function PublicBookScreen() {
 
 type LatestSlide = { key: string; kind: 'work'; url: string };
 
+/** Oricine: ziua aleasă în calendarul unui specialist și orele lui libere în acea zi. */
+type StaffDay = { date: string; slots: FreeSlot[]; loading: boolean };
+
 const COVER_HEIGHT = 210;
 const COVER_HEIGHT_WIDE = 360;
 const COVER_AUTO_MS = 5000;
 
-/** Carusel cu pagini: avans automat pe web, sageti pe web, puncte peste tot. */
+/** Carusel cu pagini: glisare pe toate dispozitivele, avans automat si sageti pe web, puncte peste tot. */
 function useAutoCarousel(count: number) {
   const isWeb = Platform.OS === 'web';
   const scroller = useRef<ScrollView>(null);
@@ -1472,11 +1509,13 @@ function SpecialistCover({
   wide,
   badge,
   onImageError,
+  onImagePress,
 }: {
   slides: { key: string; source: ImageSourcePropType; url?: string }[];
   wide: boolean;
   badge: string;
   onImageError: (url: string) => void;
+  onImagePress?: (url: string) => void;
 }) {
   const t = useTheme();
   const height = wide ? COVER_HEIGHT_WIDE : COVER_HEIGHT;
@@ -1498,21 +1537,36 @@ function SpecialistCover({
           ref={scroller}
           horizontal
           pagingEnabled
-          scrollEnabled={!isWeb && count > 1}
+          scrollEnabled={count > 1}
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={(e) => sync(e.nativeEvent.contentOffset.x)}
           onScrollEndDrag={(e) => sync(e.nativeEvent.contentOffset.x)}
         >
-          {slides.map((s) => (
-            <Image
-              key={s.key}
-              source={s.source}
-              style={{ width, height }}
-              resizeMode="cover"
-              accessibilityIgnoresInvertColors
-              onError={s.url ? () => onImageError(s.url as string) : undefined}
-            />
-          ))}
+          {slides.map((s) => {
+            const img = (
+              <Image
+                source={s.source}
+                style={{ width, height }}
+                resizeMode="cover"
+                accessibilityIgnoresInvertColors
+                pointerEvents="none"
+                onError={s.url ? () => onImageError(s.url as string) : undefined}
+              />
+            );
+            if (!s.url || !onImagePress) {
+              return <View key={s.key}>{img}</View>;
+            }
+            return (
+              <Pressable
+                key={s.key}
+                accessibilityRole="imagebutton"
+                onPress={() => onImagePress(s.url as string)}
+                style={{ width }}
+              >
+                {img}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       ) : null}
       <View style={[styles.coverBadge, { backgroundColor: t.colors.bgElevated, borderRadius: radius.pill }]} pointerEvents="none">
@@ -1546,7 +1600,7 @@ function LatestCarousel({
           ref={scroller}
           horizontal
           pagingEnabled
-          scrollEnabled={!isWeb && count > 1}
+          scrollEnabled={count > 1}
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={(e) => sync(e.nativeEvent.contentOffset.x)}
           onScrollEndDrag={(e) => sync(e.nativeEvent.contentOffset.x)}
@@ -1556,12 +1610,14 @@ function LatestCarousel({
               key={slide.key}
               accessibilityRole="imagebutton"
               onPress={() => onWorkPress(slide.url)}
+              style={{ width }}
             >
               <Image
                 source={{ uri: slide.url }}
                 style={{ width, height: 240 }}
                 resizeMode="cover"
                 accessibilityIgnoresInvertColors
+                pointerEvents="none"
                 onError={() => onWorkError(slide.url)}
               />
             </Pressable>

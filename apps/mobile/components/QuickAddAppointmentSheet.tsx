@@ -90,6 +90,8 @@ function QuickAddBody({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(2);
   const [notify, setNotify] = useState(false);
   const [suggestions, setSuggestions] = useState<BusinessClientContact[]>([]);
   const [saving, setSaving] = useState(false);
@@ -241,27 +243,37 @@ function QuickAddBody({
       setError(mapQuickAddError(invalid ?? ''));
       return;
     }
+    const repeatCount = repeatEnabled ? repeatWeeks : 1;
     setSaving(true);
-    const { appointment, error: err } = await createBusinessAppointment({
+    const { appointment, appointments, error: err } = await createBusinessAppointment({
       businessId: business.id,
       staffId: member?.id ?? null,
       payload,
       note,
       notifyClient: notify && !isStaffRole,
+      repeatCount,
     });
     if (err) {
       setSaving(false);
-      setError(mapQuickAddError(err));
+      setError(mapQuickAddError(err, repeatCount));
       return;
     }
     // Toggle PORNIT: confirmarea către client (email/WhatsApp) pleacă prin notify-decision.
-    if (appointment?.id && notify && !isStaffRole) {
-      await invokeDecisionNotify(appointment.id);
+    if (notify && !isStaffRole) {
+      for (const row of appointments) {
+        if (row.id) await invokeDecisionNotify(row.id);
+      }
     }
     setSaving(false);
     const label = formatInTimeZone(new Date(payload.p_start_at), tz, 'dd.MM HH:mm');
-    setOk(trKey('cal.addedAt', { label }));
+    setOk(
+      repeatCount > 1
+        ? trKey('qa.addedSeries', { n: repeatCount, label })
+        : trKey('cal.addedAt', { label })
+    );
     setSlot(null);
+    setRepeatEnabled(false);
+    setRepeatWeeks(2);
     setPicked(null);
     setPhone('');
     setName('');
@@ -283,7 +295,7 @@ function QuickAddBody({
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={() => !saving && onClose()} statusBarTranslucent>
-      <View style={[styles.backdrop, { backgroundColor: t.colors.overlay, paddingBottom: spacing.md + insets.bottom }]}>
+      <View style={[styles.backdrop, { backgroundColor: t.colors.overlay, paddingTop: insets.top + spacing.md, paddingBottom: spacing.md + insets.bottom }]}>
         <View style={[styles.card, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
           <View style={styles.head}>
             <Text style={[styles.title, { color: t.colors.text }]} numberOfLines={1}>
@@ -316,7 +328,7 @@ function QuickAddBody({
             {picked ? (
               <View style={[styles.pickedRow, { borderColor: t.colors.border, backgroundColor: t.colors.surface }]}>
                 <Ionicons name="person-circle-outline" size={22} color={t.colors.accent} />
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ color: t.colors.text, fontWeight: '700' }} numberOfLines={1}>
                     {picked.displayName || formatPhoneDisplay(picked.phone) || picked.email}
                   </Text>
@@ -476,11 +488,46 @@ function QuickAddBody({
               )}
             </View>
 
+            <SectionTitle>{tr('qa.repeat')}</SectionTitle>
+            <View style={styles.notifyRow}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ color: t.colors.text, fontWeight: '700' }}>{tr('qa.repeatEnable')}</Text>
+                <Text style={[styles.hint, { color: t.colors.textMuted }]}>
+                  {repeatEnabled ? tr('qa.repeatHint') : tr('qa.repeatOffHint')}
+                </Text>
+              </View>
+              <Toggle
+                value={repeatEnabled}
+                onValueChange={setRepeatEnabled}
+                accessibilityLabel={tr('qa.repeatEnable')}
+              />
+            </View>
+            {repeatEnabled ? (
+              <View style={styles.wrap} accessibilityRole="radiogroup">
+                {([2, 3, 4] as const).map((count) => {
+                  const on = repeatWeeks === count;
+                  const key = `qa.weeks${count}` as const;
+                  return (
+                    <Pressable
+                      key={count}
+                      onPress={() => setRepeatWeeks(count)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={tr(key)}
+                      style={chip(on)}
+                    >
+                      <Text style={chipText(on)}>{tr(key)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
             <Field label={tr('qa.note')} placeholder={tr('qa.notePh')} value={note} onChangeText={setNote} multiline maxLength={500} />
           </ScrollView>
           {isStaffRole ? null : (
             <View style={styles.notifyRow}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ color: t.colors.text, fontWeight: '700' }}>{tr('qa.notify')}</Text>
                 <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.notifyHint')}</Text>
               </View>

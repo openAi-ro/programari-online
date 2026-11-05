@@ -110,7 +110,7 @@
                                  [
                                      "expo-splash-screen",
                                      {
-                                         "image":  "./assets/images/logo-varianta-1.png",
+                                         "image":  "./assets/images/icon.png",
                                          "resizeMode":  "contain",
                                          "backgroundColor":  "#f1f5f9",
                                          "imageWidth":  200
@@ -125,7 +125,7 @@
                                "router":  {
 
                                           },
-                               "displayVersion":  "3.14",
+                               "displayVersion":  "3.16",
                                "webBaseUrl":  "https://programari.expo.app",
                                "installUrl":  "https://expo.dev/accounts/promixt/projects/programari/builds/4a07edea-1504-4892-adc5-fe8d685c428d",
                                "eas":  {

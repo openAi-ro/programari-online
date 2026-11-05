@@ -7,6 +7,7 @@ import { DatePickerField } from '@/components/DatePickerField';
 import type { DateInputIssue } from '@/lib/dateInput';
 import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
+import { StaffSlotsCard } from '@/components/StaffSlotsCard';
 import { StaffBadge } from '@/components/StaffBadge';
 import { StaffPortfolio } from '@/components/StaffPortfolio';
 import { SocialButtons } from '@/components/SocialButtons';
@@ -50,7 +51,7 @@ import {
   staffServicesMap,
   type StaffServiceRow,
 } from '@/lib/staffServices';
-import { unionStaffSlots } from '@/lib/anyStaff';
+import { loadStaffDaySlots } from '@/lib/staffDaySlots';
 import { discountedPrice, isOffpeakStart } from '@/lib/offpeak';
 import { parseTipInput, tipOptions } from '@/lib/tip';
 import { normalizeRepeatSelection } from '@/lib/recurringRules';
@@ -123,9 +124,12 @@ export default function BookScreen() {
   const [services, setServices] = useState<Service[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [staffId, setStaffId] = useState<string | null>(null);
-  // Oricine disponibil (F-11): ora se ia din reuniunea sloturilor echipei.
+  // Oricine disponibil (F-11): câte un calendar pe specialist care face toate serviciile alese.
   const [staffAny, setStaffAny] = useState(false);
-  const [freeStaffByStart, setFreeStaffByStart] = useState<Record<string, string[]>>({});
+  // Oricine: orele libere ale fiecărui specialist eligibil în ziua aleasă (ordinea echipei).
+  const [staffSlots, setStaffSlots] = useState<{ member: Staff; slots: FreeSlot[] }[]>([]);
+  // Oricine: specialistul pe al cărui calendar s-a ales ora (la el merge programarea).
+  const [pickedStaffId, setPickedStaffId] = useState<string | null>(null);
   // staff_services (v67): specialistul fără rânduri face tot.
   const [staffServices, setStaffServices] = useState<Record<string, string[]>>({});
   const [serviceIds, setServiceIds] = useState<string[]>([]);
@@ -157,6 +161,7 @@ export default function BookScreen() {
   const isReschedule = Boolean(rescheduleId);
   // Specialistul efectiv: null = Oricine (sau firma fără echipă, ca înainte).
   const effStaffId = staffAny && !isReschedule ? null : staffId;
+  const anyMode = staffAny && !isReschedule && staffList.length > 0;
   const combo = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
   const offpeakPct = business?.offpeak_discount_percent ?? 0;
   const selectedOffpeak =
@@ -188,6 +193,15 @@ export default function BookScreen() {
 
   const durationMinutes =
     combo.count > 0 ? combo.durationMinutes : business?.session_duration_minutes ?? 60;
+  // Oricine: doar specialiștii care fac toate serviciile alese într-o singură vizită.
+  const eligibleStaff = useMemo(
+    () => staffForServices(staffList, staffServices, serviceIds),
+    [staffList, staffServices, serviceIds]
+  );
+  const pickedStaff = anyMode && selected ? staffList.find((m) => m.id === pickedStaffId) ?? null : null;
+  const freeCount = anyMode
+    ? staffSlots.reduce((n, row) => n + row.slots.length, 0)
+    : slots.length;
 
   /** Data aleasă de client; schimbarea specialistului/serviciului nu o mai resetează (F-28). */
   const pickedDate = useRef<string | null>(null);
@@ -196,12 +210,12 @@ export default function BookScreen() {
     if (!business || !stepsReady) return;
     const first = firstBookableDateForStaff(
       business,
-      staffAny ? [...staffList] : selectedStaff ? [selectedStaff] : [],
+      staffAny ? eligibleStaff : selectedStaff ? [selectedStaff] : [],
       durationMinutes
     );
     const kept = pickedDate.current;
     setDateLocal(kept && kept >= first ? kept : first);
-  }, [business, stepsReady, selectedStaff, staffAny, staffList, durationMinutes]);
+  }, [business, stepsReady, selectedStaff, staffAny, eligibleStaff, durationMinutes]);
 
   const hasStaffChoice = staffList.length > 1;
   const hasServices = services.length > 0;
@@ -471,44 +485,19 @@ export default function BookScreen() {
 
     const { startUtc, endUtc } = localDayBoundsUtc(dateLocal, business.timezone);
 
-    // Oricine: reuniunea sloturilor libere ale echipei (ca pe pagina publică).
-    if (staffAny && !isReschedule && staffList.length > 0) {
-      const perStaff: { staffId: string; slots: FreeSlot[] }[] = [];
-      for (const m of staffList) {
-        const { busy: memberBusy, error: memberErr } = await listBusyRanges({
-          businessId: business.id,
-          fromIso: startUtc.toISOString(),
-          toIso: endUtc.toISOString(),
-          staffId: m.id,
-        });
-        if (!slotsRequests.isCurrent(req)) return;
-        if (memberErr) {
-          setError(memberErr);
-          setSlots([]);
-          setFreeStaffByStart({});
-          setSlotsLoading(false);
-          return;
-        }
-        const memberHours = staffSchedule(m, business);
-        perStaff.push({
-          staffId: m.id,
-          slots: generateFreeSlots({
-            dateLocal,
-            timezone: business.timezone,
-            sessionDurationMinutes: durationMinutes,
-            workingHours: memberHours.workingHours,
-            breakHours: memberHours.breakHours,
-            busy: memberBusy,
-            bufferMinutes: business.buffer_minutes ?? 0,
-            blockedDates: business.blocked_dates ?? [],
-            notBeforeUtc: notBeforeUtc(business),
-          }),
-        });
-      }
+    // Oricine: calendarul fiecărui specialist eligibil, separat (fără reuniune anonimă).
+    if (anyMode) {
+      setPickedStaffId(null);
+      const results = await Promise.all(
+        eligibleStaff.map((member) =>
+          loadStaffDaySlots({ business, member, dateLocal, durationMinutes })
+        )
+      );
       if (!slotsRequests.isCurrent(req)) return;
-      const union = unionStaffSlots(perStaff);
-      setSlots(union.slots);
-      setFreeStaffByStart(union.staffByStart);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) setError(failed.error);
+      setStaffSlots(eligibleStaff.map((member, i) => ({ member, slots: results[i].slots })));
+      setSlots([]);
       setSlotsLoading(false);
       return;
     }
@@ -532,6 +521,7 @@ export default function BookScreen() {
     if (err) {
       setError(err);
       setSlots([]);
+      setStaffSlots([]);
       setSlotsLoading(false);
       return;
     }
@@ -557,9 +547,9 @@ export default function BookScreen() {
       notBeforeUtc: notBeforeUtc(business),
     });
     setSlots(free);
-    setFreeStaffByStart({});
+    setStaffSlots([]);
     setSlotsLoading(false);
-  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, staffAny, staffList, isReschedule, selectedStaff, slotsRequests]);
+  }, [business, dateLocal, durationMinutes, rescheduleId, staffId, anyMode, eligibleStaff, selectedStaff, slotsRequests]);
 
   useEffect(() => {
     // Nu reincarca pe 'confirm': loadSlots() reseteaza ora aleasa si blocheaza trimiterea.
@@ -581,13 +571,11 @@ export default function BookScreen() {
     setError(null);
     setMessage(null);
 
-    // Oricine: la ora aleasă merge primul specialist liber (ordinea echipei).
-    const bookStaffId =
-      staffAny && !isReschedule ? (freeStaffByStart[selected.startUtc]?.[0] ?? null) : staffId;
-    if (staffAny && !isReschedule && staffList.length > 0 && !bookStaffId) {
+    // Oricine: programarea merge la specialistul pe al cărui calendar s-a ales ora.
+    const bookStaffId = anyMode ? pickedStaff?.id ?? null : staffId;
+    if (anyMode && !bookStaffId) {
       setBooking(false);
-      setError(trKey('book.errSlotTaken'));
-      await loadSlots();
+      setError(trKey('book.pickSlot'));
       return;
     }
 
@@ -856,11 +844,17 @@ export default function BookScreen() {
 
   const code = String(publicCode ?? '').trim();
   const addr = formatAddress(locationFromBusiness(business));
+  const noSlotsLabel = (business.blocked_dates ?? []).includes(dateLocal)
+    ? tr('book.dayBlocked')
+    : tr('book.noSlots', {
+        date: dateLocal,
+        h: Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60)),
+      });
   const canAdvance =
     step === 'staff'
       ? staffAny || Boolean(staffId)
       : step === 'service'
-        ? serviceIds.length > 0 || services.length === 0
+        ? (serviceIds.length > 0 || services.length === 0) && !(anyMode && eligibleStaff.length === 0)
         : step === 'date'
           ? Boolean(dateLocal) && !dateIssue
           : step === 'slot'
@@ -885,7 +879,7 @@ export default function BookScreen() {
           loading={booking}
           disabled={!selected}
         />
-        {!isReschedule && !slotsLoading && slots.length === 0 ? (
+        {!isReschedule && !slotsLoading && freeCount === 0 ? (
           <>
             <Callout tone="accent" title={waitlistJoinTitle()}>
               {onWaitlist ? waitlistOnList() : waitlistJoinBody()}
@@ -902,7 +896,7 @@ export default function BookScreen() {
           </>
         ) : null}
       </>
-    ) : step === 'slot' && !slotsLoading && slots.length === 0 && !isReschedule ? (
+    ) : step === 'slot' && !slotsLoading && freeCount === 0 && !isReschedule ? (
       <>
         {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
         <Callout tone="accent" title={waitlistJoinTitle()}>
@@ -1160,6 +1154,9 @@ export default function BookScreen() {
       {step === 'service' ? (
         <>
           <SectionTitle>{tr('book.pickServiceTitle')}</SectionTitle>
+          {anyMode && eligibleStaff.length === 0 ? (
+            <Callout tone="warning">{tr('pub.anyStaffNone')}</Callout>
+          ) : null}
           {combo.count > 1 ? (
             <Text style={[styles.note, { color: t.colors.textMuted }]}>
               {tr('book.comboSummary', {
@@ -1278,9 +1275,31 @@ export default function BookScreen() {
             >
               {selected ? selected.labelLocal : '—'}
             </Text>
-            <Badge tone="accent">{tr('book.freeCount', { n: slots.length })}</Badge>
+            <Badge tone="accent">{tr('book.freeCount', { n: freeCount })}</Badge>
           </View>
-          {slotsLoading ? (
+          {anyMode && eligibleStaff.length === 0 ? (
+            <Callout tone="warning">{tr('pub.anyStaffNone')}</Callout>
+          ) : anyMode && !slotsLoading ? (
+            <>
+              <Text style={[styles.note, { color: t.colors.textMuted }]}>
+                {tr('pub.anyStaffCalendars')}
+              </Text>
+              {staffSlots.map(({ member, slots: memberSlots }) => (
+                <StaffSlotsCard
+                  key={member.id}
+                  member={member}
+                  slots={memberSlots}
+                  loading={false}
+                  selectedStartUtc={pickedStaff?.id === member.id ? selected?.startUtc : null}
+                  onSelect={(slot) => {
+                    setSelected(slot);
+                    setPickedStaffId(member.id);
+                  }}
+                  emptyLabel={noSlotsLabel}
+                />
+              ))}
+            </>
+          ) : slotsLoading ? (
             <View style={styles.slotsLoading}>
               <ActivityIndicator color={t.colors.accent} />
             </View>
@@ -1289,14 +1308,7 @@ export default function BookScreen() {
               slots={slots}
               selectedStartUtc={selected?.startUtc}
               onSelect={setSelected}
-              emptyLabel={
-                (business.blocked_dates ?? []).includes(dateLocal)
-                  ? tr('book.dayBlocked')
-                  : tr('book.noSlots', {
-                      date: dateLocal,
-                      h: Math.max(1, Math.ceil((business.min_notice_minutes ?? 0) / 60)),
-                    })
-              }
+              emptyLabel={noSlotsLabel}
             />
           )}
         </>
@@ -1316,7 +1328,7 @@ export default function BookScreen() {
             ]}
           >
             <ConfirmLine label={tr('book.salon')} value={business.name} />
-            {(selectedStaff || (staffAny && !isReschedule)) ? <ConfirmLine label={tr('book.stepStaff')} value={selectedStaff ? selectedStaff.name : tr('pub.anyStaff')} /> : null}
+            {(selectedStaff || (staffAny && !isReschedule)) ? <ConfirmLine label={tr('book.stepStaff')} value={selectedStaff ? selectedStaff.name : pickedStaff ? pickedStaff.name : tr('pub.anyStaff')} /> : null}
             {combo.count > 0 ? (
               <ConfirmLine
                 label={tr('book.stepService')}

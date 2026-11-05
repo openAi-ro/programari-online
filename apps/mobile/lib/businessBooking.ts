@@ -17,7 +17,8 @@ import {
 
 export type { BusinessClientContact, ContactClientRow } from './quickAddRules';
 
-export function mapQuickAddError(message: string): string {
+export function mapQuickAddError(message: string, repeatCount = 1): string {
+  if (repeatCount > 1 && message.includes('slot_taken')) return trKey('qa.errSeriesSlot');
   if (message.includes('service_required')) return trKey('qa.errService');
   if (message.includes('too_far_past')) return trKey('qa.errTooFarPast');
   if (message.includes('staff_own_only') || message.includes('staff_not_linked')) {
@@ -55,16 +56,40 @@ export async function createBusinessAppointment(opts: {
   payload: QuickAddPayload;
   note: string;
   notifyClient: boolean;
-}): Promise<{ appointment: Appointment | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('business_create_appointment', {
+  repeatCount?: number;
+}): Promise<{ appointment: Appointment | null; appointments: Appointment[]; error: string | null }> {
+  const repeatCount = Math.min(4, Math.max(1, Math.floor(opts.repeatCount ?? 1)));
+  if (repeatCount === 1) {
+    const { data, error } = await supabase.rpc('business_create_appointment', {
+      p_business_id: opts.businessId,
+      p_staff_id: opts.staffId,
+      ...opts.payload,
+      p_note: opts.note.trim() || null,
+      p_notify_client: opts.notifyClient,
+    });
+    if (error) return { appointment: null, appointments: [], error: error.message };
+    const appointment = unwrapRpcRow<Appointment>(data);
+    return {
+      appointment,
+      appointments: appointment ? [appointment] : [],
+      error: appointment ? null : 'booking_empty_result',
+    };
+  }
+
+  const { data, error } = await supabase.rpc('business_create_recurring_appointments', {
     p_business_id: opts.businessId,
     p_staff_id: opts.staffId,
     ...opts.payload,
+    p_repeat_count: repeatCount,
     p_note: opts.note.trim() || null,
     p_notify_client: opts.notifyClient,
   });
-  if (error) return { appointment: null, error: error.message };
-  return { appointment: unwrapRpcRow<Appointment>(data), error: null };
+  if (error) return { appointment: null, appointments: [], error: error.message };
+  const appointments = (Array.isArray(data) ? data : data ? [data] : []) as Appointment[];
+  if (appointments.length !== repeatCount || !appointments[0]?.id) {
+    return { appointment: null, appointments: [], error: 'booking_empty_result' };
+  }
+  return { appointment: appointments[0], appointments, error: null };
 }
 
 export async function listBusinessContactClients(): Promise<{

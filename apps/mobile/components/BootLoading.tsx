@@ -4,12 +4,12 @@ import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 import { trKey } from '@/lib/i18n';
 
-const LOGO = require('../assets/images/logo-varianta-1.png');
+const LOGO = require('../assets/images/icon.png');
 
 /**
  * Ecran de pornire (boot), replică nativă a animației din
  * `assets/images/index.html`: inel gradient (#9b59b6 → #84cdfa → #5ad1cd)
- * care se rotește la 1,2s, cerc alb interior și logo-ul rotund în centru,
+ * care se rotește la 1,2s, și iconița aplicației (nu tăiată rotund) în centru,
  * pe fundal #f1f5f9. Splash-ul nativ Android este static, deci animația
  * rulează aici, imediat după ce splash-ul se ascunde.
  */
@@ -56,8 +56,7 @@ export function BootLoading({ label, sublabel }: { label?: string; sublabel?: st
           </Svg>
         </Animated.View>
 
-        <View style={styles.innerCircle} />
-        <Image source={LOGO} style={styles.logo} resizeMode="cover" accessibilityIgnoresInvertColors />
+        <Image source={LOGO} style={styles.logo} resizeMode="contain" accessibilityIgnoresInvertColors />
       </View>
 
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -107,17 +106,10 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
   },
-  innerCircle: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#ffffff',
-  },
   logo: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 80,
+    height: 80,
+    borderRadius: 18,
   },
   label: {
     marginTop: 24,
