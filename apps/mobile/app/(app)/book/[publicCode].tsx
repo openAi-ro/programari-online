@@ -9,6 +9,7 @@ import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import { StaffSlotsCard } from '@/components/StaffSlotsCard';
 import { StaffBadge } from '@/components/StaffBadge';
+import { ServiceImagePreview } from '@/components/ServiceImagePreview';
 import { StaffPortfolio } from '@/components/StaffPortfolio';
 import { SocialButtons } from '@/components/SocialButtons';
 import { BusinessVisitCard } from '@/components/BusinessVisitCard';
@@ -1189,7 +1190,7 @@ export default function BookScreen() {
                 >
                   <View style={styles.serviceChipInner}>
                     {s.image_url ? (
-                      <Image source={{ uri: s.image_url }} style={styles.serviceThumb} />
+                      <ServiceImagePreview uri={s.image_url} name={s.name} style={styles.serviceThumb} />
                     ) : null}
                     <View style={styles.serviceChipText}>
                       <Text

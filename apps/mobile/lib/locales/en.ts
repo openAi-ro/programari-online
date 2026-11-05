@@ -837,6 +837,7 @@ export const en: typeof ro = {
   'book.pickStaff': 'Pick the specialist',
   'book.worksOf': 'Work: {name}',
   'book.workPhoto': 'Work by {name}',
+  'book.serviceImageOpen': 'Open the image for {name}',
   'book.staffA11y': 'Specialist {name}',
   'book.pickServiceTitle': 'Pick the service (you can tick several)',
   'book.comboSummary': 'Combined: {name} · {duration} · {price}',

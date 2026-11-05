@@ -35,6 +35,7 @@ import {
 import { fontSize, palette, radius, spacing } from '@/constants/theme';
 import { setPendingAuthRedirect } from '@/lib/auth-redirect';
 import { ImageLightbox } from '@/components/ImageLightbox';
+import { ServiceImagePreview } from '@/components/ServiceImagePreview';
 import { setAppMode } from '@/lib/appMode';
 import { ANON_BUSINESS_COLUMNS, buildPublicPageMeta, jsonLdText } from '@/lib/publicPageMeta';
 import { loadPublicPageMetadata } from '@/lib/publicBusinessServer';
@@ -1231,7 +1232,7 @@ export default function PublicBookScreen() {
                 >
                   <View style={styles.serviceChipInner}>
                     {s.image_url ? (
-                      <Image source={{ uri: s.image_url }} style={styles.serviceThumb} />
+                      <ServiceImagePreview uri={s.image_url} name={s.name} style={styles.serviceThumb} />
                     ) : null}
                     <View style={styles.serviceChipText}>
                       <Text style={[styles.serviceName, { color: on ? t.colors.onAccent : t.colors.text }]}>

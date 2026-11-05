@@ -835,6 +835,7 @@ export const ro = {
   'book.pickStaff': 'Alege specialistul',
   'book.worksOf': 'Lucrări: {name}',
   'book.workPhoto': 'Lucrare {name}',
+  'book.serviceImageOpen': 'Deschide imaginea serviciului {name}',
   'book.staffA11y': 'Specialist {name}',
   'book.pickServiceTitle': 'Alege serviciul (poți bifa mai multe)',
   'book.comboSummary': 'Combinat: {name} · {duration} · {price}',
