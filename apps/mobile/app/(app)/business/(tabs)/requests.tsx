@@ -3,6 +3,7 @@ import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Tex
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
+import type { ServiceImage } from '@/components/ServiceImageCarousel';
 import { appointmentContactParts } from '@/lib/quickAddRules';
 import { DatePickerField } from '@/components/DatePickerField';
 import {
@@ -80,6 +81,8 @@ export default function BusinessRequestsScreen() {
   const [postponeBusyId, setPostponeBusyId] = useState<string | null>(null);
   const [timezoneByBusiness, setTimezoneByBusiness] = useState<Record<string, string>>({});
   const [codeByBusiness, setCodeByBusiness] = useState<Record<string, string>>({});
+  // Pozele serviciilor (services.image_url), pentru miniatura de pe card.
+  const [serviceImageById, setServiceImageById] = useState<Record<string, ServiceImage>>({});
   const [businessIds, setBusinessIds] = useState<string[]>([]);
   const [businessList, setBusinessList] = useState<BusinessProfile[]>([]);
   const [moveApt, setMoveApt] = useState<Row | null>(null);
@@ -148,6 +151,7 @@ export default function BusinessRequestsScreen() {
     } else {
       const list = (data ?? []) as Row[];
       setRows(list);
+      void loadServiceImages(list);
       // Marchează tot ce există deja ca „văzut" — popup doar pentru ce vine nou.
       for (const r of list) seenIdsRef.current.add(r.id);
     }
@@ -172,6 +176,36 @@ export default function BusinessRequestsScreen() {
           : upcomingRows,
     [filter, rows, tickNow, pendingRows, upcomingRows]
   );
+
+  // service_ids e uuid[] (fara FK), deci pozele vin dintr-un select separat pe services.
+  // O eroare aici nu blocheaza lista - cardurile raman doar fara miniatura.
+  async function loadServiceImages(list: Row[]) {
+    const ids = [...new Set(list.flatMap(appointmentServiceIds))];
+    if (ids.length === 0) {
+      setServiceImageById({});
+      return;
+    }
+    const { data, error: sErr } = await supabase
+      .from('services')
+      .select('id, name, image_url')
+      .in('id', ids)
+      .not('image_url', 'is', null);
+    if (sErr) return;
+    const map: Record<string, ServiceImage> = {};
+    for (const svc of (data ?? []) as { id: string; name: string; image_url: string | null }[]) {
+      if (svc.image_url) map[svc.id] = { uri: svc.image_url, name: svc.name };
+    }
+    setServiceImageById(map);
+  }
+
+  function serviceImagesFor(apt: Row): ServiceImage[] {
+    const out: ServiceImage[] = [];
+    for (const id of appointmentServiceIds(apt)) {
+      const img = serviceImageById[id];
+      if (img && !out.some((o) => o.uri === img.uri)) out.push(img);
+    }
+    return out;
+  }
 
   loadRef.current = load;
 
@@ -691,6 +725,7 @@ export default function BusinessRequestsScreen() {
             onDeclineReschedule={() => void decideReschedule(item, false)}
             rescheduleBusy={rescheduleBusyId === item.id}
             onBusinessCancel={(reason) => void cancelByBusiness(item, reason)}
+            serviceImages={serviceImagesFor(item)}
           />
         )}
       />
@@ -834,6 +869,12 @@ export default function BusinessRequestsScreen() {
     </Screen>
     </View>
   );
+}
+
+/** Serviciile programarii in ordine: service_ids (combo), altfel service_id. */
+function appointmentServiceIds(apt: Row): string[] {
+  if (apt.service_ids && apt.service_ids.length > 0) return apt.service_ids;
+  return apt.service_id ? [apt.service_id] : [];
 }
 
 const styles = StyleSheet.create({

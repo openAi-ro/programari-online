@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { Badge, Button, ButtonRow, useTheme } from '@/components/ui';
+import { ServiceImageCarousel, type ServiceImage } from '@/components/ServiceImageCarousel';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { hasEnded } from '@/lib/appointmentTime';
 import { statusMeta } from '@/lib/status';
@@ -76,6 +77,8 @@ type Props = {
   requestedLabel?: string;
   /** v87 (business): anulare cu motiv, vazut de client. */
   onBusinessCancel?: (reason: string) => void;
+  /** Cereri (business): pozele serviciilor programarii, in ordinea serviciilor; goala = fara miniatura. */
+  serviceImages?: ServiceImage[];
 };
 
 export function AppointmentCard({
@@ -117,6 +120,7 @@ export function AppointmentCard({
   rescheduleBusy,
   requestedLabel,
   onBusinessCancel,
+  serviceImages,
 }: Props) {
   const t = useTheme();
   const tr = useT();
@@ -210,6 +214,82 @@ export function AppointmentCard({
     }
   }
 
+  const thumbImages = serviceImages ?? [];
+  const withThumb = thumbImages.length > 0;
+  const headInfo = (
+    <HeadWrap style={withThumb ? styles.headTextCol : styles.headText} {...(compact ? { onPress: () => setExpanded((v) => !v), accessibilityRole: 'button' as const } : {})}>
+      {businessName ? (
+        <Text style={[styles.title, { color: t.colors.text }]} numberOfLines={1}>
+          {businessName}
+        </Text>
+      ) : null}
+      {appointment.service_name ? (
+        <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
+          {appointment.service_name}
+          {appointment.staff_name ? ` · ${appointment.staff_name}` : ''}
+          {appointment.loyalty_redeemed ? tr('appt.giftSuffix') : ''}
+        </Text>
+      ) : appointment.staff_name ? (
+        <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
+          {appointment.staff_name}
+        </Text>
+      ) : null}
+      <View style={styles.timeRow}>
+        <Ionicons name="calendar-outline" size={14} color={t.colors.textMuted} />
+        <Text style={[styles.time, { color: t.colors.text }]} numberOfLines={1}>
+          {localLabel ?? fallbackLabel}
+        </Text>
+      </View>
+    </HeadWrap>
+  );
+  const statusBadge = (
+    <Badge tone={appointment.no_show ? 'danger' : meta.tone} dot>
+      {appointment.no_show ? tr('appt.noShowBadge') : meta.label}
+    </Badge>
+  );
+  const subInfo = (
+    <>
+      {showDetails ? (
+      <Text
+        style={[styles.nextStep, { color: t.colors.textMuted }]}
+        numberOfLines={2}
+      >
+        {appointmentNextHint(status, {
+          noShow: Boolean(appointment.no_show),
+          attendanceConfirmed: Boolean(appointment.attendance_confirmed),
+          canCancel: Boolean(onCancel && canCancel && (status === 'pending' || status === 'approved')),
+          canReschedule: Boolean(canReschedule && onReschedule),
+          tooLate: Boolean(onCancel && !canCancel && new Date(appointment.start_at).getTime() > Date.now()),
+        })}
+      </Text>
+      ) : null}
+
+      {contact ? (
+        <View style={styles.contactRow}>
+          <Ionicons name="person-outline" size={13} color={t.colors.textFaint} />
+          <Text style={[styles.contact, { color: t.colors.textMuted }]} numberOfLines={1}>
+            {contact}
+          </Text>
+        </View>
+      ) : null}
+
+      {compact ? (
+        <Pressable
+          android_ripple={{ color: t.colors.accentSoft, borderless: false }}
+          onPress={() => setExpanded((v) => !v)}
+          accessibilityRole="button"
+          hitSlop={6}
+          style={styles.expandRow}
+        >
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={t.colors.textMuted} />
+          <Text style={[styles.contact, { color: t.colors.textMuted }]}>
+            {expanded ? tr('appt.showLess') : tr('appt.moreActions')}
+          </Text>
+        </Pressable>
+      ) : null}
+    </>
+  );
+
   return (
     <View
       style={[
@@ -221,74 +301,26 @@ export function AppointmentCard({
       <View style={[styles.accent, { backgroundColor: toneColor }]} />
 
       <View style={styles.content}>
-        <View style={styles.headRow}>
-          <HeadWrap style={styles.headText} {...(compact ? { onPress: () => setExpanded((v) => !v), accessibilityRole: 'button' as const } : {})}>
-            {businessName ? (
-              <Text style={[styles.title, { color: t.colors.text }]} numberOfLines={1}>
-                {businessName}
-              </Text>
-            ) : null}
-            {appointment.service_name ? (
-              <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
-                {appointment.service_name}
-                {appointment.staff_name ? ` · ${appointment.staff_name}` : ''}
-                {appointment.loyalty_redeemed ? tr('appt.giftSuffix') : ''}
-              </Text>
-            ) : appointment.staff_name ? (
-              <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
-                {appointment.staff_name}
-              </Text>
-            ) : null}
-            <View style={styles.timeRow}>
-              <Ionicons name="calendar-outline" size={14} color={t.colors.textMuted} />
-              <Text style={[styles.time, { color: t.colors.text }]} numberOfLines={1}>
-                {localLabel ?? fallbackLabel}
-              </Text>
+        {withThumb ? (
+          <View style={styles.headRow}>
+            <View style={styles.topLeft}>
+              {headInfo}
+              {subInfo}
             </View>
-          </HeadWrap>
-          <Badge tone={appointment.no_show ? 'danger' : meta.tone} dot>
-            {appointment.no_show ? tr('appt.noShowBadge') : meta.label}
-          </Badge>
-        </View>
-
-        {showDetails ? (
-        <Text
-          style={[styles.nextStep, { color: t.colors.textMuted }]}
-          numberOfLines={2}
-        >
-          {appointmentNextHint(status, {
-            noShow: Boolean(appointment.no_show),
-            attendanceConfirmed: Boolean(appointment.attendance_confirmed),
-            canCancel: Boolean(onCancel && canCancel && (status === 'pending' || status === 'approved')),
-            canReschedule: Boolean(canReschedule && onReschedule),
-            tooLate: Boolean(onCancel && !canCancel && new Date(appointment.start_at).getTime() > Date.now()),
-          })}
-        </Text>
-        ) : null}
-
-        {contact ? (
-          <View style={styles.contactRow}>
-            <Ionicons name="person-outline" size={13} color={t.colors.textFaint} />
-            <Text style={[styles.contact, { color: t.colors.textMuted }]} numberOfLines={1}>
-              {contact}
-            </Text>
+            <View style={styles.topRight}>
+              {statusBadge}
+              <ServiceImageCarousel images={thumbImages} />
+            </View>
           </View>
-        ) : null}
-
-        {compact ? (
-          <Pressable
-            android_ripple={{ color: t.colors.accentSoft, borderless: false }}
-            onPress={() => setExpanded((v) => !v)}
-            accessibilityRole="button"
-            hitSlop={6}
-            style={styles.expandRow}
-          >
-            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={t.colors.textMuted} />
-            <Text style={[styles.contact, { color: t.colors.textMuted }]}>
-              {expanded ? tr('appt.showLess') : tr('appt.moreActions')}
-            </Text>
-          </Pressable>
-        ) : null}
+        ) : (
+          <>
+            <View style={styles.headRow}>
+              {headInfo}
+              {statusBadge}
+            </View>
+            {subInfo}
+          </>
+        )}
         {phoneTel || phoneWa ? (
           <ButtonRow>
             {phoneTel ? (
@@ -936,6 +968,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   headText: { flex: 1, minWidth: 0, gap: 4 },
+  headTextCol: { minWidth: 0, gap: 4 },
+  topLeft: { flex: 1, minWidth: 0, gap: spacing.sm },
+  topRight: { alignItems: 'flex-end', gap: spacing.sm },
   title: { fontSize: fontSize.md, fontWeight: '700' },
   service: { fontSize: fontSize.sm, fontWeight: '600' },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

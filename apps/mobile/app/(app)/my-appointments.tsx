@@ -41,6 +41,7 @@ import { useBack } from '@/lib/nav';
 import { invokeWaitlistNotify } from '@/lib/notify-client';
 import { invokeRefundDeposit } from '@/lib/payments';
 import { formatRon } from '@/lib/format';
+import { giftCardDisplayStatus } from '@/lib/giftCard';
 import { sessionsLeft } from '@/lib/packages';
 import { canCheckIn } from '@/lib/checkin';
 import { needsMovedAck } from '@/lib/moveAck';
@@ -330,17 +331,35 @@ export default function MyAppointmentsScreen() {
       setGiftResult(trKey('pkg.giftNotFound'));
       return;
     }
+    const display = giftCardDisplayStatus({
+      status: row.status,
+      expires_at: row.expires_at,
+    });
     const statusLabel =
-      row.status === 'redeemed'
+      display === 'redeemed'
         ? trKey('pkg.giftStatusRedeemed')
-        : row.status === 'cancelled'
+        : display === 'cancelled'
           ? trKey('pkg.giftStatusCancelled')
-          : trKey('pkg.giftStatusActive');
+          : display === 'expired'
+            ? trKey('pkg.giftStatusExpired')
+            : trKey('pkg.giftStatusActive');
+    const value =
+      row.kind === 'service'
+        ? trKey('pkg.giftServiceValue', {
+            service: row.service_name || trKey('pkg.giftKindService'),
+          })
+        : formatRon(row.amount ?? row.balance);
+    const expiry = row.expires_at
+      ? trKey('pkg.giftFoundExpiry', {
+          date: new Date(row.expires_at).toLocaleDateString(),
+        })
+      : trKey('pkg.giftFoundNoExpiry');
     setGiftResult(
       trKey('pkg.giftFound', {
         business: row.business_name ?? '',
-        balance: formatRon(row.balance),
+        value,
         status: statusLabel,
+        expiry,
       })
     );
   }

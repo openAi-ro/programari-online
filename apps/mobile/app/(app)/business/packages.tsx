@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
+import { GiftCardsSection } from '@/components/GiftCardsSection';
 import {
   Button,
   Callout,
@@ -14,12 +15,6 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatRon } from '@/lib/format';
-import {
-  applyGiftRedemption,
-  formatGiftCode,
-  generateGiftCode,
-  isValidGiftAmount,
-} from '@/lib/giftCard';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
@@ -39,6 +34,8 @@ type IssuedRow = ClientPackage & {
   packages?: { name: string | null } | null;
 };
 
+type ServiceOption = { id: string; name: string; price: number };
+
 function BusinessPackagesScreen() {
   const t = useTheme();
   const back = useBack();
@@ -48,6 +45,7 @@ function BusinessPackagesScreen() {
   const [templates, setTemplates] = useState<PackageTemplate[]>([]);
   const [issued, setIssued] = useState<IssuedRow[]>([]);
   const [cards, setCards] = useState<GiftCard[]>([]);
+  const [services, setServices] = useState<ServiceOption[]>([]);
   const [clients, setClients] = useState<BusinessClientRow[]>([]);
   const [error, setError] = useTransientMessage();
   const [message, setMessage] = useTransientMessage();
@@ -56,8 +54,6 @@ function BusinessPackagesScreen() {
   const [price, setPrice] = useState('');
   const [pickTemplateId, setPickTemplateId] = useState<string | null>(null);
   const [pickClientId, setPickClientId] = useState<string | null>(null);
-  const [giftAmount, setGiftAmount] = useState('');
-  const [giftRecipient, setGiftRecipient] = useState('');
 
   const load = useCallback(async () => {
     setError(null);
@@ -72,7 +68,7 @@ function BusinessPackagesScreen() {
       return;
     }
     setBusinessId(biz.id);
-    const [tpl, iss, gc, cli] = await Promise.all([
+    const [tpl, iss, gc, cli, svc] = await Promise.all([
       supabase.from('packages').select('*').eq('business_id', biz.id).order('sort_order'),
       supabase
         .from('client_packages')
@@ -81,16 +77,23 @@ function BusinessPackagesScreen() {
         .order('created_at', { ascending: false }),
       supabase
         .from('gift_cards')
-        .select('*')
+        .select('*, services(name)')
         .eq('business_id', biz.id)
         .order('created_at', { ascending: false }),
       supabase.rpc('list_business_clients'),
+      supabase
+        .from('services')
+        .select('id, name, price')
+        .eq('business_id', biz.id)
+        .eq('active', true)
+        .order('sort_order'),
     ]);
     if (tpl.error) setError(tpl.error.message, { sticky: true });
     setTemplates((tpl.data ?? []) as PackageTemplate[]);
     setIssued((iss.data ?? []) as IssuedRow[]);
     setCards((gc.data ?? []) as GiftCard[]);
     setClients(((cli.data ?? []) as BusinessClientRow[]).filter((c) => c.business_id === biz.id));
+    setServices((svc.data ?? []) as ServiceOption[]);
     setLoading(false);
   }, []);
 
@@ -155,60 +158,6 @@ function BusinessPackagesScreen() {
       .from('client_packages')
       .update({ sessions_used: next, updated_at: new Date().toISOString() })
       .eq('id', row.id);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    await load();
-  }
-
-  async function createGiftCard() {
-    if (!businessId) return;
-    const amount = Number(String(giftAmount).replace(',', '.'));
-    if (!isValidGiftAmount(amount)) {
-      setError(trKey('pkg.giftAmount'));
-      return;
-    }
-    const code = generateGiftCode();
-    setError(null);
-    const { error: err } = await supabase.from('gift_cards').insert({
-      business_id: businessId,
-      code,
-      amount,
-      balance: amount,
-      recipient_name: giftRecipient.trim() || null,
-    });
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    setGiftAmount('');
-    setGiftRecipient('');
-    setMessage(trKey('pkg.giftCreated', { code: formatGiftCode(code) }));
-    await load();
-  }
-
-  async function redeemGiftCard(card: GiftCard) {
-    const next = applyGiftRedemption(Number(card.balance), Number(card.balance));
-    if (next === null) return;
-    setError(null);
-    const { error: err } = await supabase
-      .from('gift_cards')
-      .update({ balance: next, status: 'redeemed', updated_at: new Date().toISOString() })
-      .eq('id', card.id);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    await load();
-  }
-
-  async function cancelGiftCard(card: GiftCard) {
-    setError(null);
-    const { error: err } = await supabase
-      .from('gift_cards')
-      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-      .eq('id', card.id);
     if (err) {
       setError(err.message);
       return;
@@ -334,35 +283,14 @@ function BusinessPackagesScreen() {
         )}
       </View>
 
-      <SectionTitle>{tr('pkg.giftTitle')}</SectionTitle>
-      <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
-        <Field label={tr('pkg.giftAmount')} value={giftAmount} onChangeText={setGiftAmount} keyboardType="decimal-pad" />
-        <Field label={tr('pkg.giftRecipient')} value={giftRecipient} onChangeText={setGiftRecipient} />
-        <Button label={tr('pkg.giftCreate')} icon="gift-outline" onPress={() => void createGiftCard()} />
-        {cards.length === 0 ? (
-          <Text style={[styles.meta, { color: t.colors.textMuted }]}>{tr('pkg.giftEmpty')}</Text>
-        ) : (
-          cards.map((card) => (
-            <View key={card.id} style={styles.issuedRow}>
-              <Text style={[styles.meta, { color: t.colors.text }]}>
-                {tr('pkg.giftCode', { code: formatGiftCode(card.code) })}
-                {card.recipient_name ? ` · ${card.recipient_name}` : ''}
-              </Text>
-              <Text style={[styles.meta, { color: t.colors.textMuted }]}>
-                {tr('pkg.giftBalance', { balance: formatRon(card.balance), amount: formatRon(card.amount) })}
-                {' · '}
-                {card.status}
-              </Text>
-              {card.status === 'active' ? (
-                <View style={styles.btnRow}>
-                  <Button label={tr('pkg.giftRedeem')} size="sm" variant="secondary" onPress={() => void redeemGiftCard(card)} />
-                  <Button label={tr('pkg.giftCancel')} size="sm" variant="secondary" onPress={() => void cancelGiftCard(card)} />
-                </View>
-              ) : null}
-            </View>
-          ))
-        )}
-      </View>
+      <GiftCardsSection
+        businessId={businessId}
+        cards={cards}
+        services={services}
+        onChanged={load}
+        onError={(m) => setError(m)}
+        onMessage={(m) => setMessage(m)}
+      />
     </Screen>
   );
 }

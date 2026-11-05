@@ -271,8 +271,19 @@ export type GiftCard = {
   balance: number;
   recipient_name: string | null;
   status: 'active' | 'redeemed' | 'cancelled';
+  kind: 'amount' | 'service';
+  service_id: string | null;
+  expires_at: string | null;
+  created_by: string | null;
+  redeemed_by: string | null;
+  redeemed_at: string | null;
+  redeemed_appointment_id: string | null;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Join optional la listarea din ecranul business. */
+  services?: { name: string | null } | null;
 };
 
 export type ChatMessage = {

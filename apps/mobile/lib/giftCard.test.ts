@@ -3,9 +3,12 @@
  * from apps/mobile
  */
 import {
-  applyGiftRedemption,
   formatGiftCode,
+  giftCardDisplayStatus,
+  isGiftExpired,
   isValidGiftAmount,
+  isValidGiftKind,
+  mapGiftRpcError,
   normalizeGiftCode,
 } from './giftCard';
 
@@ -31,11 +34,31 @@ assert(isValidGiftAmount(0) === false, '0 invalid');
 assert(isValidGiftAmount(-5) === false, 'negativ invalid');
 assert(isValidGiftAmount(Number.NaN) === false, 'NaN invalid');
 
-assert(applyGiftRedemption(200, 50) === 150, 'folosește 50 din 200');
-assert(applyGiftRedemption(200, 200) === 0, 'folosește tot');
-assert(applyGiftRedemption(200, 250) === null, 'nu poate folosi peste sold');
-assert(applyGiftRedemption(200, 0) === null, 'zero invalid');
-assert(applyGiftRedemption(0, 10) === null, 'sold gol → invalid');
+assert(isValidGiftKind('amount') === true, 'kind amount');
+assert(isValidGiftKind('service') === true, 'kind service');
+assert(isValidGiftKind('both') === false, 'kind invalid');
+
+const now = new Date('2026-11-05T12:00:00.000Z');
+assert(isGiftExpired(null, now) === false, 'NULL = nu expiră');
+assert(isGiftExpired(undefined, now) === false, 'undefined = nu expiră');
+assert(isGiftExpired('2026-11-06T00:00:00.000Z', now) === false, 'viitor = neexpirat');
+assert(isGiftExpired('2026-11-05T11:00:00.000Z', now) === true, 'trecut = expirat');
+
+assert(giftCardDisplayStatus({ status: 'redeemed', expires_at: null }, now) === 'redeemed', 'folosit');
+assert(giftCardDisplayStatus({ status: 'cancelled', expires_at: null }, now) === 'cancelled', 'anulat');
+assert(giftCardDisplayStatus({ status: 'active', expires_at: null }, now) === 'active', 'vechi fără expirare = nefolosit');
+assert(
+  giftCardDisplayStatus({ status: 'active', expires_at: '2026-11-01T00:00:00.000Z' }, now) === 'expired',
+  'active + expirat → expired'
+);
+assert(
+  giftCardDisplayStatus({ status: 'redeemed', expires_at: '2026-11-01T00:00:00.000Z' }, now) === 'redeemed',
+  'folosit bate expirarea'
+);
+
+assert(mapGiftRpcError('gift_expired').length > 0 && !mapGiftRpcError('gift_expired').includes('gift_expired'), 'map expired translated');
+assert(mapGiftRpcError('gift_not_unused').length > 0 && !mapGiftRpcError('gift_not_unused').includes('gift_not_unused'), 'map not unused translated');
+assert(mapGiftRpcError('weird') === 'weird', 'map passthrough');
 
 console.log(`giftCard: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
