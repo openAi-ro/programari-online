@@ -1,7 +1,15 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 import {
   Button,
@@ -15,6 +23,12 @@ import {
   useTheme,
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
+import {
+  GALLERY_MAX_WIDTH,
+  deleteBusinessMediaImage,
+  uploadBusinessMediaImage,
+} from '@/lib/businessMedia';
+import { showDialog } from '@/lib/dialog';
 import { formatDuration, formatRon } from '@/lib/format';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
@@ -31,9 +45,19 @@ type Draft = {
   rebookInterval: string;
   duration: string;
   price: string;
+  imageUrl: string;
 };
 
-const EMPTY_DRAFT: Draft = { name: '', description: '', duration: '60', price: '0', rebookInterval: '' };
+const EMPTY_DRAFT: Draft = {
+  name: '',
+  description: '',
+  duration: '60',
+  price: '0',
+  rebookInterval: '',
+  imageUrl: '',
+};
+
+const THUMB_SIZE = 68;
 
 function BusinessServicesScreen() {
   const t = useTheme();
@@ -48,6 +72,8 @@ function BusinessServicesScreen() {
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  /** Service id, or 'draft' while uploading from the form. */
+  const [imageBusy, setImageBusy] = useState<string | 'draft' | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -106,6 +132,154 @@ function BusinessServicesScreen() {
       rebookInterval: s.rebook_interval_days ? String(s.rebook_interval_days) : '',
       duration: String(s.duration_minutes),
       price: String(s.price ?? 0),
+      imageUrl: s.image_url ?? '',
+    });
+  }
+
+  async function uploadPickedUri(localUri: string, sourceWidth?: number | null): Promise<string> {
+    if (!businessId) throw new Error(trKey('req.notAuthed'));
+    return uploadBusinessMediaImage(localUri, businessId, {
+      maxWidth: GALLERY_MAX_WIDTH,
+      sourceWidth,
+    });
+  }
+
+  async function pickFromLibrary(): Promise<ImagePicker.ImagePickerAsset | null> {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || result.assets.length === 0) return null;
+    const asset = result.assets[0];
+    const mime = (asset.mimeType ?? '').toLowerCase();
+    if (mime && !mime.startsWith('image/')) {
+      setError(trKey('svc.imageBadType'));
+      return null;
+    }
+    return asset;
+  }
+
+  async function takeWithCamera(): Promise<ImagePicker.ImagePickerAsset | null> {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      setError(trKey('media.uploadForbidden'));
+      return null;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || result.assets.length === 0) return null;
+    return result.assets[0];
+  }
+
+  async function applyDraftImage(asset: ImagePicker.ImagePickerAsset): Promise<void> {
+    setImageBusy('draft');
+    setError(null);
+    try {
+      const url = await uploadPickedUri(asset.uri, asset.width);
+      const old = draft.imageUrl.trim();
+      setDraft((d) => ({ ...d, imageUrl: url }));
+      if (old && old !== url) void deleteBusinessMediaImage(old);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : trKey('svc.imageFail'));
+    }
+    setImageBusy(null);
+  }
+
+  async function clearDraftImage(): Promise<void> {
+    const old = draft.imageUrl.trim();
+    setDraft((d) => ({ ...d, imageUrl: '' }));
+    if (old) void deleteBusinessMediaImage(old);
+  }
+
+  async function setServiceImageUrl(s: Service, url: string | null): Promise<void> {
+    const old = s.image_url ?? null;
+    const { error: err } = await supabase
+      .from('services')
+      .update({ image_url: url, updated_at: new Date().toISOString() })
+      .eq('id', s.id);
+    if (err) {
+      setError(err.message);
+      if (url) void deleteBusinessMediaImage(url);
+      return;
+    }
+    if (old && old !== url) void deleteBusinessMediaImage(old);
+    setRows((list) => list.map((row) => (row.id === s.id ? { ...row, image_url: url } : row)));
+    if (editingId === s.id) {
+      setDraft((d) => ({ ...d, imageUrl: url ?? '' }));
+    }
+  }
+
+  async function uploadForService(
+    s: Service,
+    asset: ImagePicker.ImagePickerAsset
+  ): Promise<void> {
+    setImageBusy(s.id);
+    setError(null);
+    try {
+      const url = await uploadPickedUri(asset.uri, asset.width);
+      await setServiceImageUrl(s, url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : trKey('svc.imageFail'));
+    }
+    setImageBusy(null);
+  }
+
+  function openImageActions(s: Service) {
+    if (imageBusy) return;
+    if (!s.image_url) {
+      showDialog({
+        title: tr('svc.imageAdd'),
+        actions: [
+          {
+            text: tr('team.fromGallery'),
+            onPress: () => {
+              void (async () => {
+                const asset = await pickFromLibrary();
+                if (asset) await uploadForService(s, asset);
+              })();
+            },
+          },
+          {
+            text: tr('team.takePhoto'),
+            nativeOnly: true,
+            onPress: () => {
+              void (async () => {
+                const asset = await takeWithCamera();
+                if (asset) await uploadForService(s, asset);
+              })();
+            },
+          },
+          { text: tr('common.cancel'), style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    showDialog({
+      title: tr('svc.imageOptions'),
+      actions: [
+        {
+          text: tr('svc.imageReplace'),
+          onPress: () => {
+            void (async () => {
+              const asset = await pickFromLibrary();
+              if (asset) await uploadForService(s, asset);
+            })();
+          },
+        },
+        {
+          text: tr('svc.imageRemove'),
+          style: 'destructive',
+          onPress: () => {
+            void setServiceImageUrl(s, null);
+          },
+        },
+        { text: tr('common.cancel'), style: 'cancel' },
+      ],
     });
   }
 
@@ -117,6 +291,7 @@ function BusinessServicesScreen() {
     const price = Number(String(draft.price).replace(',', '.'));
     const rebookRaw = draft.rebookInterval.trim();
     const rebookInterval = rebookRaw === '' ? null : parseInt(rebookRaw, 10);
+    const imageUrl = draft.imageUrl.trim() || null;
     if (!name) {
       setError(trKey('svc.nameRequired'));
       return;
@@ -144,6 +319,7 @@ function BusinessServicesScreen() {
         duration_minutes: duration,
         rebook_interval_days: rebookInterval,
         price,
+        image_url: imageUrl,
         sort_order: rows.reduce((max, r) => Math.max(max, r.sort_order ?? 0), -1) + 1,
         active: true,
       });
@@ -165,6 +341,7 @@ function BusinessServicesScreen() {
         duration_minutes: duration,
         rebook_interval_days: rebookInterval,
         price,
+        image_url: imageUrl,
         updated_at: new Date().toISOString(),
       })
       .eq('id', editingId);
@@ -191,26 +368,19 @@ function BusinessServicesScreen() {
     await load();
   }
 
-  async function moveService(s: Service, dir: -1 | 1) {
-    const idx = rows.findIndex((r) => r.id === s.id);
-    const other = rows[idx + dir];
-    if (!other) return;
-    setError(null);
-    const a = await supabase.from('services').update({ sort_order: other.sort_order, updated_at: new Date().toISOString() }).eq('id', s.id);
-    if (a.error) { setError(a.error.message); return; }
-    const b = await supabase.from('services').update({ sort_order: s.sort_order, updated_at: new Date().toISOString() }).eq('id', other.id);
-    if (b.error) { setError(b.error.message); return; }
-    await load();
-  }
-
   async function deleteService(s: Service) {
     setError(null);
     const { error: err } = await supabase.from('services').delete().eq('id', s.id);
     setPendingDeleteId(null);
-    if (err) { setError(err.message); return; }
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    if (s.image_url) void deleteBusinessMediaImage(s.image_url);
     if (editingId === s.id) setEditingId(null);
     await load();
   }
+
   if (loading && rows.length === 0) {
     return (
       <ListLoadingScreen
@@ -315,6 +485,64 @@ function BusinessServicesScreen() {
             icon="repeat-outline"
             hint={tr('svc.rebookHint')}
           />
+          <Text style={[styles.imageLabel, { color: t.colors.text }]}>{tr('svc.image')}</Text>
+          <Text style={[styles.imageHint, { color: t.colors.textMuted }]}>{tr('svc.imageHint')}</Text>
+          <View
+            style={[
+              styles.imageRow,
+              { backgroundColor: t.colors.surface, borderColor: t.colors.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.formThumb,
+                { borderColor: t.colors.border, backgroundColor: t.colors.bg },
+              ]}
+            >
+              {imageBusy === 'draft' ? (
+                <ActivityIndicator
+                  accessibilityLabel={tr('svc.imageUploading')}
+                  accessibilityRole="progressbar"
+                />
+              ) : draft.imageUrl.trim() ? (
+                <Image source={{ uri: draft.imageUrl.trim() }} style={styles.formThumbImg} />
+              ) : (
+                <Ionicons name="image-outline" size={28} color={t.colors.textFaint} />
+              )}
+            </View>
+            <View style={styles.imageBtns}>
+              <Button
+                label={tr('team.fromGallery')}
+                variant="secondary"
+                icon="image-outline"
+                onPress={() => {
+                  void (async () => {
+                    const asset = await pickFromLibrary();
+                    if (asset) await applyDraftImage(asset);
+                  })();
+                }}
+              />
+              <Button
+                label={tr('team.takePhoto')}
+                variant="secondary"
+                icon="camera-outline"
+                onPress={() => {
+                  void (async () => {
+                    const asset = await takeWithCamera();
+                    if (asset) await applyDraftImage(asset);
+                  })();
+                }}
+              />
+              {draft.imageUrl.trim() ? (
+                <Button
+                  label={tr('svc.imageRemove')}
+                  variant="secondary"
+                  icon="trash-outline"
+                  onPress={() => void clearDraftImage()}
+                />
+              ) : null}
+            </View>
+          </View>
         </>
       ) : null}
 
@@ -337,41 +565,71 @@ function BusinessServicesScreen() {
               },
             ]}
           >
-            <Pressable accessibilityRole="button" onPress={() => startEdit(s)} style={styles.rowText}>
-              <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
-              {s.description ? (
-                <Text style={[styles.rowDesc, { color: t.colors.textMuted }]} numberOfLines={2}>
-                  {s.description}
+            <View style={styles.rowMain}>
+              <Pressable accessibilityRole="button" onPress={() => startEdit(s)} style={styles.rowText}>
+                <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
+                {s.description ? (
+                  <Text style={[styles.rowDesc, { color: t.colors.textMuted }]} numberOfLines={2}>
+                    {s.description}
+                  </Text>
+                ) : null}
+                <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
+                  {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
+                  {s.active ? '' : ` · ${tr('svc.inactive')}`}
                 </Text>
-              ) : null}
-              <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
-                {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
-                {s.active ? '' : ` · ${tr('svc.inactive')}`}
-              </Text>
-            </Pressable>
-            <View style={styles.rowRight}>
-              <Pressable onPress={() => void moveService(s, -1)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.moveUp')}>
-                <Ionicons name="arrow-up" size={18} color={t.colors.textMuted} />
               </Pressable>
-              <Pressable onPress={() => void moveService(s, 1)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.moveDown')}>
-                <Ionicons name="arrow-down" size={18} color={t.colors.textMuted} />
-              </Pressable>
-              <Pressable onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.deleteHard')}>
-                <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
-              </Pressable>
-              <Toggle
-                value={s.active}
-                onValueChange={() => void toggleActive(s)}
-                accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
-              />
-              <Pressable onPress={() => startEdit(s)} accessibilityRole="button" android_ripple={{ color: t.colors.accentSoft, borderless: true }} style={styles.iconBtn} accessibilityLabel={tr('common.edit')}>
-                <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
-              </Pressable>
+              <View style={styles.rowActions}>
+                <Pressable
+                  onPress={() => setPendingDeleteId(pendingDeleteId === s.id ? null : s.id)}
+                  accessibilityRole="button"
+                  android_ripple={{ color: t.colors.accentSoft, borderless: true }}
+                  style={styles.iconBtn}
+                  accessibilityLabel={tr('common.deleteHard')}
+                >
+                  <Ionicons name="trash-outline" size={18} color={t.colors.danger} />
+                </Pressable>
+                <Toggle
+                  value={s.active}
+                  onValueChange={() => void toggleActive(s)}
+                  accessibilityLabel={s.active ? tr('svc.disable') : tr('svc.enable')}
+                />
+              </View>
             </View>
+            <Pressable
+              onPress={() => openImageActions(s)}
+              accessibilityRole="button"
+              accessibilityLabel={s.image_url ? tr('svc.imageOptions') : tr('svc.imageAdd')}
+              style={[
+                styles.thumb,
+                { borderColor: t.colors.border, backgroundColor: t.colors.bg },
+              ]}
+            >
+              {imageBusy === s.id ? (
+                <ActivityIndicator accessibilityLabel={tr('svc.imageUploading')} />
+              ) : s.image_url ? (
+                <Image source={{ uri: s.image_url }} style={styles.thumbImg} />
+              ) : (
+                <Ionicons name="image-outline" size={22} color={t.colors.textFaint} />
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => startEdit(s)}
+              accessibilityRole="button"
+              android_ripple={{ color: t.colors.accentSoft, borderless: true }}
+              style={styles.iconBtn}
+              accessibilityLabel={tr('common.edit')}
+            >
+              <Ionicons name="chevron-forward" size={18} color={t.colors.textFaint} />
+            </Pressable>
             {pendingDeleteId === s.id ? (
               <View style={styles.confirmBox}>
                 <Text style={[styles.rowMeta, { color: t.colors.danger }]}>{tr('common.deleteConfirm')}</Text>
-                <Button label={tr('common.deleteHard')} size="sm" variant="danger" onPress={() => void deleteService(s)} />
+                <Button
+                  label={tr('common.deleteHard')}
+                  size="sm"
+                  variant="danger"
+                  onPress={() => void deleteService(s)}
+                />
               </View>
             ) : null}
           </View>
@@ -392,13 +650,53 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
   },
-  rowText: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 140, gap: 2 },
+  rowMain: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 140, gap: spacing.sm },
+  rowText: { gap: 2 },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowDesc: { fontSize: fontSize.sm, marginTop: 2 },
   rowMeta: { fontSize: fontSize.sm },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  iconBtn: { width: 44, height: spacing.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  iconBtn: {
+    width: 44,
+    height: spacing.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
+  thumb: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbImg: { width: '100%', height: '100%' },
   confirmBox: { width: '100%', gap: spacing.sm, marginTop: spacing.sm },
+  imageLabel: { fontSize: fontSize.sm, fontWeight: '700', marginTop: spacing.sm },
+  imageHint: { fontSize: fontSize.sm, marginBottom: spacing.sm },
+  imageRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
+  formThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formThumbImg: { width: '100%', height: '100%' },
+  imageBtns: { flex: 1, minWidth: 160, gap: spacing.sm },
 });
 
 export default managerOnly(BusinessServicesScreen);

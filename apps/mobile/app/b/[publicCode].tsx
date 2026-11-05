@@ -1229,20 +1229,27 @@ export default function PublicBookScreen() {
                     },
                   ]}
                 >
-                  <Text style={[styles.serviceName, { color: on ? t.colors.onAccent : t.colors.text }]}>
-                    {s.name}
-                  </Text>
-                  {s.description ? (
-                    <Text
-                      style={[styles.serviceDesc, { color: on ? t.colors.onAccent : t.colors.textMuted }]}
-                      numberOfLines={3}
-                    >
-                      {s.description}
-                    </Text>
-                  ) : null}
-                  <Text style={[styles.serviceMeta, { color: on ? t.colors.onAccent : t.colors.textMuted }]}>
-                    {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
-                  </Text>
+                  <View style={styles.serviceChipInner}>
+                    {s.image_url ? (
+                      <Image source={{ uri: s.image_url }} style={styles.serviceThumb} />
+                    ) : null}
+                    <View style={styles.serviceChipText}>
+                      <Text style={[styles.serviceName, { color: on ? t.colors.onAccent : t.colors.text }]}>
+                        {s.name}
+                      </Text>
+                      {s.description ? (
+                        <Text
+                          style={[styles.serviceDesc, { color: on ? t.colors.onAccent : t.colors.textMuted }]}
+                          numberOfLines={3}
+                        >
+                          {s.description}
+                        </Text>
+                      ) : null}
+                      <Text style={[styles.serviceMeta, { color: on ? t.colors.onAccent : t.colors.textMuted }]}>
+                        {formatDuration(s.duration_minutes)} · {formatRon(s.price)}
+                      </Text>
+                    </View>
+                  </View>
                 </Pressable>
               );
             })}
@@ -1695,6 +1702,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: 2,
   },
+  serviceChipInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  serviceChipText: { flex: 1, gap: 2 },
+  serviceThumb: { width: 52, height: 52, borderRadius: radius.sm },
   serviceName: { fontSize: fontSize.md, fontWeight: '700' },
   serviceDesc: { fontSize: fontSize.sm, opacity: 0.9 },
   serviceMeta: { fontSize: fontSize.sm },

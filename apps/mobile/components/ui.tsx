@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ComponentProps } from 'react';
 
+import { PageLoader } from '@/components/PageLoader';
 import { useColorScheme } from '@/components/useColorScheme';
 import { buildTheme, fontSize, palette, radius, spacing, type Theme } from '@/constants/theme';
 import { computeFooterPaddingBottom } from '@/lib/keyboardPad';
@@ -1004,7 +1005,7 @@ export function LoadingScreen({ label }: { label?: string }) {
   const t = useTheme();
   return (
     <View style={[styles.centered, { backgroundColor: t.colors.bg }]}>
-      <ActivityIndicator size="large" color={t.colors.accent} accessibilityLabel={trKey('common.loading')} accessibilityRole="progressbar" />
+      <PageLoader accessibilityLabel={label ?? trKey('common.loading')} />
       <Text style={[styles.loadingText, { color: t.colors.textMuted }]}>{label ?? trKey('common.loading')}</Text>
     </View>
   );

@@ -92,6 +92,8 @@ export type Service = {
   rebook_interval_days?: number | null;
   active: boolean;
   sort_order: number;
+  /** Public URL of optional service photo; null/undefined = none. */
+  image_url?: string | null;
   created_at: string;
   updated_at: string;
 };
