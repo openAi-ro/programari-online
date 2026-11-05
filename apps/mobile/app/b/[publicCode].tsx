@@ -1544,14 +1544,15 @@ function SpecialistCover({
         >
           {slides.map((s) => {
             const img = (
-              <Image
-                source={s.source}
-                style={{ width, height }}
-                resizeMode="cover"
-                accessibilityIgnoresInvertColors
-                pointerEvents="none"
-                onError={s.url ? () => onImageError(s.url as string) : undefined}
-              />
+              <View pointerEvents="none" style={{ width, height }}>
+                <Image
+                  source={s.source}
+                  style={{ width, height }}
+                  resizeMode="cover"
+                  accessibilityIgnoresInvertColors
+                  onError={s.url ? () => onImageError(s.url as string) : undefined}
+                />
+              </View>
             );
             if (!s.url || !onImagePress) {
               return <View key={s.key}>{img}</View>;
@@ -1612,14 +1613,15 @@ function LatestCarousel({
               onPress={() => onWorkPress(slide.url)}
               style={{ width }}
             >
-              <Image
-                source={{ uri: slide.url }}
-                style={{ width, height: 240 }}
-                resizeMode="cover"
-                accessibilityIgnoresInvertColors
-                pointerEvents="none"
-                onError={() => onWorkError(slide.url)}
-              />
+              <View pointerEvents="none" style={{ width, height: 240 }}>
+                <Image
+                  source={{ uri: slide.url }}
+                  style={{ width, height: 240 }}
+                  resizeMode="cover"
+                  accessibilityIgnoresInvertColors
+                  onError={() => onWorkError(slide.url)}
+                />
+              </View>
             </Pressable>
           ))}
         </ScrollView>
