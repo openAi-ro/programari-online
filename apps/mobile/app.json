@@ -116,7 +116,10 @@
             [
                 "expo-splash-screen",
                 {
-                    "backgroundColor": "#f1f5f9"
+                    "backgroundColor": "#f1f5f9",
+                    "image": "./assets/images/splash-blank.png",
+                    "imageWidth": 200,
+                    "resizeMode": "contain"
                 }
             ],
             "react-native-maps"
