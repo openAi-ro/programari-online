@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { Badge, Button, ButtonRow, useTheme } from '@/components/ui';
-import { ServiceImageCarousel, type ServiceImage } from '@/components/ServiceImageCarousel';
+import { ClientAvatar } from '@/components/ClientAvatar';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { hasEnded } from '@/lib/appointmentTime';
 import { statusMeta } from '@/lib/status';
@@ -89,8 +89,8 @@ type Props = {
   movedAck?: { busy: boolean; onAck: () => void };
   /** v87 (business): anulare cu motiv, vazut de client. */
   onBusinessCancel?: (reason: string) => void;
-  /** Cereri (business): pozele serviciilor programarii, in ordinea serviciilor; goala = fara miniatura. */
-  serviceImages?: ServiceImage[];
+  /** Cereri (business): cercul clientului (poza de profil, altfel inițiale). Lipsă = fără cerc. */
+  clientAvatar?: { uri: string | null; name: string | null; seed: string };
 };
 
 export function AppointmentCard({
@@ -135,7 +135,7 @@ export function AppointmentCard({
   currentShortLabel,
   movedAck,
   onBusinessCancel,
-  serviceImages,
+  clientAvatar,
 }: Props) {
   const t = useTheme();
   const tr = useT();
@@ -234,8 +234,7 @@ export function AppointmentCard({
     }
   }
 
-  const thumbImages = serviceImages ?? [];
-  const withThumb = thumbImages.length > 0;
+  const withThumb = Boolean(clientAvatar);
   const headInfo = (
     <HeadWrap style={withThumb ? styles.headTextCol : styles.headText} {...(compact ? { onPress: () => setExpanded((v) => !v), accessibilityRole: 'button' as const } : {})}>
       {businessName ? (
@@ -329,7 +328,7 @@ export function AppointmentCard({
             </View>
             <View style={styles.topRight}>
               {statusBadge}
-              <ServiceImageCarousel images={thumbImages} />
+              {clientAvatar ? <ClientAvatar {...clientAvatar} /> : null}
             </View>
           </View>
         ) : (
