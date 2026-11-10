@@ -287,7 +287,8 @@ export function AppointmentCard({
       {contact ? (
         <View style={styles.contactRow}>
           <Ionicons name="person-outline" size={13} color={t.colors.textFaint} />
-          <Text style={[styles.contact, { color: t.colors.textMuted }]} numberOfLines={1}>
+          {/* Numele și emailul încap pe 2 rânduri la 390 px, fără „…” (R-5, retest 3.24). */}
+          <Text style={[styles.contact, { color: t.colors.textMuted }]} numberOfLines={2}>
             {contact}
           </Text>
         </View>

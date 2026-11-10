@@ -227,7 +227,8 @@ function toneLabelKey(tone: DayTone, business: boolean): TrKey {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, gap: spacing.xs },
+  // Padding orizontal mai mic: 7 zile × 48 px încap și pe un telefon de 390 px (retest 3.24).
+  card: { borderWidth: 1, borderRadius: radius.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, gap: spacing.xs },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -240,7 +241,16 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
   cell: { flex: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
   weekday: { fontSize: fontSize.sm, fontWeight: '700' },
-  day: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // Țintă de 48 px (cât permite coloana pe ecrane foarte înguste).
+  day: {
+    width: '100%',
+    maxWidth: spacing.touchTarget,
+    height: spacing.touchTarget,
+    borderRadius: spacing.touchTarget / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   dayText: { fontSize: fontSize.md },
   dot: { position: 'absolute', top: 2, right: '22%', width: 9, height: 9, borderRadius: 5, borderWidth: 1.5 },
   countBadge: {

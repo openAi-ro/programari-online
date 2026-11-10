@@ -394,7 +394,7 @@ export async function notifyAfterBooking(
   // Excepție: reprogramările (UPDATE) nu sunt acoperite de webhook și își
   // trimit push-ul separat, cu reason 'rescheduled'.
   if (appointment.status === 'approved') {
-    const toClient = await invokeDecisionNotify(appointment.id);
+    const toClient = await invokeDecisionNotify(appointment.id, 'client');
     if (!toClient.ok) {
       console.warn('notify-decision after auto-approve failed', toClient.error);
       return { ok: false, error: toClient.error };

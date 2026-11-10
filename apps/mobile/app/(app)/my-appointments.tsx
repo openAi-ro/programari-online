@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Linking, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Linking, Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
@@ -278,6 +278,41 @@ export default function MyAppointmentsScreen() {
       load();
     }, [load])
   );
+
+  // Live (F-E, retest 3.24): o programare adăugată / mutată / anulată de salon apare fără reload.
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+    void getCurrentUser().then((user) => {
+      if (!user || stopped) return;
+      channel = supabase
+        .channel(`my-appointments-${user.id}-${Date.now()}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'appointments', filter: `client_user_id=eq.${user.id}` },
+          () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => void load(), 400);
+          }
+        )
+        .subscribe();
+    });
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') void load();
+    };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisible);
+    }
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      if (channel) void supabase.removeChannel(channel);
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisible);
+      }
+    };
+  }, [load]);
 
   function localLabel(a: Row): string {
     const tz = a.business_profiles?.timezone ?? 'Europe/Bucharest';

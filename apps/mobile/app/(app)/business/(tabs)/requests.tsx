@@ -316,7 +316,7 @@ export default function BusinessRequestsScreen() {
     // Cardul se actualizeaza imediat; notificarea si reincarcarea vin dupa.
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
 
-    const notifyWarning = clientNotifyWarning(await invokeDecisionNotify(id));
+    const notifyWarning = clientNotifyWarning(await invokeDecisionNotify(id, 'business'));
 
     if (status === 'rejected') {
       notifyWaitlistForRow(rows.find((r) => r.id === id));

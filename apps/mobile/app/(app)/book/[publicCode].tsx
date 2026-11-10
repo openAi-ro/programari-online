@@ -70,7 +70,8 @@ import { fireAndForget } from '@/lib/fireAndForget';
 import { getCurrentUser } from '@/lib/currentUser';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
-import { clearDraft, readDraft, restorableDraft, writeDraft } from '@/lib/bookingDraft';
+import { clearDraft, defaultBookingDate, readDraft, restorableDraft, writeDraft } from '@/lib/bookingDraft';
+import { userFacingError } from '@/lib/networkError';
 import { createRequestTracker } from '@/lib/latestRequest';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
@@ -155,6 +156,9 @@ export default function BookScreen() {
   const [stepsReady, setStepsReady] = useState(false);
   // Web: ora aleasă înainte de refresh, de re-selectat când se încarcă orele (Auditor F-8).
   const restoreSlotRef = useRef<string | null>(null);
+  /** Eroarea încărcării orelor (separată de mesajul acțiunilor, ca reîncărcarea să nu-l șteargă). */
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [repeatCount, setRepeatCount] = useState(1);
   const [tipRon, setTipRon] = useState(0);
   const [tipCustom, setTipCustom] = useState('');
@@ -219,8 +223,7 @@ export default function BookScreen() {
       staffAny ? eligibleStaff : selectedStaff ? [selectedStaff] : [],
       durationMinutes
     );
-    const kept = pickedDate.current;
-    setDateLocal(kept && kept >= first ? kept : first);
+    setDateLocal(defaultBookingDate(pickedDate.current, first));
   }, [business, stepsReady, selectedStaff, staffAny, eligibleStaff, durationMinutes]);
 
   const hasStaffChoice = staffList.length > 1;
@@ -258,6 +261,7 @@ export default function BookScreen() {
         .eq('public_code', code)
         .maybeSingle();
       if (err) {
+        setBusiness(null);
         setError(err.message, { sticky: true });
         setLoading(false);
         return;
@@ -471,14 +475,15 @@ export default function BookScreen() {
         if (draft.serviceIds.length > 0) setServiceIds(draft.serviceIds);
         setStaffAny(draft.staffAny);
         if (draft.staffId) setStaffId(draft.staffId);
-        setDateLocal(draft.dateLocal);
+        // Ziua din draft e o alegere a clientului: efectul datei implicite o respectă (R-1).
+        pickedDate.current = draft.dateLocal;
         restoreSlotRef.current = draft.slotStartUtc;
       }
       setStep(draft && built.includes(draft.step) ? draft.step : prefilled || isReschedule ? 'date' : built[0] ?? 'date');
       setStepsReady(true);
       setLoading(false);
     })();
-  }, [publicCode, rescheduleId, serviceIdParam, staffIdParam, isReschedule]);
+  }, [publicCode, rescheduleId, serviceIdParam, staffIdParam, isReschedule, loadAttempt]);
 
   // Doar ultima încărcare de sloturi are voie să scrie starea (tastarea datei cifră cu cifră
   // pornește câte o cerere pe dată intermediară; un răspuns vechi nu suprascrie unul nou).
@@ -489,7 +494,8 @@ export default function BookScreen() {
     const req = slotsRequests.start();
     setSlotsLoading(true);
     setSelected(null);
-    setError(null);
+    // Eroarea orelor e separată: o reîncărcare nu mai șterge mesajul unei acțiuni (ex. ora ocupată).
+    setSlotsError(null);
     setMessage(null);
     setOnWaitlist(false);
 
@@ -505,7 +511,7 @@ export default function BookScreen() {
       );
       if (!slotsRequests.isCurrent(req)) return;
       const failed = results.find((r) => r.error);
-      if (failed?.error) setError(failed.error);
+      if (failed?.error) setSlotsError(userFacingError(failed.error));
       setStaffSlots(eligibleStaff.map((member, i) => ({ member, slots: results[i].slots })));
       setSlots([]);
       setSlotsLoading(false);
@@ -529,7 +535,7 @@ export default function BookScreen() {
     if (!slotsRequests.isCurrent(req)) return;
 
     if (err) {
-      setError(err);
+      setSlotsError(userFacingError(err));
       setSlots([]);
       setStaffSlots([]);
       setSlotsLoading(false);
@@ -696,11 +702,10 @@ export default function BookScreen() {
 
     setBooking(false);
     if (err) {
-      // loadSlots() golește eroarea, deci mesajul se pune după reîncărcare (test încrucișat A F-6).
-      await loadSlots();
       // Conflict de cursă: ora dispăruse între încărcare și trimitere. Clientul vede mesajul
-      // explicit și poate alege din lista proaspătă, fără o oră fantomă pe confirmare.
+      // explicit pe pasul de ore, unde lista se reîncarcă singură (efectul pe `step`).
       if (err.includes('slot_taken')) setStep('slot');
+      else await loadSlots();
       setError(mapBookingRpcError(err), { sticky: true });
       return;
     }
@@ -866,7 +871,20 @@ export default function BookScreen() {
         <ErrorState
           title={tr('book.loadFail')}
           description={error ?? tr('auth.cbUnknownError')}
-          action={<Button label={tr('common.back')} variant="secondary" onPress={goBack} />}
+          action={
+            <>
+              <Button
+                label={tr('common.retry')}
+                icon="refresh-outline"
+                onPress={() => {
+                  setError(null);
+                  setLoading(true);
+                  setLoadAttempt((n) => n + 1);
+                }}
+              />
+              <Button label={tr('common.back')} variant="secondary" onPress={goBack} />
+            </>
+          }
         />
       </Screen>
     );
@@ -891,10 +909,28 @@ export default function BookScreen() {
             ? Boolean(selected)
             : Boolean(selected);
 
+  const shownError =
+    error || slotsError ? (
+      <>
+        <Callout
+          onClose={() => {
+            setError(null);
+            setSlotsError(null);
+          }}
+          tone="danger"
+        >
+          {error ?? slotsError}
+        </Callout>
+        {slotsError && !error ? (
+          <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void loadSlots()} />
+        ) : null}
+      </>
+    ) : null;
+
   const footer =
     step === 'confirm' ? (
       <>
-        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+        {shownError}
         {message ? <Callout onClose={() => setMessage(null)} tone="success">{message}</Callout> : null}
         <Button
           label={
@@ -928,7 +964,7 @@ export default function BookScreen() {
       </>
     ) : step === 'slot' && !slotsLoading && freeCount === 0 && !isReschedule ? (
       <>
-        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+        {shownError}
         <Callout tone="accent" title={waitlistJoinTitle()}>
           {onWaitlist ? waitlistOnList() : waitlistJoinBody()}
         </Callout>
@@ -945,7 +981,7 @@ export default function BookScreen() {
       </>
     ) : (
       <>
-        {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
+        {shownError}
         <Button
           label={step === 'slot' ? tr('book.continueConfirm') : tr('book.continue')}
           icon="arrow-forward"

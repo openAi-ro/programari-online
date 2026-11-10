@@ -18,6 +18,7 @@ import {
   messageCancelledByBusiness,
   messageRescheduleAccepted,
   messageRescheduleDeclined,
+  cancelNoticeAlreadySent,
   notifyClientChannels,
   notifyLocale,
   parseNotifyLang,
@@ -145,6 +146,19 @@ Deno.serve(async (req) => {
 
   const toBusiness = event === 'client_accepted' || event === 'client_declined';
   if (!toBusiness && !wantsDecision) return jsonResponse({ ok: true, skipped: 'opted_out' });
+  // F-C: anularea de către salon pleacă indiferent de „Anunță clientul”, dar o singură dată.
+  if (event === 'cancelled') {
+    const { data: sentBefore } = await admin
+      .from('notification_log')
+      .select('status')
+      .eq('appointment_id', live.id)
+      .eq('type', 'RESCHEDULE_CANCELLED')
+      .eq('channel', 'email')
+      .limit(5);
+    if (cancelNoticeAlreadySent((sentBefore ?? []) as { status: string | null }[])) {
+      return jsonResponse({ ok: true, skipped: 'already_sent' });
+    }
+  }
 
   let results: unknown = { skipped: true };
   let pushSent = 0;

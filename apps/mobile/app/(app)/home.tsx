@@ -795,7 +795,8 @@ function ClientHome({
         />
       )}
 
-      <NearbyCarousel />
+      {/* Offline: o singură eroare pe Acasă (cea de mai sus, cu Reîncearcă), nu două (retest 3.24). */}
+      {loadError ? null : <NearbyCarousel />}
 
       <Banner
         tone="accent"

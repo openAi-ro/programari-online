@@ -409,6 +409,23 @@ export default function BrowseScreen() {
               />
             </View>
 
+            {/* Offline: eroarea stă deasupra categoriilor, vizibilă fără derulare (retest 3.24). */}
+            {error ? (
+              <Callout tone="warning" title={tr('browse.partialList')}>
+                {tr('browse.partialDesc')}
+              </Callout>
+            ) : null}
+            {error ? (
+              <Button
+                label={tr('common.retry')}
+                variant="secondary"
+                icon="refresh-outline"
+                onPress={() => {
+                  setLoading(true);
+                  void load({});
+                }}
+              />
+            ) : null}
             <CategoryGrid
               counts={error && rows.length === 0 ? null : categoryCounts}
               onSelect={onSelectCategory}
@@ -453,22 +470,6 @@ export default function BrowseScreen() {
               </View>
             ) : null}
 
-            {error ? (
-              <Callout tone="warning" title={tr('browse.partialList')}>
-                {tr('browse.partialDesc')}
-              </Callout>
-            ) : null}
-            {error ? (
-              <Button
-                label={tr('common.retry')}
-                variant="secondary"
-                icon="refresh-outline"
-                onPress={() => {
-                  setLoading(true);
-                  void load({});
-                }}
-              />
-            ) : null}
           </View>
         </ScrollView>
       </Screen>

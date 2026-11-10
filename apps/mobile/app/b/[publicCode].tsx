@@ -59,6 +59,7 @@ import { isEmbedParam } from '@/lib/bookingButton';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { bookingDateRange } from '@/lib/bookingCalendar';
 import { bookingStepNumbers } from '@/lib/bookingSteps';
+import { clearDraft, defaultBookingDate, readDraft, restorableDraft, writeDraft } from '@/lib/bookingDraft';
 import {
   staffForServices,
   staffOffersServices,
@@ -147,6 +148,10 @@ export default function PublicBookScreen() {
   >([]);
   const [logoFailed, setLogoFailed] = useState(false);
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
+  /** Ziua aleasă de client (sau din draftul de după refresh); datele implicite o respectă. */
+  const pickedDate = useRef<string | null>(null);
+  /** Ora din draft, re-selectată doar dacă e încă liberă (R-1, refresh pe pagina publică). */
+  const restoreSlotRef = useRef<string | null>(null);
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -203,7 +208,7 @@ export default function PublicBookScreen() {
     );
     // Linkul din emailul „Loc eliberat” deschide direct ziua respectivă (?date=YYYY-MM-DD).
     const wanted = typeof requestedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : null;
-    setDateLocal(wanted && wanted >= first ? wanted : first);
+    setDateLocal(defaultBookingDate(wanted ?? pickedDate.current, first));
   }, [business, loading, selectedStaff, eligibleStaff, durationMinutes, requestedDate]);
 
   useEffect(() => {
@@ -295,6 +300,23 @@ export default function PublicBookScreen() {
         offered = staffServicesMap(offeredRows as StaffServiceRow[] | null);
       }
       setStaffServices(offered);
+      // Refresh / revenire după login: serviciile, specialistul, ziua și ora rămân (30 min, tabul curent).
+      const draft =
+        Platform.OS === 'web'
+          ? restorableDraft(readDraft(), {
+              code,
+              now: Date.now(),
+              todayYmd: toYmd(new Date()),
+              serviceIds: list.map((x) => x.id),
+              staffIds: team.map((m) => m.id),
+            })
+          : null;
+      if (draft) {
+        if (draft.serviceIds.length > 0) setServiceIds(draft.serviceIds);
+        setStaffId(draft.staffAny ? null : draft.staffId);
+        pickedDate.current = draft.dateLocal;
+        restoreSlotRef.current = draft.slotStartUtc;
+      }
       const phones: Record<string, string> = {};
       for (const p of (Array.isArray(phoneRows) ? phoneRows : []) as { staff_id: string; phone: string }[]) {
         if (p?.staff_id && p.phone) phones[p.staff_id] = p.phone;
@@ -423,6 +445,29 @@ export default function PublicBookScreen() {
     void loadSlots();
   }, [loadSlots]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !business || loading || catalogFailed) return;
+    writeDraft({
+      code,
+      savedAt: Date.now(),
+      serviceIds,
+      staffId,
+      staffAny: !staffId,
+      dateLocal,
+      step: selected ? 'confirm' : 'date',
+      slotStartUtc: !anyMode && selected ? selected.startUtc : null,
+    });
+  }, [anyMode, business, catalogFailed, code, dateLocal, loading, selected, serviceIds, staffId]);
+
+  // După refresh: ora aleasă înainte, dacă e încă liberă.
+  useEffect(() => {
+    const want = restoreSlotRef.current;
+    if (!want || anyMode || slotsLoading || slots.length === 0) return;
+    restoreSlotRef.current = null;
+    const found = slots.find((x) => x.startUtc === want);
+    if (found) setSelected(found);
+  }, [anyMode, slots, slotsLoading]);
+
   // Titlul din browser și limba documentului urmează limba paginii, nu rămân fixe pe română.
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined' || !business) return;
@@ -531,6 +576,7 @@ export default function PublicBookScreen() {
       return;
     }
     const appointment = created;
+    clearDraft();
     let payError: string | null = null;
     if (appointment?.id) {
       fireAndForget(notifyAfterBooking(appointment), 'notify after book failed');
@@ -617,6 +663,7 @@ export default function PublicBookScreen() {
       await reloadSlots();
       return;
     }
+    clearDraft();
     setSelected(null);
     setGuestName('');
     setGuestPhone('');
@@ -1302,6 +1349,7 @@ export default function PublicBookScreen() {
             value={dateLocal}
             onChange={(ymd) => {
               setSelected(null);
+              pickedDate.current = ymd;
               setDateLocal(ymd);
             }}
             minYmd={minYmd}

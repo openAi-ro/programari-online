@@ -141,7 +141,7 @@ export async function sendEmail(
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        sender: { name: 'Programari', email: Deno.env.get('EMAIL_FROM') ?? 'programari@promixt.ro' },
+        sender: { name: 'Programări', email: Deno.env.get('EMAIL_FROM') ?? 'programari@promixt.ro' },
         to: [{ email: to }],
         subject,
         textContent: text,
@@ -791,6 +791,14 @@ export function messageRejected(
 }
 
 /**
+ * Fusul orar apare în text doar pentru saloanele din afara României: „(Europe/Bucharest)” e un
+ * detaliu tehnic pentru un client din România (retest 3.24, P8).
+ */
+export function zoneNote(timezone: string): string {
+  return !timezone || timezone === 'Europe/Bucharest' ? '' : ` (${timezone})`;
+}
+
+/**
  * "Soon" reminder: kind '1h' when it goes out ~1 hour before the start, 'catchup' for late
  * bookings that get it closer to the start (text then names the time, not a duration).
  * WhatsApp uses the REMINDER_1H template (generic text: business + time); REMINDER_SOON is the
@@ -808,25 +816,25 @@ export function messageReminder(
     if (kind === 'catchup') {
       return {
         subject: `Booking reminder — today at ${timeLocal}`,
-        text: `Hi! Reminder: you have a booking at ${businessName} soon, today at ${timeLocal} (${timezone}).`,
+        text: `Hi! Reminder: you have a booking at ${businessName} soon, today at ${timeLocal}${zoneNote(timezone)}.`,
         wa,
       };
     }
     return {
       subject: 'Booking reminder — in 1 hour',
-      text: `Hi! You have a booking at ${businessName} in 1 hour, at ${timeLocal} (${timezone}).`,
+      text: `Hi! You have a booking at ${businessName} in 1 hour, at ${timeLocal}${zoneNote(timezone)}.`,
       wa,
     };
   }
   if (kind === 'catchup') {
     return {
-      subject: `Reminder programare — azi la ora ${timeLocal}`,
-      text: `Salut! Îți reamintim că ai o programare la ${businessName} în curând, azi la ora ${timeLocal} (${timezone}).`,
+      subject: `Reamintire programare — azi la ora ${timeLocal}`,
+      text: `Salut! Îți reamintim că ai o programare la ${businessName} în curând, azi la ora ${timeLocal}${zoneNote(timezone)}.`,
       wa,
     };
   }
-  const text = `Salut! Ai o programare la ${businessName} într-o oră, la ora ${timeLocal} (${timezone}).`;
-  return { subject: 'Reminder programare — într-o oră', text, wa };
+  const text = `Salut! Ai o programare la ${businessName} într-o oră, la ora ${timeLocal}${zoneNote(timezone)}.`;
+  return { subject: 'Reamintire programare — într-o oră', text, wa };
 }
 
 export function messageReminder24h(
@@ -840,11 +848,11 @@ export function messageReminder24h(
     return {
       wa,
       subject: 'Booking reminder — 24 hours',
-      text: `Hi! You have a booking at ${businessName} tomorrow at ${timeLocal} (${timezone}). Confirm attendance from the app, under My bookings.`,
+      text: `Hi! You have a booking at ${businessName} tomorrow at ${timeLocal}${zoneNote(timezone)}. Confirm attendance from the app, under My bookings.`,
     };
   }
-  const text = `Salut! Ai o programare la ${businessName} mâine la ${timeLocal} (${timezone}). Confirmă prezența din aplicație, la Programările mele.`;
-  return { subject: 'Reminder programare — 24 de ore', text, wa };
+  const text = `Salut! Ai o programare la ${businessName} mâine la ${timeLocal}${zoneNote(timezone)}. Confirmă prezența din aplicație, la Programările mele.`;
+  return { subject: 'Reamintire programare — mâine', text, wa };
 }
 
 export function messageRebook(
@@ -862,8 +870,8 @@ export function messageRebook(
   }
   return {
     wa,
-    subject: 'E timpul sa revii',
-    text: `Salut! A venit timpul pentru ${serviceName} la ${businessName}. Programeaza urmatoarea vizita din aplicatie.`,
+    subject: 'E timpul să revii',
+    text: `Salut! A venit timpul pentru ${serviceName} la ${businessName}. Programează următoarea vizită din aplicație.`,
   };
 }
 
@@ -883,10 +891,10 @@ export function messagePostpone(
     return {
       wa,
       subject: `Booking postponed by ${hoursLabel}`,
-      text: `The booking at ${businessName} is postponed by ${hoursLabel}. New time: ${newTimeLocal} (${timezone}).`,
+      text: `The booking at ${businessName} is postponed by ${hoursLabel}. New time: ${newTimeLocal}${zoneNote(timezone)}.`,
     };
   }
-  const text = `Programarea la ${businessName} se amână cu ${hoursLabel}. Noua oră: ${newTimeLocal} (${timezone}).`;
+  const text = `Programarea la ${businessName} se amână cu ${hoursLabel}. Noua oră: ${newTimeLocal}${zoneNote(timezone)}.`;
   return { subject: `Programare amânată cu ${hoursLabel}`, text, wa };
 }
 
@@ -901,11 +909,11 @@ export function messageMoved(
     return {
       wa,
       subject: 'Booking moved',
-      text: `Your booking at ${businessName} was moved. New time: ${newTimeLocal} (${timezone}).`,
+      text: `Your booking at ${businessName} was moved. New time: ${newTimeLocal}${zoneNote(timezone)}.`,
     };
   }
-  const text = `Programarea ta la ${businessName} a fost mutata. Noua ora: ${newTimeLocal} (${timezone}).`;
-  return { subject: 'Programare mutata', text, wa };
+  const text = `Programarea ta la ${businessName} a fost mutată. Noua oră: ${newTimeLocal}${zoneNote(timezone)}.`;
+  return { subject: 'Programare mutată', text, wa };
 }
 
 export function messageTest(lang: NotifyLang = 'ro'): { subject: string; text: string } {
@@ -916,8 +924,8 @@ export function messageTest(lang: NotifyLang = 'ro'): { subject: string; text: s
     };
   }
   const text =
-    'Test Programari: mesajele WhatsApp funcționează. Vei primi confirmări și reminder-uri aici.';
-  return { subject: 'Test WhatsApp Programari', text };
+    'Test Programări: mesajele WhatsApp funcționează. Vei primi aici confirmări și mementouri.';
+  return { subject: 'Test WhatsApp Programări', text };
 }
 
 /** OTP for WhatsApp phone login. */
@@ -931,8 +939,8 @@ export function messageAuthOtp(code: string, lang: NotifyLang = 'ro'): {
       text: `Your Programari code: ${code}. Valid for 15 minutes.`,
     };
   }
-  const text = `Codul tau Programari: ${code}. Valabil 15 minute.`;
-  return { subject: 'Cod autentificare Programari', text };
+  const text = `Codul tău Programări: ${code}. Valabil 15 minute.`;
+  return { subject: 'Cod de autentificare Programări', text };
 }
 
 const RO_MONTHS = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
@@ -1082,6 +1090,20 @@ export function messagePendingExpiredOwner(
   };
 }
 
+/** Motivul fără punctuația de final: șablonul pune el punctul („încheiat..” → „încheiat.”, F-B). */
+export function cancelReasonText(reason: string): string {
+  return reason.trim().replace(/[\s.!?…]+$/u, '');
+}
+
+/**
+ * F-C (decizia lui Rafael, 11.11.2026): când salonul anulează, clientul primește MEREU emailul,
+ * chiar dacă la crearea manuală „Anunță clientul” era oprit (notify_client nu contează aici).
+ * O singură dată pe programare: dacă un email de anulare a plecat deja, nu se mai trimite.
+ */
+export function cancelNoticeAlreadySent(previous: { status: string | null }[]): boolean {
+  return previous.some((r) => r.status != null && r.status !== 'failed' && r.status !== 'stub');
+}
+
 /** Client: the salon cancelled the booking, with its reason. */
 export function messageCancelledByBusiness(
   businessName: string,
@@ -1090,6 +1112,7 @@ export function messageCancelledByBusiness(
   link: string,
   lang: NotifyLang = 'ro'
 ): { subject: string; text: string } {
+  reason = cancelReasonText(reason);
   if (lang === 'en') {
     return {
       subject: 'Booking cancelled by the salon',

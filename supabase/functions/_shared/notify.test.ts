@@ -1,6 +1,13 @@
 // Run: deno test --allow-env --allow-net supabase/functions/_shared/
 import { assert, assertEquals, assertStringIncludes } from 'jsr:@std/assert@1';
 import {
+  messageMoved,
+  messageReminder24h,
+  messageRebook,
+  zoneNote,
+  cancelNoticeAlreadySent,
+  cancelReasonText,
+  messageCancelledByBusiness,
   chatPushBody,
   logNotification,
   messageNewPendingRequest,
@@ -347,4 +354,27 @@ Deno.test('staff new booking: confirmed vs pending, service and date, HTML escap
     'New booking added by the business: c');
   assert(!p.text.includes('Serviciu'));
   assertEquals(messageStaffNewBooking({ businessName: 'S', contact: 'c', pending: false, link: 'l' }, 'en').subject, 'New booking: c');
+});
+
+Deno.test('F-B: motivul cu punct final nu dă „..” în emailul de anulare', () => {
+  assertEquals(cancelReasonText('Programul s-a încheiat. '), 'Programul s-a încheiat');
+  assertEquals(cancelReasonText('Boală!'), 'Boală');
+  const ro = messageCancelledByBusiness('Salon', '13.11 14:00', 'Programul s-a încheiat.', 'https://x', 'ro');
+  assertStringIncludes(ro.text, 'Motiv: Programul s-a încheiat. Alege');
+  assert(!ro.text.includes('..'));
+});
+
+Deno.test('F-C: emailul de anulare pleacă o singură dată pe programare', () => {
+  assertEquals(cancelNoticeAlreadySent([]), false);
+  assertEquals(cancelNoticeAlreadySent([{ status: 'failed' }, { status: 'stub' }]), false);
+  assertEquals(cancelNoticeAlreadySent([{ status: 'accepted' }]), true);
+});
+
+Deno.test('P8: emailurile RO au diacritice și fără „(Europe/Bucharest)”', () => {
+  const moved = messageMoved('Salon', '13.11 14:00', 'Europe/Bucharest', 'ro');
+  assertEquals(moved.subject, 'Programare mutată');
+  assertEquals(moved.text, 'Programarea ta la Salon a fost mutată. Noua oră: 13.11 14:00.');
+  assert(!messageReminder24h('Salon', '14:00', 'Europe/Bucharest', 'ro').text.includes('Europe/'));
+  assertStringIncludes(messageRebook('Salon', 'Tuns', 'ro').text, 'Programează următoarea vizită din aplicație.');
+  assertEquals(zoneNote('Europe/London'), ' (Europe/London)');
 });

@@ -56,6 +56,14 @@ export function restorableDraft(
   };
 }
 
+/**
+ * Ziua afișată când se schimbă specialistul/serviciile: ziua aleasă de client (inclusiv cea
+ * din draft după refresh) rămâne dacă se mai poate rezerva; altfel prima zi rezervabilă.
+ */
+export function defaultBookingDate(picked: string | null, firstBookable: string): string {
+  return picked && picked >= firstBookable ? picked : firstBookable;
+}
+
 function store(): Storage | null {
   try {
     return typeof window !== 'undefined' && window.sessionStorage ? window.sessionStorage : null;

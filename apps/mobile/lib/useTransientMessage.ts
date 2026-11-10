@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { userFacingError } from './networkError';
 
 /** Cât stă pe ecran un mesaj de rezultat (succes / eroare a unei acțiuni) înainte să dispară singur. */
 export const TRANSIENT_MESSAGE_MS = 30_000;
@@ -46,7 +47,8 @@ export function useTransientMessage(): [string | null, ShowMessage] {
   if (!clock.current) clock.current = createTransientClock(() => setMessage(null));
   useEffect(() => () => clock.current?.cancel(), []);
   const show = useCallback<ShowMessage>((next, opts) => {
-    setMessage(next);
+    // Eroarea brută de rețea („TypeError: Failed to fetch”) devine mesajul clar de „fără internet”.
+    setMessage(next ? userFacingError(next) : null);
     if (next) clock.current!.arm(opts?.sticky);
     else clock.current!.cancel();
   }, []);

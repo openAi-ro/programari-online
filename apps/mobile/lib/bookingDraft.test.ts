@@ -2,7 +2,7 @@
  * Run: npx tsx lib/bookingDraft.test.ts  (din apps/mobile)
  * Test încrucișat, Auditor F-8: refresh la confirmare nu mai trimite clientul la pasul 1.
  */
-import { DRAFT_TTL_MS, restorableDraft, type BookingDraft } from './bookingDraft';
+import { DRAFT_TTL_MS, defaultBookingDate, restorableDraft, type BookingDraft } from './bookingDraft';
 
 let passed = 0;
 let failed = 0;
@@ -41,6 +41,12 @@ eq(restorableDraft(raw({ staffId: 'plecat' }), ctx), null, 'specialist scos din 
 eq(restorableDraft(raw({ staffAny: true, staffId: null }), ctx)?.slotStartUtc, null, '„Oricine” → ora se alege din nou');
 eq(restorableDraft('nu e json', ctx), null, 'JSON stricat → nimic');
 eq(restorableDraft(null, ctx), null, 'fără ciornă');
+
+// Retest 3.24, R-1: după refresh ziua din draft (13.11) nu mai sare pe prima zi rezervabilă (azi).
+const restored = restorableDraft(raw({}), ctx);
+eq(defaultBookingDate(restored?.dateLocal ?? null, '2026-11-12'), '2026-11-13', 'ziua din draft rămâne după refresh');
+eq(defaultBookingDate(null, '2026-11-12'), '2026-11-12', 'fără alegere → prima zi rezervabilă');
+eq(defaultBookingDate('2026-11-13', '2026-11-14'), '2026-11-14', 'ziua aleasă nu mai e rezervabilă → prima zi posibilă');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

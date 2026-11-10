@@ -261,7 +261,7 @@ function QuickAddBody({
     // Toggle PORNIT: confirmarea către client (email/WhatsApp) pleacă prin notify-decision.
     if (notify && !isStaffRole) {
       for (const row of appointments) {
-        if (row.id) await invokeDecisionNotify(row.id);
+        if (row.id) await invokeDecisionNotify(row.id, 'business');
       }
     }
     setSaving(false);

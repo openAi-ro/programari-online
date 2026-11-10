@@ -114,50 +114,50 @@ export function DatePickerField({
     </Pressable>
   );
 
-  // Web: input type=date (calendar browser)
+  // Web: input type=date (calendar browser). Inputul stă într-un View simplu, nu într-un buton
+  // dezactivat (role=button + aria-disabled îl făcea „dezactivat” pentru cititoare de ecran și
+  // automatizări; B4, retest 3.24).
   if (Platform.OS === 'web') {
     return (
       <View style={styles.wrap}>
         {shownLabel ? <Text style={[styles.label, { color: t.colors.textMuted }]}>{shownLabel}</Text> : null}
-        {field(
-          <>
-            <Ionicons name="calendar-outline" size={17} color={t.colors.accent} />
-            <input
-              ref={webInput}
-              type="date"
-              defaultValue={value}
-              min={minimumDate ? toYmd(minimumDate) : undefined}
-              max={maximumDate ? toYmd(maximumDate) : undefined}
-              onChange={(e: { target: { value: string } }) => {
-                // Partial years while typing ("0002-…") and dates outside min/max are not forwarded.
-                const issue = dateInputIssue(
-                  e.target.value,
-                  minimumDate ? toYmd(minimumDate) : undefined,
-                  maximumDate ? toYmd(maximumDate) : undefined
-                );
-                if (!issue) onChange(e.target.value);
-                onIssueChange?.(issue);
-              }}
-              onBlur={() => {
-                // Ieșire cu o dată neutilizabilă: dacă ecranul afișează mesajul (onIssueChange),
-                // textul rămâne ca utilizatorul să-l corecteze; altfel revine la ultima dată validă.
-                if (onIssueChange) return;
-                const el = webInput.current;
-                if (el && el.value !== value) el.value = value;
-              }}
-              style={{
-                flex: 1,
-                border: 'none',
-                outline: 'none',
-                fontSize: 16,
-                fontWeight: '600',
-                background: 'transparent',
-                fontFamily: 'inherit',
-                color: t.colors.text,
-              }}
-            />
-          </>
-        )}
+        <View style={[styles.field, { backgroundColor: t.colors.surface, borderColor: t.colors.borderStrong }]}>
+          <Ionicons name="calendar-outline" size={17} color={t.colors.accent} />
+          <input
+            ref={webInput}
+            type="date"
+            defaultValue={value}
+            min={minimumDate ? toYmd(minimumDate) : undefined}
+            max={maximumDate ? toYmd(maximumDate) : undefined}
+            onChange={(e: { target: { value: string } }) => {
+              // Partial years while typing ("0002-…") and dates outside min/max are not forwarded.
+              const issue = dateInputIssue(
+                e.target.value,
+                minimumDate ? toYmd(minimumDate) : undefined,
+                maximumDate ? toYmd(maximumDate) : undefined
+              );
+              if (!issue) onChange(e.target.value);
+              onIssueChange?.(issue);
+            }}
+            onBlur={() => {
+              // Ieșire cu o dată neutilizabilă: dacă ecranul afișează mesajul (onIssueChange),
+              // textul rămâne ca utilizatorul să-l corecteze; altfel revine la ultima dată validă.
+              if (onIssueChange) return;
+              const el = webInput.current;
+              if (el && el.value !== value) el.value = value;
+            }}
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              fontSize: 16,
+              fontWeight: '600',
+              background: 'transparent',
+              fontFamily: 'inherit',
+              color: t.colors.text,
+            }}
+          />
+        </View>
       </View>
     );
   }

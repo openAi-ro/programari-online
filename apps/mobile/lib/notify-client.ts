@@ -1,5 +1,6 @@
 import { trKey } from './i18n';
 import { getLanguageSync } from './language';
+import { notifyLangFor } from './notifyLang';
 import { supabase } from './supabase';
 import type { Appointment } from './types';
 
@@ -11,10 +12,11 @@ type InvokeResult<T = unknown> = {
 
 /** Trigger email/WhatsApp after business approve/reject (fallback dacă webhook-ul lipsește). */
 export async function invokeDecisionNotify(
-  appointmentId: string
+  appointmentId: string,
+  sentBy: 'client' | 'business'
 ): Promise<InvokeResult> {
   const { data, error } = await supabase.functions.invoke('notify-decision', {
-    body: { appointment_id: appointmentId, lang: getLanguageSync() },
+    body: { appointment_id: appointmentId, lang: notifyLangFor(sentBy) },
   });
 
   if (error) {
@@ -50,7 +52,7 @@ export async function invokePostpone(
   hours: number
 ): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-postpone', {
-    body: { appointment_id: appointmentId, hours, lang: getLanguageSync() },
+    body: { appointment_id: appointmentId, hours },
   });
 
   if (error) {
@@ -179,7 +181,11 @@ export async function invokeRescheduleNotify(
   event: 'accepted' | 'declined' | 'cancelled' | 'proposed' | 'client_accepted' | 'client_declined'
 ): Promise<InvokeResult<{ event?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-reschedule', {
-    body: { appointment_id: appointmentId, event, lang: getLanguageSync() },
+    body: {
+      appointment_id: appointmentId,
+      event,
+      lang: notifyLangFor(event === 'client_accepted' || event === 'client_declined' ? 'client' : 'business'),
+    },
   });
   if (error) {
     console.warn('notify-reschedule invoke failed', error.message);
@@ -197,7 +203,7 @@ export async function invokeMoved(
   appointmentId: string
 ): Promise<InvokeResult<{ start_at?: string; end_at?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-moved', {
-    body: { appointment_id: appointmentId, lang: getLanguageSync() },
+    body: { appointment_id: appointmentId },
   });
 
   if (error) {

@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   // Textul ia latimea ramasa; pe ecran ingust actiunile trec pe randul urmator.
   rowText: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 140, gap: 2 },
   rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 'auto' },
-  iconBtn: { width: 44, height: spacing.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  iconBtn: { width: spacing.touchTarget, height: spacing.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   rowName: { fontSize: fontSize.md, fontWeight: '700' },
   rowMeta: { fontSize: fontSize.sm },
 });

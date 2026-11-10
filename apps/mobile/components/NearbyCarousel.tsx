@@ -40,6 +40,7 @@ import {
   type NearbyArea,
 } from '@/lib/nearby';
 import { loadNearbyPrefs, saveNearbyPrefs } from '@/lib/nearbyPrefs';
+import { userFacingError } from '@/lib/networkError';
 import { JUDETE, localitatiPentruJudet } from '@/lib/roGeo';
 
 const LOCATE_TIMEOUT_MS = 8000;
@@ -246,7 +247,7 @@ export function NearbyCarousel() {
           compact
           icon="storefront-outline"
           title={listError ? tr('nearby.loadFail') : tr('nearby.empty')}
-          description={listError ?? tr('nearby.emptyDesc')}
+          description={listError ? userFacingError(listError) : tr('nearby.emptyDesc')}
         />
       ) : (
         <FlatList
