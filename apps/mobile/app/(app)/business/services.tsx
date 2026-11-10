@@ -24,7 +24,6 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import {
-  GALLERY_MAX_WIDTH,
   deleteBusinessMediaImage,
   uploadBusinessMediaImage,
 } from '@/lib/businessMedia';
@@ -136,12 +135,9 @@ function BusinessServicesScreen() {
     });
   }
 
-  async function uploadPickedUri(localUri: string, sourceWidth?: number | null): Promise<string> {
+  async function uploadPickedUri(localUri: string): Promise<string> {
     if (!businessId) throw new Error(trKey('req.notAuthed'));
-    return uploadBusinessMediaImage(localUri, businessId, {
-      maxWidth: GALLERY_MAX_WIDTH,
-      sourceWidth,
-    });
+    return uploadBusinessMediaImage(localUri, businessId);
   }
 
   async function pickFromLibrary(): Promise<ImagePicker.ImagePickerAsset | null> {
@@ -180,7 +176,7 @@ function BusinessServicesScreen() {
     setImageBusy('draft');
     setError(null);
     try {
-      const url = await uploadPickedUri(asset.uri, asset.width);
+      const url = await uploadPickedUri(asset.uri);
       const old = draft.imageUrl.trim();
       setDraft((d) => ({ ...d, imageUrl: url }));
       if (old && old !== url) void deleteBusinessMediaImage(old);
@@ -221,7 +217,7 @@ function BusinessServicesScreen() {
     setImageBusy(s.id);
     setError(null);
     try {
-      const url = await uploadPickedUri(asset.uri, asset.width);
+      const url = await uploadPickedUri(asset.uri);
       await setServiceImageUrl(s, url);
     } catch (e) {
       setError(e instanceof Error ? e.message : trKey('svc.imageFail'));

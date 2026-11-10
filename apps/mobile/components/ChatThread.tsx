@@ -21,7 +21,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { listMessages, markConversationRead, sendAttachment, sendMessage } from '@/lib/chatRpc';
 import { ChatAttachmentThumb, ChatMediaViewer } from '@/components/ChatMedia';
 import { CHAT_VIDEO_MAX_SECONDS, chatMessagePreview, planChatAttachment, type ChatAttachmentKind } from '@/lib/mediaKeys';
+import { IMAGE_MAX_SIDE } from '@/lib/imageSizing';
 import { readLocalFileBytes, signChatFiles, uploadChatFile } from '@/lib/mediaUpload';
+import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import { pickerDurationToMs } from '@/lib/videoRules';
 import { mergeMessages } from '@/lib/chatPaging';
 import { useDictation } from '@/lib/useDictation';
@@ -234,13 +236,17 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     if (attaching || sending) return;
     setAttaching(true); setError(null);
     try {
-      const buffer = await readLocalFileBytes(att.uri, att.ext);
-      const sized = planChatAttachment({ pickerType: att.pickerType, mimeType: att.mime, sizeBytes: buffer.byteLength, durationMs: att.durationMs });
+      // Photos are resized (max 1200px) and re-encoded (WebP on web) before upload; videos go as picked.
+      const file =
+        att.kind === 'image'
+          ? await readLocalImageBytes(att.uri, IMAGE_MAX_SIDE.photo).then((img) => ({ buffer: img.buffer, mime: img.contentType as string, ext: img.ext as string }))
+          : { buffer: await readLocalFileBytes(att.uri, att.ext), mime: att.mime, ext: att.ext };
+      const sized = planChatAttachment({ pickerType: att.pickerType, mimeType: file.mime, sizeBytes: file.buffer.byteLength, durationMs: att.durationMs });
       if (!sized.ok) throw new Error(trKey('chat.attachTooBig'));
-      const uploaded = await uploadChatFile(conversationId, att.ext, buffer, att.mime);
+      const uploaded = await uploadChatFile(conversationId, file.ext, file.buffer, file.mime);
       const { message, error: err } = await sendAttachment(
         conversationId,
-        { key: uploaded.key, kind: att.kind, mime: att.mime, bytes: uploaded.bytes },
+        { key: uploaded.key, kind: att.kind, mime: file.mime, bytes: uploaded.bytes },
         draft
       );
       if (err) setError(err === 'message_too_long' ? trKey('chat.msgTooLong') : trKey('chat.sendError', { err }));

@@ -58,6 +58,7 @@ import {
   isValidRoMobile,
   normalizePhoneE164,
 } from '@/lib/phone';
+import { IMAGE_MAX_SIDE } from '@/lib/imageSizing';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import { uploadPublicMedia } from '@/lib/mediaUpload';
 import { uploadBusinessVideo } from '@/lib/businessVideo';
@@ -398,7 +399,7 @@ export default function SettingsScreen() {
 
 
   async function uploadProfileAvatar(localUri: string, userId: string): Promise<string> {
-    const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
+    const { buffer, contentType, ext } = await readLocalImageBytes(localUri, IMAGE_MAX_SIDE.avatar);
     return uploadPublicMedia('profile-avatars', userId, ext, buffer, contentType);
   }
 
@@ -498,7 +499,7 @@ export default function SettingsScreen() {
 
 
   async function uploadBusinessLogo(localUri: string, bizId: string): Promise<string> {
-    const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
+    const { buffer, contentType, ext } = await readLocalImageBytes(localUri, IMAGE_MAX_SIDE.avatar);
     return uploadPublicMedia('business-logos', bizId, ext, buffer, contentType);
   }
 

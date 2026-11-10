@@ -30,6 +30,7 @@ import { ensureChatConversationForClient } from '@/lib/chatRpc';
 import { isWinbackCandidate } from '@/lib/winback';
 import { visitCountKey } from '@/lib/visitLabel';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
+import { IMAGE_MAX_SIDE } from '@/lib/imageSizing';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import type { ClientIntake, ClientPhoto } from '@/lib/types';
 import { CLIENT_PHOTO_BUCKET, clientPhotoPath, withSignedUrls } from '@/lib/clientPhotos';
@@ -196,7 +197,7 @@ function BusinessClientsScreen() {
     setPhotoBusy(true);
     setError(null);
     try {
-      const { buffer, contentType, ext } = await readLocalImageBytes(result.assets[0].uri);
+      const { buffer, contentType, ext } = await readLocalImageBytes(result.assets[0].uri, IMAGE_MAX_SIDE.photo);
       const path = clientPhotoPath(row.business_id, row.client_user_id, ext);
       const { error: upErr } = await supabase.storage
         .from(CLIENT_PHOTO_BUCKET)

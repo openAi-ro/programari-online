@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { IMAGE_MAX_SIDE } from '@/lib/imageSizing';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
 import { uploadPublicMedia } from '@/lib/mediaUpload';
 
@@ -208,7 +209,7 @@ function BusinessStaffScreen() {
 
   async function uploadStaffPhoto(localUri: string): Promise<string> {
     if (!businessId) throw new Error(trKey('team.bizMissing'));
-    const { buffer, contentType, ext } = await readLocalImageBytes(localUri);
+    const { buffer, contentType, ext } = await readLocalImageBytes(localUri, IMAGE_MAX_SIDE.avatar);
     return uploadPublicMedia('staff-photos', businessId, ext, buffer, contentType);
   }
 

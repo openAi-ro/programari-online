@@ -20,8 +20,6 @@ import { fontSize, radius, spacing } from '@/constants/theme';
 import { getWebBookingUrl } from '@/lib/bookingLink';
 import { businessCategoryText } from '@/lib/browseCategories';
 import {
-  COVER_MAX_WIDTH,
-  GALLERY_MAX_WIDTH,
   deleteBusinessMediaImage,
   uploadBusinessMediaImage,
 } from '@/lib/businessMedia';
@@ -111,10 +109,7 @@ function BusinessPageSettingsScreen() {
     setUploadBusy(true);
     setError(null);
     try {
-      const url = await uploadBusinessMediaImage(asset.uri, business.id, {
-        maxWidth: COVER_MAX_WIDTH,
-        sourceWidth: asset.width,
-      });
+      const url = await uploadBusinessMediaImage(asset.uri, business.id);
       const old = coverUrl;
       setCoverUrl(url);
       if (old) void deleteBusinessMediaImage(old);
@@ -143,10 +138,7 @@ function BusinessPageSettingsScreen() {
       let urls = gallery;
       for (const asset of result.assets) {
         if (urls.length >= MAX_GALLERY_PHOTOS) break;
-        const url = await uploadBusinessMediaImage(asset.uri, business.id, {
-          maxWidth: GALLERY_MAX_WIDTH,
-          sourceWidth: asset.width,
-        });
+        const url = await uploadBusinessMediaImage(asset.uri, business.id);
         if (!urls.includes(url)) urls = [...urls, url];
       }
       setGallery(urls);
