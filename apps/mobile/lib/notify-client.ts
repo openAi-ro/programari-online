@@ -176,7 +176,7 @@ export async function invokePendingPush(
  */
 export async function invokeRescheduleNotify(
   appointmentId: string,
-  event: 'accepted' | 'declined' | 'cancelled'
+  event: 'accepted' | 'declined' | 'cancelled' | 'proposed' | 'client_accepted' | 'client_declined'
 ): Promise<InvokeResult<{ event?: string }>> {
   const { data, error } = await supabase.functions.invoke('notify-reschedule', {
     body: { appointment_id: appointmentId, event, lang: getLanguageSync() },

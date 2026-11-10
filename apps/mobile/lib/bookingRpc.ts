@@ -280,7 +280,7 @@ export async function listBusyRanges(opts: {
   return { busy, error: null };
 }
 
-/** Muta o programare pe alt slot — doar owner-ul business-ului (v34). */
+/** Muta o programare pe alt slot imediat („Mută acum”, v34/v111). */
 export async function moveAppointmentToSlot(opts: {
   appointmentId: string;
   startAt: string;
@@ -319,6 +319,29 @@ async function businessAppointmentRpc(
 }
 
 /** Salonul accepta ora ceruta de client (v87); programarea se muta pe ea. */
+
+/** Salonul propune o ora noua; clientul cu cont accepta sau refuza (v111). */
+export async function proposeAppointmentReschedule(opts: {
+  appointmentId: string;
+  startAt: string;
+  endAt: string;
+}): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('business_propose_reschedule', {
+    p_appointment_id: opts.appointmentId,
+    p_start_at: opts.startAt,
+    p_end_at: opts.endAt,
+  });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
+}
+
 export function acceptReschedule(appointmentId: string) {
   return businessAppointmentRpc('business_accept_reschedule', { p_appointment_id: appointmentId });
 }
@@ -326,6 +349,32 @@ export function acceptReschedule(appointmentId: string) {
 /** Salonul refuza ora ceruta de client (v87); ora initiala ramane. */
 export function declineReschedule(appointmentId: string) {
   return businessAppointmentRpc('business_decline_reschedule', { p_appointment_id: appointmentId });
+}
+
+/** Clientul accepta propunerea salonului (v111). */
+export function clientAcceptReschedule(appointmentId: string) {
+  return clientRescheduleRpc('client_accept_reschedule', appointmentId);
+}
+
+/** Clientul refuza propunerea salonului (v111); ramane ora veche. */
+export function clientDeclineReschedule(appointmentId: string) {
+  return clientRescheduleRpc('client_decline_reschedule', appointmentId);
+}
+
+async function clientRescheduleRpc(
+  fn: 'client_accept_reschedule' | 'client_decline_reschedule',
+  appointmentId: string
+): Promise<{ appointment: Appointment | null; error: string | null }> {
+  const { data, error } = await supabase.rpc(fn, { p_appointment_id: appointmentId });
+  if (error) {
+    const text = [error.message, error.details, error.hint].filter(Boolean).join(' — ');
+    return { appointment: null, error: text };
+  }
+  const appointment = unwrapRpcRow<Appointment>(data);
+  if (!appointment?.id) {
+    return { appointment: null, error: 'booking_empty_result' };
+  }
+  return { appointment, error: null };
 }
 
 /** Salonul anuleaza programarea cu motiv (v87). Fara rambursari. */

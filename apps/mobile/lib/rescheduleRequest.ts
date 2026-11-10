@@ -1,8 +1,11 @@
 import type { Appointment } from './types';
 
-type RequestFields = Pick<Appointment, 'status' | 'requested_start_at' | 'requested_end_at'>;
+type RequestFields = Pick<
+  Appointment,
+  'status' | 'requested_start_at' | 'requested_end_at' | 'reschedule_proposed_by' | 'client_user_id'
+>;
 
-/** O cerere de reprogramare in asteptare (v87): ora ceruta e setata si programarea e activa. */
+/** O cerere/propunere de reprogramare in asteptare: ora ceruta e setata si programarea e activa. */
 export function hasPendingReschedule(appt: RequestFields): boolean {
   return (
     Boolean(appt.requested_start_at && appt.requested_end_at) &&
@@ -10,9 +13,37 @@ export function hasPendingReschedule(appt: RequestFields): boolean {
   );
 }
 
-/** Filtrul 'De decis': cereri noi (pending) sau reprogramari cerute de client. */
+/** Cine a deschis cererea. Randurile vechi (null) = client (v87). */
+export function rescheduleProposedBy(
+  appt: Pick<Appointment, 'reschedule_proposed_by'>
+): 'client' | 'business' | null {
+  if (!appt.reschedule_proposed_by) return null;
+  if (appt.reschedule_proposed_by === 'business') return 'business';
+  if (appt.reschedule_proposed_by === 'client') return 'client';
+  return null;
+}
+
+export function isClientProposedReschedule(appt: RequestFields): boolean {
+  if (!hasPendingReschedule(appt)) return false;
+  const by = rescheduleProposedBy(appt);
+  return by === 'client' || by === null;
+}
+
+export function isBusinessProposedReschedule(appt: RequestFields): boolean {
+  return hasPendingReschedule(appt) && rescheduleProposedBy(appt) === 'business';
+}
+
+/**
+ * Filtrul 'De decis' pentru salon: cereri noi (pending) sau reprogramari cerute de client.
+ * Propunerile facute de salon asteapta raspunsul clientului — nu apar aici ca decizie a salonului.
+ */
 export function needsDecision(appt: RequestFields): boolean {
-  return appt.status === 'pending' || hasPendingReschedule(appt);
+  return appt.status === 'pending' || isClientProposedReschedule(appt);
+}
+
+/** Salonul poate propune alta ora doar daca clientul are cont in aplicatie. */
+export function canBusinessProposeReschedule(appt: Pick<Appointment, 'client_user_id' | 'status'>): boolean {
+  return Boolean(appt.client_user_id) && (appt.status === 'pending' || appt.status === 'approved');
 }
 
 /**

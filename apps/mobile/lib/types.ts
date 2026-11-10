@@ -129,10 +129,12 @@ export type Appointment = {
   loyalty_redeemed?: boolean;
   /** Serie saptamanala (v38); null pentru programari simple. */
   recurring_series_id?: string | null;
-  /** v87: ora propusa de client, in asteptarea deciziei salonului (slotul e tinut). */
+  /** v87/v111: ora ceruta/propusa, in asteptarea deciziei (slotul e tinut). */
   requested_start_at?: string | null;
   requested_end_at?: string | null;
   reschedule_requested_at?: string | null;
+  /** v111: cine a deschis cererea — 'client' | 'business'. Null pe randuri vechi = client. */
+  reschedule_proposed_by?: 'client' | 'business' | null;
   /** v87: motivul anularii de catre salon (vazut de client). */
   cancel_reason?: string | null;
   /** v105: salonul a mutat programarea (banner F-12); gol dupa confirmarea clientului. */

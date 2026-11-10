@@ -190,6 +190,15 @@ export function mapBookingRpcError(message: string): string {
   if (message.includes('service_not_found')) {
     return trKey('book.errServiceGone');
   }
+  if (message.includes('no_client_account')) {
+    return trKey('book.errNoClientAccount');
+  }
+  if (message.includes('not_business_proposal')) {
+    return trKey('book.errNotBusinessProposal');
+  }
+  if (message.includes('not_client_proposal')) {
+    return trKey('book.errNotClientProposal');
+  }
   if (message.includes('no_reschedule_request')) {
     return trKey('book.errNoRescheduleRequest');
   }
