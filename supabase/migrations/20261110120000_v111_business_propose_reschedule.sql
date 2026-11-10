@@ -691,6 +691,8 @@ end;
 $function$;
 
 -- Expirare: intoarce si cine a propus (inainte de clear).
+-- Tipul de return se schimba (adauga r_proposed_by) => DROP obligatoriu.
+drop function if exists public.expire_reschedule_requests();
 create or replace function public.expire_reschedule_requests()
 returns table(
   r_id uuid,
