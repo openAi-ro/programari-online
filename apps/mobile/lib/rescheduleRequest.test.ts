@@ -6,6 +6,7 @@ import {
   isOwnBusyRange,
   needsDecision,
   ownBusyKeys,
+  withoutOwnBusy,
 } from './rescheduleRequest';
 
 function assert(cond: boolean, label: string) {
@@ -37,4 +38,12 @@ const keys = ownBusyKeys({ start_at: '2026-11-03T13:00:00Z', end_at: '2026-11-03
 assert(isOwnBusyRange(keys, { startUtc: '2026-11-03T13:00:00.000Z', endUtc: '2026-11-03T13:30:00+00:00' }), 'own current range');
 assert(isOwnBusyRange(keys, { startUtc: '2026-11-04T14:00:00Z', endUtc: '2026-11-04T14:30:00Z' }), 'own requested range');
 assert(!isOwnBusyRange(keys, { startUtc: '2026-11-04T14:00:00Z', endUtc: '2026-11-04T15:00:00Z' }), 'other range');
-console.log('rescheduleRequest: 15 ok');
+const ranges = [
+  { startUtc: '2026-11-03T13:00:00Z', endUtc: '2026-11-03T13:30:00Z' },
+  { startUtc: '2026-11-04T14:00:00Z', endUtc: '2026-11-04T14:30:00Z' },
+  { startUtc: '2026-11-05T09:00:00Z', endUtc: '2026-11-05T10:00:00Z' },
+];
+const kept = withoutOwnBusy(ranges, { start_at: '2026-11-03T13:00:00Z', end_at: '2026-11-03T13:30:00Z', ...req });
+assert(kept.length === 1 && kept[0].startUtc === '2026-11-05T09:00:00Z', 'withoutOwnBusy drops current + requested');
+assert(withoutOwnBusy(ranges, null) === ranges, 'withoutOwnBusy null keeps all');
+console.log('rescheduleRequest: 17 ok');

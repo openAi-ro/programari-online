@@ -73,3 +73,13 @@ export function ownBusyKeys(
 export function isOwnBusyRange(keys: Set<string>, range: { startUtc: string; endUtc: string }): boolean {
   return keys.has(`${Date.parse(range.startUtc)}|${Date.parse(range.endUtc)}`);
 }
+
+/** Ocupările fără cele ale programării care se mută (null = nimic de scos). */
+export function withoutOwnBusy<T extends { startUtc: string; endUtc: string }>(
+  busy: T[],
+  appt: Pick<Appointment, 'start_at' | 'end_at' | 'requested_start_at' | 'requested_end_at'> | null | undefined
+): T[] {
+  if (!appt?.start_at) return busy;
+  const keys = ownBusyKeys(appt);
+  return busy.filter((b) => !isOwnBusyRange(keys, b));
+}

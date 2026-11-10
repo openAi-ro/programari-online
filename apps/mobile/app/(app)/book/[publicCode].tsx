@@ -43,7 +43,7 @@ import {
   notifyAfterBooking,
   unwrapRpcRow,
 } from '@/lib/bookingRpc';
-import { hasPendingReschedule, isOwnBusyRange, ownBusyKeys } from '@/lib/rescheduleRequest';
+import { hasPendingReschedule, withoutOwnBusy } from '@/lib/rescheduleRequest';
 import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
 import {
   staffForServices,
@@ -157,6 +157,11 @@ export default function BookScreen() {
   const [tipCustom, setTipCustom] = useState('');
 
   const isReschedule = Boolean(rescheduleId);
+  /** Reprogramare: ora curentă a programării, ca să nu coloreze ziua ca ocupată. */
+  const [rescheduleOwn, setRescheduleOwn] = useState<Pick<
+    Appointment,
+    'start_at' | 'end_at' | 'requested_start_at' | 'requested_end_at'
+  > | null>(null);
   // Specialistul efectiv: null = Oricine (sau firma fără echipă, ca înainte).
   const effStaffId = staffAny && !isReschedule ? null : staffId;
   const anyMode = staffAny && !isReschedule && staffList.length > 0;
@@ -315,7 +320,7 @@ export default function BookScreen() {
         rescheduleId
           ? supabase
               .from('appointments')
-              .select('service_id, service_ids, staff_id, status, start_at, client_user_id')
+              .select('service_id, service_ids, staff_id, status, start_at, end_at, requested_start_at, requested_end_at, client_user_id')
               .eq('id', String(rescheduleId))
               .maybeSingle()
           : null,
@@ -436,6 +441,12 @@ export default function BookScreen() {
         if (apt?.staff_id && team.some((s) => s.id === apt.staff_id)) {
           setStaffId(apt.staff_id as string);
         }
+        setRescheduleOwn({
+          start_at: apt.start_at as string,
+          end_at: apt.end_at as string,
+          requested_start_at: (apt.requested_start_at as string | null) ?? null,
+          requested_end_at: (apt.requested_end_at as string | null) ?? null,
+        });
       }
 
       const built = buildSteps(team.length > 1, list.length > 0);
@@ -505,13 +516,8 @@ export default function BookScreen() {
       return;
     }
 
-    let busy = rawBusy;
-    const current = currentRes?.data;
-    if (current?.start_at) {
-      // Ora curenta si o eventuala ora deja ceruta (v87) sunt ale acestei programari.
-      const own = ownBusyKeys(current);
-      busy = rawBusy.filter((b) => !isOwnBusyRange(own, b));
-    }
+    // Ora curenta si o eventuala ora deja ceruta (v87) sunt ale acestei programari.
+    const busy = withoutOwnBusy(rawBusy, currentRes?.data);
 
     const hours = staffSchedule(selectedStaff, business);
     const free = generateFreeSlots({
@@ -1224,15 +1230,17 @@ export default function BookScreen() {
                   : [staffSchedule(selectedStaff, business).workingHours]
               }
               heat={
-                anyMode
+                anyMode && eligibleStaff.length === 0
                   ? null
                   : {
                       kind: 'client',
                       business,
-                      member: selectedStaff,
+                      // Oricine: reuniunea specialiștilor care fac serviciile alese.
+                      members: anyMode ? eligibleStaff : [selectedStaff],
                       durationMinutes,
                       minYmd: dateRange.minYmd,
                       maxYmd: dateRange.maxYmd,
+                      ownAppointment: rescheduleOwn,
                     }
               }
             />

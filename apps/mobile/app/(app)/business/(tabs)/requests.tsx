@@ -35,9 +35,8 @@ import {
 import {
   canBusinessProposeReschedule,
   isClientProposedReschedule,
-  isOwnBusyRange,
   needsDecision,
-  ownBusyKeys,
+  withoutOwnBusy,
 } from '@/lib/rescheduleRequest';
 import { pastAppointments, upcomingAppointments } from '@/lib/appointmentTime';
 import { generateFreeSlots } from '@/lib/slots';
@@ -381,8 +380,7 @@ export default function BusinessRequestsScreen() {
       return;
     }
     // Ora curenta si ora ceruta de client (v87) sunt ale acestei programari.
-    const own = ownBusyKeys(apt);
-    const busy = rawBusy.filter((b) => !isOwnBusyRange(own, b));
+    const busy = withoutOwnBusy(rawBusy, apt);
     // Programul specialistului (null = programul firmei), nu direct al firmei.
     let member: Pick<Staff, 'working_hours' | 'break_hours'> | null = null;
     if (apt.staff_id) {

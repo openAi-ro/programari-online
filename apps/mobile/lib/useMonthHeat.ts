@@ -12,22 +12,28 @@ import {
 import { listBusyRanges } from '@/lib/bookingRpc';
 import { notBeforeUtc, staffSchedule } from '@/lib/bookingRules';
 import { staffOrUnassignedFilter } from '@/lib/calendarStaffFilter';
+import { withoutOwnBusy } from '@/lib/rescheduleRequest';
 import type { BusyRange } from '@/lib/slots';
 import { supabase } from '@/lib/supabase';
-import type { BusinessProfile, Staff } from '@/lib/types';
+import type { Appointment, BusinessProfile, Staff } from '@/lib/types';
 
 /** De unde vin culorile calendarului. */
 export type HeatSource =
   | {
       kind: 'client';
       business: BusinessProfile;
-      /** null = firma fără echipă (programul firmei). */
-      member: Pick<Staff, 'id' | 'working_hours' | 'break_hours'> | null;
+      /**
+       * Specialiștii luați în calcul: unul ales, toți cei eligibili („Oricine”, reuniune)
+       * sau [null] = firma fără echipă (programul firmei).
+       */
+      members: (Pick<Staff, 'id' | 'working_hours' | 'break_hours'> | null)[];
       durationMinutes: number;
       minYmd: string;
       maxYmd: string;
       /** Quick-add (business): fără preaviz minim, ca lista de ore de acolo. */
       ignoreMinNotice?: boolean;
+      /** Reprogramare: ora curentă (și cea cerută) a programării nu se numără ca ocupată. */
+      ownAppointment?: Pick<Appointment, 'start_at' | 'end_at' | 'requested_start_at' | 'requested_end_at'> | null;
     }
   | {
       kind: 'business';
@@ -46,12 +52,17 @@ export type MonthHeat = { tones: Record<string, DayTone>; counts: Record<string,
 
 const EMPTY: MonthHeat = { tones: {}, counts: {} };
 
-type Raw = { busy: BusyRange[]; counts: Record<string, number> };
+/** busy[i] = ocupările pentru members[i] (la business: un singur element). */
+type Raw = { busy: BusyRange[][]; counts: Record<string, number> };
+
+function memberIds(src: Extract<HeatSource, { kind: 'client' }>): string {
+  return src.members.map((m) => m?.id ?? '-').join(',');
+}
 
 function sourceKey(src: HeatSource, view: CalendarMonth): string {
   const month = `${view.year}-${view.month}`;
   return src.kind === 'client'
-    ? `c|${src.business.id}|${src.member?.id ?? '-'}|${month}`
+    ? `c|${src.business.id}|${memberIds(src)}|${month}`
     : `b|${src.businessId}|${src.staffId ?? '-'}|${month}|${src.refreshKey}`;
 }
 
@@ -95,14 +106,15 @@ export function useMonthHeat(source: HeatSource | null | undefined, view: Calend
     void (async () => {
       const tz = source.kind === 'client' ? source.business.timezone : source.timezone;
       const businessId = source.kind === 'client' ? source.business.id : source.businessId;
-      const staffId = source.kind === 'client' ? source.member?.id ?? null : source.staffId;
+      // list_busy_ranges nu spune al cui e intervalul, deci „Oricine” cere luna o dată per specialist, în paralel.
+      const staffIds = source.kind === 'client' ? source.members.map((m) => m?.id ?? null) : [source.staffId];
       const { fromIso, toIso } = monthBoundsUtc(view, tz);
       const [busyRes, counts] = await Promise.all([
-        listBusyRanges({ businessId, fromIso, toIso, staffId }),
+        Promise.all(staffIds.map((staffId) => listBusyRanges({ businessId, fromIso, toIso, staffId }))),
         source.kind === 'business' ? loadMonthCounts(source, view) : Promise.resolve({}),
       ]);
-      if (busyRes.error) return;
-      const data: Raw = { busy: busyRes.busy, counts };
+      if (busyRes.some((r) => r.error)) return;
+      const data: Raw = { busy: busyRes.map((r) => r.busy), counts };
       cache.current.set(key, data);
       if (alive) setRaw({ key, data });
     })();
@@ -114,7 +126,10 @@ export function useMonthHeat(source: HeatSource | null | undefined, view: Calend
   }, [key]);
 
   const data = raw && raw.key === key ? raw.data : null;
-  const durationMinutes = source?.kind === 'client' ? source.durationMinutes : 0;
+  const client = source?.kind === 'client' ? source : null;
+  const durationMinutes = client?.durationMinutes ?? 0;
+  const own = client?.ownAppointment;
+  const ownKey = own ? `${own.start_at}|${own.end_at}|${own.requested_start_at ?? ''}|${own.requested_end_at ?? ''}` : '';
   return useMemo(() => {
     if (!source || !data) return EMPTY;
     if (source.kind === 'business') {
@@ -123,20 +138,20 @@ export function useMonthHeat(source: HeatSource | null | undefined, view: Calend
           month: view,
           timezone: source.timezone,
           capacities: source.capacities,
-          busy: data.busy,
+          busy: data.busy[0] ?? [],
           blockedDates: source.blockedDates,
         }),
         counts: data.counts,
       };
     }
-    const hours = staffSchedule(source.member, source.business);
     return {
       tones: clientMonthTones({
         month: view,
         timezone: source.business.timezone,
-        workingHours: hours.workingHours,
-        breakHours: hours.breakHours,
-        busy: data.busy,
+        members: source.members.map((m, i) => ({
+          ...staffSchedule(m, source.business),
+          busy: withoutOwnBusy(data.busy[i] ?? [], source.ownAppointment),
+        })),
         durationMinutes,
         bufferMinutes: source.business.buffer_minutes ?? 0,
         blockedDates: source.business.blocked_dates ?? [],
@@ -147,5 +162,5 @@ export function useMonthHeat(source: HeatSource | null | undefined, view: Calend
       counts: {},
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, key, durationMinutes]);
+  }, [data, key, durationMinutes, ownKey]);
 }

@@ -165,9 +165,7 @@ ok(bTones[mon] === 'full' && bTones['2026-11-17'] === 'free' && bTones['2026-11-
 const cTones = clientMonthTones({
   month: nov,
   timezone: TZ,
-  workingHours: weekdaysOnly,
-  breakHours: noBreak,
-  busy: [{ startUtc: at('09:00'), endUtc: at('15:00') }],
+  members: [{ workingHours: weekdaysOnly, breakHours: noBreak, busy: [{ startUtc: at('09:00'), endUtc: at('15:00') }] }],
   durationMinutes: 60,
   notBeforeUtc: new Date('2026-11-01T00:00:00Z'),
   minYmd: '2026-11-10',
@@ -180,14 +178,67 @@ ok(cTones['2026-11-09'] === undefined && cTones['2026-11-21'] === undefined, 'cl
 const cLong = clientMonthTones({
   month: nov,
   timezone: TZ,
-  workingHours: weekdaysOnly,
-  breakHours: noBreak,
-  busy: [{ startUtc: at('09:00'), endUtc: at('15:00') }],
+  members: [{ workingHours: weekdaysOnly, breakHours: noBreak, busy: [{ startUtc: at('09:00'), endUtc: at('15:00') }] }],
   durationMinutes: 180,
   notBeforeUtc: new Date('2026-11-01T00:00:00Z'),
   minYmd: '2026-11-10',
   maxYmd: '2026-11-20',
 });
 ok(cLong[mon] === 'full', 'client: serviciu de 3h nu mai incape -> plin');
+
+
+// Oricine: reuniunea specialistilor eligibili
+const anyBase = {
+  month: nov,
+  timezone: TZ,
+  durationMinutes: 60,
+  notBeforeUtc: new Date('2026-11-01T00:00:00Z'),
+  minYmd: '2026-11-10',
+  maxYmd: '2026-11-20',
+};
+const fullDay = [{ startUtc: at('09:00'), endUtc: at('17:00') }];
+const anyOneFree = clientMonthTones({
+  ...anyBase,
+  members: [
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: fullDay },
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: [] },
+  ],
+});
+ok(anyOneFree[mon] === 'free', 'oricine: unul plin + unul liber -> sunt locuri');
+const anyNone = clientMonthTones({
+  ...anyBase,
+  members: [
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: fullDay },
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: fullDay },
+  ],
+});
+ok(anyNone[mon] === 'full', 'oricine: toti plini -> plin');
+const anyFew = clientMonthTones({
+  ...anyBase,
+  members: [
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: fullDay },
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: [{ startUtc: at('09:00'), endUtc: at('16:00') }] },
+  ],
+});
+ok(anyFew[mon] === 'almostFull', 'oricine: o singura ora libera in total -> putine');
+const anyShare = clientMonthTones({
+  ...anyBase,
+  members: [
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: fullDay },
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: fullDay },
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: [{ startUtc: at('09:00'), endUtc: at('13:00') }] },
+  ],
+});
+ok(anyShare[mon] === 'almostFull', 'oricine: 4 libere din 24 (<=25%) -> putine');
+const anyOffDay = clientMonthTones({
+  ...anyBase,
+  members: [
+    { workingHours: weekdaysOnly, breakHours: noBreak, busy: [] },
+    { workingHours: { ...weekdaysOnly, mon: closed }, breakHours: noBreak, busy: [] },
+  ],
+});
+ok(anyOffDay[mon] === 'free', 'oricine: un specialist liber luni, celalalt nu lucreaza -> sunt locuri');
+ok(anyOffDay['2026-11-15'] === 'closed', 'oricine: nimeni nu lucreaza duminica -> inchis');
+ok(clientMonthTones({ ...anyBase, members: [] })[mon] === 'closed', 'oricine: fara specialisti -> inchis');
 
 console.log(`bookingCalendar: ${n} passed, 0 failed`);

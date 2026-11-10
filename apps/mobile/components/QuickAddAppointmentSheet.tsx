@@ -445,7 +445,7 @@ function QuickAddBody({
                   ? {
                       kind: 'client',
                       business,
-                      member,
+                      members: [member],
                       durationMinutes: totals.durationMinutes,
                       minYmd: today,
                       maxYmd,

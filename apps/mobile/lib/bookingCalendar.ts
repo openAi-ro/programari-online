@@ -286,12 +286,17 @@ export function businessMonthTones(opts: {
  * Client: tonul fiecărei zile rezervabile, din orele libere pentru durata aleasă
  * (aceeași funcție ca lista de ore, deci culoarea și lista nu se contrazic).
  */
+/** Programul și ocupările unui specialist (sau ale firmei fără echipă), pentru tonurile clientului. */
+export type ClientCapacity = { workingHours: WorkingHours; breakHours: BreakHours; busy: BusyRange[] };
+
+/**
+ * Tonul fiecărei zile pentru client. Cu mai mulți specialiști („Oricine”) se adună orele de start
+ * libere și posibile ale tuturor: o zi e liberă dacă măcar unul are loc, plină dacă niciunul.
+ */
 export function clientMonthTones(opts: {
   month: CalendarMonth;
   timezone: string;
-  workingHours: WorkingHours;
-  breakHours: BreakHours;
-  busy: BusyRange[];
+  members: ClientCapacity[];
   durationMinutes: number;
   bufferMinutes?: number;
   blockedDates?: string[];
@@ -303,16 +308,21 @@ export function clientMonthTones(opts: {
   const base = {
     timezone: opts.timezone,
     sessionDurationMinutes: opts.durationMinutes,
-    workingHours: opts.workingHours,
-    breakHours: opts.breakHours,
     bufferMinutes: opts.bufferMinutes ?? 0,
     blockedDates: opts.blockedDates ?? [],
     notBeforeUtc: opts.notBeforeUtc,
   };
   for (const ymd of monthDays(opts.month)) {
     if (ymd < opts.minYmd || ymd > opts.maxYmd) continue;
-    const possible = generateFreeSlots({ ...base, dateLocal: ymd, busy: [] }).length;
-    const free = possible > 0 ? generateFreeSlots({ ...base, dateLocal: ymd, busy: opts.busy }).length : 0;
+    let possible = 0;
+    let free = 0;
+    for (const m of opts.members) {
+      const day = { ...base, dateLocal: ymd, workingHours: m.workingHours, breakHours: m.breakHours };
+      const can = generateFreeSlots({ ...day, busy: [] }).length;
+      if (can === 0) continue;
+      possible += can;
+      free += generateFreeSlots({ ...day, busy: m.busy }).length;
+    }
     out[ymd] = availabilityTone(free, possible);
   }
   return out;
