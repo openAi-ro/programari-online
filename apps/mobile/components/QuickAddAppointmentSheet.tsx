@@ -440,6 +440,19 @@ function QuickAddBody({
               maxYmd={maxYmd}
               blockedDates={business.blocked_dates ?? []}
               schedules={[schedule.workingHours]}
+              heat={
+                totals.durationMinutes > 0 && (staffList.length === 0 || member)
+                  ? {
+                      kind: 'client',
+                      business,
+                      member,
+                      durationMinutes: totals.durationMinutes,
+                      minYmd: today,
+                      maxYmd,
+                      ignoreMinNotice: true,
+                    }
+                  : null
+              }
             />
 
             <View

@@ -13,21 +13,61 @@ import {
   monthGrid,
   monthOfYmd,
   type CalendarRules,
+  type DayTone,
 } from '@/lib/bookingCalendar';
 import { useLanguage } from '@/lib/i18n';
+import type { TrKey } from '@/lib/i18n';
+import { useMonthHeat, type HeatSource } from '@/lib/useMonthHeat';
 
 type Props = CalendarRules & {
   /** Ziua aleasă, "YYYY-MM-DD". */
   value: string;
   onChange: (ymd: string) => void;
+  /** Culorile zilelor (cât de plină e ziua). Lipsă = calendar simplu. */
+  heat?: HeatSource | null;
+  /**
+   * Business: toate zilele se pot alege (și cele trecute sau închise), fără limită la săgeți.
+   * `minYmd` rămâne doar ziua de azi (cercul).
+   */
+  browse?: boolean;
 };
 
-/** Calendar lunar pentru rezervare: luni primul, zilele nerezervabile gri. */
-export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates, schedules }: Props) {
+type ToneColors = { bg: string; fg: string };
+
+function useToneColors(): Record<Exclude<DayTone, 'closed'>, ToneColors> {
+  const t = useTheme();
+  // Secvență teal → sky → amber → orange: se deosebește și fără roșu/verde, cu legendă dedesubt.
+  return {
+    free: { bg: t.colors.accentSoft, fg: t.colors.accentSoftText },
+    moderate: { bg: t.colors.infoSoft, fg: t.colors.infoSoftText },
+    almostFull: { bg: t.colors.warningSoft, fg: t.colors.warningSoftText },
+    full: { bg: t.colors.warmSoft, fg: t.colors.warmSoftText },
+  };
+}
+
+const LEGEND_BUSINESS: { tone: DayTone; key: TrKey }[] = [
+  { tone: 'free', key: 'calendar.toneFree' },
+  { tone: 'moderate', key: 'calendar.toneModerate' },
+  { tone: 'almostFull', key: 'calendar.toneAlmostFull' },
+  { tone: 'full', key: 'calendar.toneFull' },
+  { tone: 'closed', key: 'calendar.toneClosed' },
+];
+const LEGEND_CLIENT: { tone: DayTone; key: TrKey }[] = [
+  { tone: 'free', key: 'calendar.toneAvailable' },
+  { tone: 'almostFull', key: 'calendar.toneFewLeft' },
+  { tone: 'full', key: 'calendar.toneFull' },
+];
+
+/** Calendar lunar: luni primul, zilele nerezervabile gri, opțional colorate după cât de pline sunt. */
+export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates, schedules, heat, browse }: Props) {
   const t = useTheme();
   const { lang, t: tr } = useLanguage();
   const names = calendarNames(lang);
+  const toneColors = useToneColors();
   const [view, setView] = useState(() => monthOfYmd(value || minYmd));
+  const { tones, counts } = useMonthHeat(heat, view);
+  const showCounts = heat?.kind === 'business';
+  const legend = heat ? (heat.kind === 'business' ? LEGEND_BUSINESS : LEGEND_CLIENT) : null;
 
   // Când data aleasă se schimbă din afară (ex. prima zi liberă), arătăm luna ei.
   useEffect(() => {
@@ -36,8 +76,8 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
 
   const rows = useMemo(() => monthGrid(view), [view]);
   const rules: CalendarRules = { minYmd, maxYmd, blockedDates, schedules };
-  const prevOn = canGoPrevMonth(view, minYmd);
-  const nextOn = canGoNextMonth(view, maxYmd);
+  const prevOn = browse || canGoPrevMonth(view, minYmd);
+  const nextOn = browse || canGoNextMonth(view, maxYmd);
 
   return (
     <View
@@ -86,15 +126,25 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
         <View key={i} style={styles.row}>
           {week.map((ymd, j) => {
             if (!ymd) return <View key={`e${j}`} style={styles.cell} />;
-            const disabled = isDayDisabled(ymd, rules);
+            const disabled = browse ? false : isDayDisabled(ymd, rules);
             const selected = ymd === value;
             const today = ymd === minYmd;
+            const tone = disabled ? undefined : tones[ymd];
+            const tint = tone && tone !== 'closed' ? toneColors[tone] : null;
+            const count = showCounts ? counts[ymd] ?? 0 : 0;
+            const toneLabel = tone ? tr(toneLabelKey(tone, heat?.kind === 'business')) : '';
             return (
               <View key={ymd} style={styles.cell}>
                 <Pressable
                   android_ripple={{ color: t.colors.accentSoft, borderless: false }}
                   accessibilityRole="button"
-                  accessibilityLabel={`${Number(ymd.slice(8))} ${names.months[Number(ymd.slice(5, 7)) - 1]} ${ymd.slice(0, 4)}`}
+                  accessibilityLabel={[
+                    `${Number(ymd.slice(8))} ${names.months[Number(ymd.slice(5, 7)) - 1]} ${ymd.slice(0, 4)}`,
+                    toneLabel,
+                    count > 0 ? tr('calendar.countA11y', { n: count }) : '',
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
                   hitSlop={4}
                   accessibilityState={{ disabled, selected }}
                   disabled={disabled}
@@ -102,6 +152,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
                   testID={`calendar-day-${ymd}`}
                   style={[
                     styles.day,
+                    tint ? { backgroundColor: tint.bg } : null,
                     selected ? { backgroundColor: t.colors.accent } : null,
                     today && !selected ? { borderWidth: 1, borderColor: t.colors.accent } : null,
                   ]}
@@ -112,9 +163,11 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
                       {
                         color: selected
                           ? t.colors.onAccent
-                          : disabled
+                          : disabled || tone === 'closed'
                             ? t.colors.textMuted
-                            : t.colors.text,
+                            : tint
+                              ? tint.fg
+                              : t.colors.text,
                         opacity: disabled && !selected ? 0.4 : 1,
                         fontWeight: selected ? '800' : '600',
                       },
@@ -123,13 +176,54 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
                     {Number(ymd.slice(8))}
                   </Text>
                 </Pressable>
+                {count === 1 ? (
+                  <View pointerEvents="none" style={[styles.dot, { backgroundColor: selected ? t.colors.onAccent : t.colors.text, borderColor: t.colors.surface }]} />
+                ) : count > 1 ? (
+                  <View pointerEvents="none" style={[styles.countBadge, { backgroundColor: t.colors.text, borderColor: t.colors.surface }]}>
+                    <Text style={[styles.countText, { color: t.colors.surface }]} numberOfLines={1}>
+                      {count > 99 ? '99+' : count}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             );
           })}
         </View>
       ))}
+
+      {legend ? (
+        <View style={styles.legend} accessibilityRole="text">
+          {legend.map(({ tone, key }) => (
+            <View key={tone} style={styles.legendItem}>
+              <View
+                style={[
+                  styles.legendSwatch,
+                  tone === 'closed'
+                    ? { backgroundColor: 'transparent', borderWidth: 1, borderColor: t.colors.border }
+                    : { backgroundColor: toneColors[tone].bg },
+                ]}
+              />
+              <Text style={[styles.legendText, { color: t.colors.textMuted }]}>{tr(key)}</Text>
+            </View>
+          ))}
+          {showCounts ? (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: t.colors.text }]} />
+              <Text style={[styles.legendText, { color: t.colors.textMuted }]}>{tr('calendar.legendCount')}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
+}
+
+function toneLabelKey(tone: DayTone, business: boolean): TrKey {
+  if (tone === 'free') return business ? 'calendar.toneFree' : 'calendar.toneAvailable';
+  if (tone === 'moderate') return 'calendar.toneModerate';
+  if (tone === 'almostFull') return business ? 'calendar.toneAlmostFull' : 'calendar.toneFewLeft';
+  if (tone === 'full') return 'calendar.toneFull';
+  return 'calendar.toneClosed';
 }
 
 const styles = StyleSheet.create({
@@ -148,4 +242,23 @@ const styles = StyleSheet.create({
   weekday: { fontSize: fontSize.sm, fontWeight: '700' },
   day: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { fontSize: fontSize.md },
+  dot: { position: 'absolute', top: 2, right: '22%', width: 9, height: 9, borderRadius: 5, borderWidth: 1.5 },
+  countBadge: {
+    position: 'absolute',
+    top: 0,
+    right: '14%',
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countText: { fontSize: 10, fontWeight: '800', lineHeight: 12 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: 4, marginTop: spacing.xs },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 14, height: 14, borderRadius: 7 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: fontSize.xs, fontWeight: '600' },
 });

@@ -3,7 +3,7 @@ import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-
 import { useFocusEffect, useRouter, useSegments } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { DatePickerField } from '@/components/DatePickerField';
+import { BookingCalendar } from '@/components/BookingCalendar';
 import { QuickAddAppointmentSheet } from '@/components/QuickAddAppointmentSheet';
 import {
   Badge,
@@ -22,6 +22,9 @@ import { statusMeta } from '@/lib/status';
 import { trKey, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
 import { staffOrUnassignedFilter } from '@/lib/calendarStaffFilter';
+import { staffSchedule } from '@/lib/bookingRules';
+import type { DayCapacity } from '@/lib/bookingCalendar';
+import type { HeatSource } from '@/lib/useMonthHeat';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
@@ -77,6 +80,8 @@ export default function BusinessCalendarScreen() {
   const [error, setError] = useTransientMessage();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [unavailRows, setUnavailRows] = useState<StaffUnavailability[]>([]);
+  // Crește la fiecare reîncărcare: culorile lunii se recitesc după o programare nouă/mutată.
+  const [loadCount, setLoadCount] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -152,6 +157,7 @@ export default function BusinessCalendarScreen() {
     } else {
       setRows((data ?? []) as Appointment[]);
     }
+    setLoadCount((n) => n + 1);
     setLoading(false);
   }, [dateLocal, staffFilter, viewMode]);
 
@@ -161,6 +167,25 @@ export default function BusinessCalendarScreen() {
       void load();
     }, [load])
   );
+
+  // Ocuparea lunii: specialistul filtrat, altfel toată echipa activă, altfel programul firmei.
+  const heat = useMemo<HeatSource | null>(() => {
+    if (!business) return null;
+    const filtered = staffFilter !== 'all' ? staffList.find((s) => s.id === staffFilter) : null;
+    const capacities: DayCapacity[] = (filtered ? [filtered] : staffList.length > 0 ? staffList : [null]).map((m) =>
+      staffSchedule(m, business)
+    );
+    return {
+      kind: 'business',
+      businessId: business.id,
+      timezone: business.timezone,
+      capacities,
+      staffId: staffFilter !== 'all' ? staffFilter : null,
+      blockedDates: business.blocked_dates ?? [],
+      refreshKey: loadCount,
+    };
+  }, [business, staffFilter, staffList, loadCount]);
+  const todayYmd = business?.timezone ? formatInTimeZone(new Date(), business.timezone, 'yyyy-MM-dd') : toYmd(new Date());
 
   const blocked = useMemo(() => {
     const list = business?.blocked_dates ?? [];
@@ -234,7 +259,16 @@ export default function BusinessCalendarScreen() {
     >
       {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
       <Segmented value={viewMode} onChange={(v) => setViewMode(v as 'day' | 'week')} options={[{ value: 'day', label: tr('cal.viewDay') }, { value: 'week', label: tr('cal.viewWeek') }]} />
-      <DatePickerField label={tr('cal.day')} value={dateLocal} onChange={setDateLocal} />
+      <BookingCalendar
+        value={dateLocal}
+        onChange={setDateLocal}
+        browse
+        minYmd={todayYmd}
+        maxYmd={todayYmd}
+        blockedDates={business.blocked_dates ?? []}
+        schedules={heat?.kind === 'business' ? heat.capacities.map((c) => c.workingHours) : []}
+        heat={heat}
+      />
       <Button
         label={blocked ? tr('cal.unblockDay') : tr('cal.blockDay')}
         icon={blocked ? 'lock-open-outline' : 'lock-closed-outline'}

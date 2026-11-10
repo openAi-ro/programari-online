@@ -1289,6 +1289,7 @@ export default function PublicBookScreen() {
                   maxYmd={maxYmd}
                   blockedDates={business.blocked_dates ?? []}
                   schedules={[staffSchedule(member, business).workingHours]}
+                  heat={{ kind: 'client', business, member, durationMinutes, minYmd, maxYmd }}
                 />
               </StaffSlotsCard>
             );
@@ -1307,6 +1308,7 @@ export default function PublicBookScreen() {
             maxYmd={maxYmd}
             blockedDates={business.blocked_dates ?? []}
             schedules={[staffSchedule(selectedStaff, business).workingHours]}
+            heat={{ kind: 'client', business, member: selectedStaff, durationMinutes, minYmd, maxYmd }}
           />
 
           <SectionTitle>{tr('pub.stepTime', { n: stepNo.time ?? 1 })}</SectionTitle>

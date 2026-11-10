@@ -10,6 +10,14 @@ import {
   isOpenOnDay,
   monthGrid,
   monthOfYmd,
+  availabilityTone,
+  businessMonthTones,
+  clientMonthTones,
+  countByDay,
+  dayOccupancy,
+  monthBoundsUtc,
+  monthDays,
+  occupancyTone,
 } from './bookingCalendar';
 import type { WorkingHours } from './types';
 
@@ -86,5 +94,100 @@ ok(isOpenOnDay('2026-10-24', [weekdaysOnly, saturdayNight]), 'oricine: sambata d
 ok(!isOpenOnDay('2026-10-26', [saturdayNight]) && isOpenOnDay('2026-10-26', [weekdaysOnly, saturdayNight]), 'specialist ales vs oricine');
 ok(!isOpenOnDay('2026-10-20', []), 'fara program -> inchis');
 ok(monthOfYmd('2026-01-05').month === 0, 'luna din ymd');
+
+
+// --- Culorile zilelor (varianta A) ---
+const TZ = 'Europe/Bucharest';
+ok(occupancyTone(null) === 'closed', 'null -> inchis');
+ok(occupancyTone(0) === 'free' && occupancyTone(0.39) === 'free', 'sub 40% -> libera');
+ok(occupancyTone(0.4) === 'moderate' && occupancyTone(0.74) === 'moderate', '40-75% -> medie');
+ok(occupancyTone(0.75) === 'almostFull' && occupancyTone(0.94) === 'almostFull', '75-95% -> aproape plina');
+ok(occupancyTone(0.95) === 'full' && occupancyTone(1) === 'full', '95%+ -> plina');
+ok(occupancyTone(Number.NaN) === 'closed', 'NaN -> inchis');
+
+ok(availabilityTone(0, 0) === 'closed', 'fara ore posibile -> inchis');
+ok(availabilityTone(0, 8) === 'full', 'nimic liber -> plin');
+ok(availabilityTone(2, 8) === 'almostFull', '2 ore ramase -> putine');
+ok(availabilityTone(3, 16) === 'almostFull', '3 din 16 (19%) -> putine');
+ok(availabilityTone(3, 8) === 'free', '3 din 8 -> sunt locuri');
+ok(availabilityTone(1, 1) === 'almostFull', 'o singura ora ramasa -> putine');
+
+const noBreak = { enabled: false, start: '13:00', end: '14:00' };
+const lunch = { enabled: true, start: '13:00', end: '14:00' };
+// Luni 2026-11-16, 09:00-17:00 = 480 min; cu pauza 420 min.
+const mon = '2026-11-16';
+const at = (hm: string) => new Date(`${mon}T${hm}:00+02:00`).toISOString();
+ok(dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], []) === 0, 'zi goala -> 0');
+const half = dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], [{ startUtc: at('09:00'), endUtc: at('13:00') }]);
+ok(Math.abs((half ?? 0) - 0.5) < 1e-9, '4h din 8h -> 50%');
+const withBreak = dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: lunch }], [{ startUtc: at('09:00'), endUtc: at('12:30') }]);
+ok(Math.abs((withBreak ?? 0) - 210 / 420) < 1e-9, 'pauza scoasa din capacitate');
+const overlap = dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], [
+  { startUtc: at('09:00'), endUtc: at('11:00') },
+  { startUtc: at('10:00'), endUtc: at('12:00') },
+]);
+ok(Math.abs((overlap ?? 0) - 180 / 480) < 1e-9, 'un program: suprapunerile nu se numara de doua ori');
+const outside = dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], [{ startUtc: at('06:00'), endUtc: at('10:00') }]);
+ok(Math.abs((outside ?? 0) - 60 / 480) < 1e-9, 'ocuparea taiata la programul zilei');
+const timeOff = dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], [
+  { startUtc: new Date(`${mon}T00:00:00+02:00`).toISOString(), endUtc: new Date('2026-11-17T00:00:00+02:00').toISOString() },
+]);
+ok(timeOff === 1, 'concediu toata ziua -> plina');
+const team = dayOccupancy(mon, TZ, [
+  { workingHours: weekdaysOnly, breakHours: noBreak },
+  { workingHours: weekdaysOnly, breakHours: noBreak },
+], [
+  { startUtc: at('09:00'), endUtc: at('17:00') },
+]);
+ok(Math.abs((team ?? 0) - 0.5) < 1e-9, 'doi specialisti, unul plin -> 50%');
+ok(dayOccupancy('2026-11-15', TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], []) === null, 'duminica inchis -> null');
+ok(dayOccupancy(mon, TZ, [{ workingHours: weekdaysOnly, breakHours: noBreak }], [], [mon]) === null, 'zi blocata -> null');
+ok(dayOccupancy(mon, TZ, [], []) === null, 'fara programe -> null');
+
+const nov = { year: 2026, month: 10 };
+ok(monthDays(nov).length === 30 && monthDays(nov)[0] === '2026-11-01', 'zilele lunii');
+const bounds = monthBoundsUtc(nov, TZ);
+ok(bounds.fromIso === '2026-10-31T22:00:00.000Z' && bounds.toIso === '2026-11-30T22:00:00.000Z', 'limitele lunii in fusul firmei');
+const counts = countByDay(
+  [{ start_at: '2026-11-16T07:00:00Z' }, { start_at: '2026-11-16T12:00:00Z' }, { start_at: '2026-11-16T22:30:00Z' }],
+  TZ
+);
+ok(counts['2026-11-16'] === 2 && counts['2026-11-17'] === 1, 'numarare pe zi in fusul firmei');
+
+const bTones = businessMonthTones({
+  month: nov,
+  timezone: TZ,
+  capacities: [{ workingHours: weekdaysOnly, breakHours: noBreak }],
+  busy: [{ startUtc: at('09:00'), endUtc: at('17:00') }],
+});
+ok(bTones[mon] === 'full' && bTones['2026-11-17'] === 'free' && bTones['2026-11-15'] === 'closed', 'tonuri business pe luna');
+
+const cTones = clientMonthTones({
+  month: nov,
+  timezone: TZ,
+  workingHours: weekdaysOnly,
+  breakHours: noBreak,
+  busy: [{ startUtc: at('09:00'), endUtc: at('15:00') }],
+  durationMinutes: 60,
+  notBeforeUtc: new Date('2026-11-01T00:00:00Z'),
+  minYmd: '2026-11-10',
+  maxYmd: '2026-11-20',
+});
+ok(cTones[mon] === 'almostFull', 'client: 2 ore ramase din 8 -> putine');
+ok(cTones['2026-11-17'] === 'free', 'client: zi libera -> sunt locuri');
+ok(cTones['2026-11-15'] === 'closed', 'client: duminica -> inchis');
+ok(cTones['2026-11-09'] === undefined && cTones['2026-11-21'] === undefined, 'client: in afara intervalului fara ton');
+const cLong = clientMonthTones({
+  month: nov,
+  timezone: TZ,
+  workingHours: weekdaysOnly,
+  breakHours: noBreak,
+  busy: [{ startUtc: at('09:00'), endUtc: at('15:00') }],
+  durationMinutes: 180,
+  notBeforeUtc: new Date('2026-11-01T00:00:00Z'),
+  minYmd: '2026-11-10',
+  maxYmd: '2026-11-20',
+});
+ok(cLong[mon] === 'full', 'client: serviciu de 3h nu mai incape -> plin');
 
 console.log(`bookingCalendar: ${n} passed, 0 failed`);

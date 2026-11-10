@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { DatePickerField } from '@/components/DatePickerField';
-import type { DateInputIssue } from '@/lib/dateInput';
+import { BookingCalendar } from '@/components/BookingCalendar';
+import { bookingDateRange } from '@/lib/bookingCalendar';
 import { LocationCard } from '@/components/LocationCard';
 import { SlotPicker } from '@/components/SlotPicker';
 import { StaffSlotsCard } from '@/components/StaffSlotsCard';
@@ -30,7 +30,6 @@ import {
   canClientReschedule,
   firstBookableDateForStaff,
   mapBookingRpcError,
-  maxBookingDate,
   notBeforeUtc,
   staffSchedule,
   toYmd,
@@ -72,7 +71,7 @@ import { getCurrentUser } from '@/lib/currentUser';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
 import { createRequestTracker } from '@/lib/latestRequest';
-import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
+import { localDayBoundsUtc } from '@/lib/timezone';
 import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
 import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
@@ -138,8 +137,6 @@ export default function BookScreen() {
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   const [slots, setSlots] = useState<FreeSlot[]>([]);
   const [selected, setSelected] = useState<FreeSlot | null>(null);
-  // Data tastată nu e (încă) utilizabilă: nu arătăm sloturile datei anterioare.
-  const [dateIssue, setDateIssue] = useState<DateInputIssue | null>(null);
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -226,26 +223,7 @@ export default function BookScreen() {
   );
   const stepIndex = Math.max(0, steps.indexOf(step));
 
-  const minDate = useMemo(() => {
-    if (!business) {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    // Azi pe calendarul firmei, la pranz local (evita decalajul de fus).
-    const ymd = formatInTimeZone(new Date(), business.timezone, 'yyyy-MM-dd');
-    return new Date(`${ymd}T12:00:00`);
-  }, [business]);
-
-  const maxDate = useMemo(
-    () => (business ? maxBookingDate(business) : minDate),
-    [business, minDate]
-  );
-
-  // Câmpul de dată se remontează la revenirea pe pas: pornește fără mesaj de dată invalidă.
-  useEffect(() => {
-    setDateIssue(null);
-  }, [step]);
+  const dateRange = useMemo(() => (business ? bookingDateRange(business) : null), [business]);
 
   useEffect(() => {
     void getFavoriteIds().then(() => {
@@ -857,7 +835,7 @@ export default function BookScreen() {
       : step === 'service'
         ? (serviceIds.length > 0 || services.length === 0) && !(anyMode && eligibleStaff.length === 0)
         : step === 'date'
-          ? Boolean(dateLocal) && !dateIssue
+          ? Boolean(dateLocal)
           : step === 'slot'
             ? Boolean(selected)
             : Boolean(selected);
@@ -1229,25 +1207,35 @@ export default function BookScreen() {
       {step === 'date' ? (
         <>
           <SectionTitle>{tr('pick.dateTitle')}</SectionTitle>
-          <DatePickerField
-            label={tr('book.dateLabel')}
-            value={dateLocal}
-            onChange={(ymd) => {
-              pickedDate.current = ymd;
-              setDateLocal(ymd);
-              setSelected(null);
-            }}
-            onIssueChange={(issue) => {
-              setDateIssue(issue);
-              if (issue) setSelected(null);
-            }}
-            minimumDate={minDate}
-            maximumDate={maxDate}
-          />
-          {dateIssue ? (
-            <Callout tone="warning">
-              {tr(dateIssue === 'incomplete' ? 'book.dateInvalid' : 'book.dateOutOfRange')}
-            </Callout>
+          {business && dateRange ? (
+            <BookingCalendar
+              value={dateLocal}
+              onChange={(ymd) => {
+                pickedDate.current = ymd;
+                setDateLocal(ymd);
+                setSelected(null);
+              }}
+              minYmd={dateRange.minYmd}
+              maxYmd={dateRange.maxYmd}
+              blockedDates={business.blocked_dates ?? []}
+              schedules={
+                anyMode
+                  ? eligibleStaff.map((m) => staffSchedule(m, business).workingHours)
+                  : [staffSchedule(selectedStaff, business).workingHours]
+              }
+              heat={
+                anyMode
+                  ? null
+                  : {
+                      kind: 'client',
+                      business,
+                      member: selectedStaff,
+                      durationMinutes,
+                      minYmd: dateRange.minYmd,
+                      maxYmd: dateRange.maxYmd,
+                    }
+              }
+            />
           ) : null}
           {selectedStaff ? (
             <Text style={[styles.note, { color: t.colors.textMuted }]}>

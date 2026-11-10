@@ -1,7 +1,8 @@
 import { maxBookingDate, toYmd } from './bookingRules';
-import { formatInTimeZone } from './timezone';
+import { generateFreeSlots, type BusyRange } from './slots';
+import { formatInTimeZone, localDateTimeToUtc, localDayBoundsUtc } from './timezone';
 import type { AppLanguage } from './language';
-import type { BusinessProfile, DayKey, WorkingHours } from './types';
+import type { BreakHours, BusinessProfile, DayKey, WorkingHours } from './types';
 
 /** Săptămâna începe luni. */
 export const CALENDAR_WEEKDAYS_RO = ['Lu', 'Ma', 'Mi', 'Jo', 'Vi', 'Sâ', 'Du'] as const;
@@ -137,4 +138,182 @@ export function canGoPrevMonth(view: CalendarMonth, minYmd: string): boolean {
 /** Săgeata „înainte” e activă doar până la luna limitei. */
 export function canGoNextMonth(view: CalendarMonth, maxYmd: string): boolean {
   return monthIndex(view) < monthIndex(monthOfYmd(maxYmd));
+}
+
+// ---------------------------------------------------------------------------
+// Culorile zilelor (varianta A): cât de plină e ziua.
+
+/** Tonul unei zile: liberă, medie, aproape plină, plină, închisă. Clientul vede doar free/almostFull/full. */
+export type DayTone = 'free' | 'moderate' | 'almostFull' | 'full' | 'closed';
+
+/**
+ * Pragurile de ocupare pentru business (minute ocupate / minute de lucru).
+ * Ales cu TypeSafe/Jev (jev-1.14.0, 2026-11-10): 40% / 75% / 95%, p=0.55 față de 25/50/80 și 50/85/100.
+ */
+export const OCCUPANCY_BANDS = { moderate: 0.4, almostFull: 0.75, full: 0.95 } as const;
+
+/**
+ * „Puține locuri” pentru client, relativ la durata serviciului ales: cel mult 2 ore de început
+ * rămase sau cel mult 25% din orele posibile ale zilei (TypeSafe/Jev, 2026-11-10, p=0.74).
+ */
+export const FEW_LEFT = { maxCount: 2, maxShare: 0.25 } as const;
+
+export function occupancyTone(ratio: number | null): DayTone {
+  if (ratio === null || !Number.isFinite(ratio)) return 'closed';
+  if (ratio >= OCCUPANCY_BANDS.full) return 'full';
+  if (ratio >= OCCUPANCY_BANDS.almostFull) return 'almostFull';
+  if (ratio >= OCCUPANCY_BANDS.moderate) return 'moderate';
+  return 'free';
+}
+
+/** Disponibilitatea pentru client: câte ore de început mai sunt libere din câte ar avea ziua. */
+export function availabilityTone(freeCount: number, possibleCount: number): DayTone {
+  if (possibleCount <= 0) return 'closed';
+  if (freeCount <= 0) return 'full';
+  if (freeCount <= FEW_LEFT.maxCount || freeCount / possibleCount <= FEW_LEFT.maxShare) return 'almostFull';
+  return 'free';
+}
+
+/** Programul unui specialist (sau al firmei fără echipă). */
+export type DayCapacity = { workingHours: WorkingHours; breakHours?: BreakHours | null };
+
+function hhmm(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** Fereastra de lucru dintr-o zi (instant UTC, ms) și minutele de pauză din ea; null = nu lucrează. */
+function shiftWindow(ymd: string, timezone: string, cap: DayCapacity): { startMs: number; endMs: number; workMs: number } | null {
+  const day = cap.workingHours?.[dayKeyOfYmd(ymd)];
+  if (!day || day.closed !== false || !day.start || !day.end) return null;
+  const s = hhmm(day.start);
+  let e = hhmm(day.end);
+  if (e <= s) e += 1440; // tura peste miezul nopții
+  let breakMin = 0;
+  const br = cap.breakHours;
+  if (br?.enabled && br.start && br.end) {
+    let bs = hhmm(br.start);
+    let be = hhmm(br.end);
+    if (e > 1440 && bs < s) bs += 1440;
+    if (be <= bs) be += 1440;
+    breakMin = Math.max(0, Math.min(be, e) - Math.max(bs, s));
+  }
+  const startMs = localDateTimeToUtc(ymd, day.start, timezone).getTime();
+  const endMs = startMs + (e - s) * 60_000;
+  return { startMs, endMs, workMs: Math.max(0, (e - s - breakMin) * 60_000) };
+}
+
+/** Intervalele care se suprapun devin unul (un singur program nu poate fi ocupat de două ori). */
+function mergeRanges(ranges: { s: number; e: number }[]): { s: number; e: number }[] {
+  const sorted = [...ranges].sort((a, b) => a.s - b.s);
+  const out: { s: number; e: number }[] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && r.s <= last.e) last.e = Math.max(last.e, r.e);
+    else out.push({ ...r });
+  }
+  return out;
+}
+
+/**
+ * Ocuparea unei zile: minute ocupate / minute de lucru (fără pauze), între 0 și 1.
+ * Ocupat = programări (și orele ținute de o cerere de mutare), Google Calendar și concedii,
+ * tăiate la fereastra de lucru a zilei. Cu mai mulți specialiști se adună capacitățile.
+ * null = zi închisă (blocată sau nimeni nu lucrează).
+ */
+export function dayOccupancy(
+  ymd: string,
+  timezone: string,
+  capacities: readonly DayCapacity[],
+  busy: readonly BusyRange[],
+  blockedDates: readonly string[] = []
+): number | null {
+  if (blockedDates.includes(ymd)) return null;
+  const windows = capacities.map((c) => shiftWindow(ymd, timezone, c)).filter((w): w is NonNullable<typeof w> => !!w);
+  const capacityMs = windows.reduce((sum, w) => sum + w.workMs, 0);
+  if (windows.length === 0 || capacityMs <= 0) return null;
+  const winStart = Math.min(...windows.map((w) => w.startMs));
+  const winEnd = Math.max(...windows.map((w) => w.endMs));
+  let clipped = busy
+    .map((b) => ({ s: Math.max(new Date(b.startUtc).getTime(), winStart), e: Math.min(new Date(b.endUtc).getTime(), winEnd) }))
+    .filter((r) => r.e > r.s);
+  if (windows.length === 1) clipped = mergeRanges(clipped);
+  const busyMs = clipped.reduce((sum, r) => sum + (r.e - r.s), 0);
+  return Math.min(1, busyMs / capacityMs);
+}
+
+/** Toate zilele lunii, "YYYY-MM-DD". */
+export function monthDays(m: CalendarMonth): string[] {
+  const n = new Date(m.year, m.month + 1, 0).getDate();
+  return Array.from({ length: n }, (_, i) => ymdOf(m.year, m.month, i + 1));
+}
+
+/** Intervalul UTC al lunii în fusul firmei, pentru o singură cerere pe lună. */
+export function monthBoundsUtc(m: CalendarMonth, timezone: string): { fromIso: string; toIso: string } {
+  const days = monthDays(m);
+  return {
+    fromIso: localDayBoundsUtc(days[0]!, timezone).startUtc.toISOString(),
+    toIso: localDayBoundsUtc(days[days.length - 1]!, timezone).endUtc.toISOString(),
+  };
+}
+
+/** Numărul de programări pe zi (după ora de început, în fusul firmei). */
+export function countByDay(rows: readonly { start_at: string }[], timezone: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const ymd = formatInTimeZone(new Date(r.start_at), timezone, 'yyyy-MM-dd');
+    out[ymd] = (out[ymd] ?? 0) + 1;
+  }
+  return out;
+}
+
+/** Business: tonul fiecărei zile din lună după ocupare. */
+export function businessMonthTones(opts: {
+  month: CalendarMonth;
+  timezone: string;
+  capacities: readonly DayCapacity[];
+  busy: readonly BusyRange[];
+  blockedDates?: readonly string[];
+}): Record<string, DayTone> {
+  const out: Record<string, DayTone> = {};
+  for (const ymd of monthDays(opts.month)) {
+    out[ymd] = occupancyTone(dayOccupancy(ymd, opts.timezone, opts.capacities, opts.busy, opts.blockedDates ?? []));
+  }
+  return out;
+}
+
+/**
+ * Client: tonul fiecărei zile rezervabile, din orele libere pentru durata aleasă
+ * (aceeași funcție ca lista de ore, deci culoarea și lista nu se contrazic).
+ */
+export function clientMonthTones(opts: {
+  month: CalendarMonth;
+  timezone: string;
+  workingHours: WorkingHours;
+  breakHours: BreakHours;
+  busy: BusyRange[];
+  durationMinutes: number;
+  bufferMinutes?: number;
+  blockedDates?: string[];
+  notBeforeUtc?: Date;
+  minYmd: string;
+  maxYmd: string;
+}): Record<string, DayTone> {
+  const out: Record<string, DayTone> = {};
+  const base = {
+    timezone: opts.timezone,
+    sessionDurationMinutes: opts.durationMinutes,
+    workingHours: opts.workingHours,
+    breakHours: opts.breakHours,
+    bufferMinutes: opts.bufferMinutes ?? 0,
+    blockedDates: opts.blockedDates ?? [],
+    notBeforeUtc: opts.notBeforeUtc,
+  };
+  for (const ymd of monthDays(opts.month)) {
+    if (ymd < opts.minYmd || ymd > opts.maxYmd) continue;
+    const possible = generateFreeSlots({ ...base, dateLocal: ymd, busy: [] }).length;
+    const free = possible > 0 ? generateFreeSlots({ ...base, dateLocal: ymd, busy: opts.busy }).length : 0;
+    out[ymd] = availabilityTone(free, possible);
+  }
+  return out;
 }
