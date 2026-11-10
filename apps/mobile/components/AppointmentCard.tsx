@@ -54,7 +54,6 @@ type Props = {
   canConfirm?: boolean;
   onPostpone?: (hours: number) => void;
   postponeBusy?: boolean;
-  onMoveToSlot?: () => void;
   /** v111: propune ora noua (clientul accepta/refuza). */
   onProposeToSlot?: () => void;
   /** v111: muta imediat pe alt slot. */
@@ -84,6 +83,10 @@ type Props = {
   rescheduleBusy?: boolean;
   /** Ora ceruta formatata in fusul business-ului (altfel locala). */
   requestedLabel?: string;
+  /** Client: ora actuală pe scurt (slotTimeLabel), tăiată în caseta propunerii salonului. */
+  currentShortLabel?: string;
+  /** Client: salonul a mutat direct programarea („Mută acum”) și clientul n-a confirmat încă. */
+  movedAck?: { busy: boolean; onAck: () => void };
   /** v87 (business): anulare cu motiv, vazut de client. */
   onBusinessCancel?: (reason: string) => void;
   /** Cereri (business): pozele serviciilor programarii, in ordinea serviciilor; goala = fara miniatura. */
@@ -106,7 +109,6 @@ export function AppointmentCard({
   canConfirm = false,
   onPostpone,
   postponeBusy,
-  onMoveToSlot,
   onProposeToSlot,
   onMoveNow,
   onAddToCalendar,
@@ -130,6 +132,8 @@ export function AppointmentCard({
   onDeclineReschedule,
   rescheduleBusy,
   requestedLabel,
+  currentShortLabel,
+  movedAck,
   onBusinessCancel,
   serviceImages,
 }: Props) {
@@ -161,6 +165,8 @@ export function AppointmentCard({
   const businessProposed = isBusinessProposedReschedule(appointment);
   const clientProposed = isClientProposedReschedule(appointment);
   const canPropose = canBusinessProposeReschedule(appointment);
+  // Client, propunere a salonului în așteptare: caseta compactă ține locul acțiunilor secundare.
+  const clientDeciding = !showActions && businessProposed;
   const requestedText =
     requestedLabel ??
     (appointment.requested_start_at
@@ -364,7 +370,83 @@ export function AppointmentCard({
           </ButtonRow>
         ) : null}
 
-        {pendingRequest ? (
+        {movedAck && !showActions ? (
+          <View style={[styles.proposalLine, { borderColor: t.colors.accent, backgroundColor: t.colors.accentSoft }]}>
+            <Ionicons name="swap-horizontal-outline" size={14} color={t.colors.accentSoftText} />
+            <Text style={[styles.proposalText, { color: t.colors.accentSoftText }]} numberOfLines={2}>
+              {tr('my.movedByBusiness')}
+            </Text>
+            <Pressable
+              onPress={movedAck.onAck}
+              disabled={movedAck.busy}
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [styles.inlineBtn, { borderColor: t.colors.accent, opacity: pressed || movedAck.busy ? 0.6 : 1 }]}
+            >
+              <Text style={[styles.inlineBtnText, { color: t.colors.accentSoftText }]} numberOfLines={1}>
+                {tr('my.movedAck')}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {pendingRequest && clientDeciding ? (
+          <View
+            style={[styles.proposalBox, { borderColor: t.colors.warning, backgroundColor: t.colors.surfaceMuted }]}
+            testID="salon-proposal-box"
+          >
+            <Text style={[styles.proposalTitle, { color: t.colors.text }]} numberOfLines={1}>
+              {businessName ? tr('appt.proposalTitle', { salon: businessName }) : tr('appt.proposalTitleNoName')}
+            </Text>
+            <View
+              style={styles.proposalTimes}
+              accessible
+              accessibilityLabel={tr('appt.proposalFromA11y', { from: currentShortLabel ?? localLabel ?? fallbackLabel, to: requestedText })}
+            >
+              <Text style={[styles.proposalOld, { color: t.colors.textMuted }]} numberOfLines={1}>
+                {currentShortLabel ?? localLabel ?? fallbackLabel}
+              </Text>
+              <Ionicons name="arrow-forward" size={13} color={t.colors.textMuted} />
+              <Text style={[styles.proposalNew, { color: t.colors.text }]} numberOfLines={1}>
+                {requestedText}
+              </Text>
+            </View>
+            <View style={styles.proposalActions}>
+              <Text style={[styles.proposalHint, { color: t.colors.textFaint }]} numberOfLines={2}>
+                {tr('appt.proposalExpiry')}
+              </Text>
+              {onDeclineReschedule ? (
+                <Pressable
+                  onPress={onDeclineReschedule}
+                  disabled={Boolean(rescheduleBusy)}
+                  accessibilityRole="button"
+                  hitSlop={6}
+                  style={({ pressed }) => [styles.inlineBtn, { borderColor: t.colors.border, opacity: pressed || rescheduleBusy ? 0.6 : 1 }]}
+                >
+                  <Text style={[styles.inlineBtnText, { color: t.colors.text }]} numberOfLines={1}>
+                    {tr('appt.declineRequest')}
+                  </Text>
+                </Pressable>
+              ) : null}
+              {onAcceptReschedule ? (
+                <Pressable
+                  onPress={onAcceptReschedule}
+                  disabled={Boolean(rescheduleBusy)}
+                  accessibilityRole="button"
+                  hitSlop={6}
+                  style={({ pressed }) => [
+                    styles.inlineBtn,
+                    { backgroundColor: t.colors.success, borderColor: t.colors.success, opacity: pressed || rescheduleBusy ? 0.6 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.inlineBtnText, { color: t.colors.onAccent }]} numberOfLines={1}>
+                    {tr('appt.accept')}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : pendingRequest ? (
           <View
             style={[
               styles.requestBox,
@@ -378,12 +460,10 @@ export function AppointmentCard({
                   ? businessProposed
                     ? tr('appt.businessProposalWaiting', { to: requestedText })
                     : tr('appt.rescheduleRequested', { from: localLabel ?? fallbackLabel, to: requestedText })
-                  : businessProposed
-                    ? tr('appt.clientProposalWaiting', { to: requestedText })
-                    : tr('appt.rescheduleWaiting', { to: requestedText })}
+                  : tr('appt.rescheduleWaiting', { to: requestedText })}
               </Text>
             </View>
-            {((showActions && clientProposed) || (!showActions && businessProposed)) && (onAcceptReschedule || onDeclineReschedule) ? (
+            {showActions && clientProposed && (onAcceptReschedule || onDeclineReschedule) ? (
               <ButtonRow>
                 <View style={styles.actionFlex}>
                   <Button
@@ -421,7 +501,18 @@ export function AppointmentCard({
 
 
         {/* P0: cancel + reschedule easy to find (client) */}
-        {!showActions &&
+        {clientDeciding && onCancel && canCancel && active && !confirming ? (
+          <Pressable
+            onPress={() => setConfirming(true)}
+            accessibilityRole="button"
+            hitSlop={6}
+            style={({ pressed }) => [styles.cancelRow, { borderTopColor: t.colors.border, opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Ionicons name="close-circle-outline" size={15} color={t.colors.danger} />
+            <Text style={[styles.cancelText, { color: t.colors.danger }]}>{tr('appt.cancelBooking')}</Text>
+          </Pressable>
+        ) : !showActions &&
+        (!clientDeciding || confirming) &&
         ((canReschedule && onReschedule) ||
           (onCancel && canCancel && (status === 'pending' || status === 'approved'))) ? (
           confirming && onCancel && canCancel && (status === 'pending' || status === 'approved') ? (
@@ -513,7 +604,7 @@ export function AppointmentCard({
           </ButtonRow>
         ) : null}
 
-                {showDetails && showActions && (status === 'approved' || status === 'pending') ? (
+        {showDetails && showActions && (status === 'approved' || status === 'pending') ? (
           <View style={{ gap: spacing.sm }}>
             {onProposeToSlot ? (
               <Button
@@ -523,14 +614,6 @@ export function AppointmentCard({
                 size="sm"
                 disabled={!canPropose || pendingRequest}
                 onPress={onProposeToSlot}
-              />
-            ) : onMoveToSlot ? (
-              <Button
-                label={tr('appt.moveToSlot')}
-                icon="swap-horizontal-outline"
-                variant="secondary"
-                size="sm"
-                onPress={onMoveToSlot}
               />
             ) : null}
             {onProposeToSlot && !canPropose ? (
@@ -881,7 +964,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {showDetails && onDrive && status === 'approved' ? (
+        {showDetails && !clientDeciding && onDrive && status === 'approved' ? (
           <View
             style={[
               styles.driveBox,
@@ -918,7 +1001,7 @@ export function AppointmentCard({
           </View>
         ) : null}
 
-        {showDetails && onAddToCalendar && status === 'approved' ? (
+        {showDetails && !clientDeciding && onAddToCalendar && status === 'approved' ? (
           <Button
             label={tr('appt.addToCalendar')}
             icon="calendar-outline"
@@ -930,7 +1013,7 @@ export function AppointmentCard({
           />
         ) : null}
 
-        {showDetails && onShare ? (
+        {showDetails && !clientDeciding && onShare ? (
           <Button
             label={tr('appt.share')}
             icon="share-outline"
@@ -1022,6 +1105,17 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   expandRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   requestBox: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm },
+  proposalBox: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, gap: 4 },
+  proposalTitle: { fontSize: fontSize.sm, fontWeight: '700' },
+  proposalTimes: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'nowrap' },
+  proposalOld: { fontSize: fontSize.sm, textDecorationLine: 'line-through', flexShrink: 1 },
+  proposalNew: { fontSize: fontSize.sm, fontWeight: '800', flexShrink: 1 },
+  proposalActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  proposalHint: { flex: 1, minWidth: 0, fontSize: fontSize.xs },
+  proposalLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  proposalText: { flex: 1, minWidth: 0, fontSize: fontSize.sm, fontWeight: '600' },
+  inlineBtn: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: spacing.md, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  inlineBtnText: { fontSize: fontSize.sm, fontWeight: '700' },
   requestText: { fontSize: fontSize.sm, fontWeight: '600', flexShrink: 1 },
   reasonInput: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, minHeight: 64, fontSize: fontSize.md, textAlignVertical: 'top' },
   contact: { fontSize: fontSize.sm, flexShrink: 1 },

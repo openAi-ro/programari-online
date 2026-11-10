@@ -41,7 +41,7 @@ import { useBack } from '@/lib/nav';
 import { invokeRescheduleNotify, invokeWaitlistNotify } from '@/lib/notify-client';
 import { fireAndForget } from '@/lib/fireAndForget';
 import { clientAcceptReschedule, clientDeclineReschedule } from '@/lib/bookingRpc';
-import { isBusinessProposedReschedule } from '@/lib/rescheduleRequest';
+import { isBusinessProposedReschedule, slotTimeLabel } from '@/lib/rescheduleRequest';
 import { invokeRefundDeposit } from '@/lib/payments';
 import { formatRon } from '@/lib/format';
 import { giftCardDisplayStatus } from '@/lib/giftCard';
@@ -724,23 +724,17 @@ export default function MyAppointmentsScreen() {
           />
         }
         renderItem={({ item }) => (
-          <>
-            {needsMovedAck(item) ? (
-              <View style={{ marginBottom: spacing.sm }}>
-                <Callout tone="accent" title={tr('my.movedByBusiness')} />
-                <Button
-                  label={ackBusyId === item.id ? tr('cli.saving') : tr('my.movedAck')}
-                  variant="secondary"
-                  icon="checkmark-circle-outline"
-                  loading={ackBusyId === item.id}
-                  onPress={() => void ackMoved(item.id)}
-                />
-              </View>
-            ) : null}
           <AppointmentCard
             appointment={item}
             businessName={item.business_profiles?.name}
             localLabel={localLabel(item)}
+            currentShortLabel={slotTimeLabel(item.start_at, item.business_profiles?.timezone ?? 'Europe/Bucharest')}
+            requestedLabel={
+              item.requested_start_at
+                ? slotTimeLabel(item.requested_start_at, item.business_profiles?.timezone ?? 'Europe/Bucharest')
+                : undefined
+            }
+            movedAck={needsMovedAck(item) ? { busy: ackBusyId === item.id, onAck: () => void ackMoved(item.id) } : undefined}
             cancelNoticeMinutes={item.business_profiles?.cancel_notice_minutes}
             onShare={() => {
               const biz = item.business_profiles?.name ?? tr('my.salonFallback');
@@ -867,7 +861,6 @@ export default function MyAppointmentsScreen() {
                 : undefined
             }
           />
-          </>
         )}
       />
     </Screen>

@@ -1,4 +1,11 @@
+import { formatInTimeZone } from 'date-fns-tz';
+
 import type { Appointment } from './types';
+
+/** O oră de programare pe scurt, în fusul firmei: „12.11.2026 · 14:30”. */
+export function slotTimeLabel(iso: string, timezone: string): string {
+  return formatInTimeZone(new Date(iso), timezone, 'dd.MM.yyyy · HH:mm');
+}
 
 type RequestFields = Pick<
   Appointment,

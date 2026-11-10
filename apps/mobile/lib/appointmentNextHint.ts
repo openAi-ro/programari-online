@@ -21,12 +21,15 @@ export function appointmentNextHint(
     return trKey('hint.tooLateToChange');
   }
 
-  if (
-    (status === 'pending' || status === 'approved') &&
-    (opts?.canCancel || opts?.canReschedule)
-  ) {
-    if (status === 'pending') return trKey('hint.pendingCanChange');
-    return trKey('hint.approvedCanChange');
+  if (status === 'pending' || status === 'approved') {
+    // Textul spune doar ce se poate face acum (ex. în timpul unei propuneri a salonului
+    // reprogramarea e blocată, deci nu o mai pomenim).
+    if (opts?.canReschedule) {
+      return trKey(status === 'pending' ? 'hint.pendingCanChange' : 'hint.approvedCanChange');
+    }
+    if (opts?.canCancel) {
+      return trKey(status === 'pending' ? 'hint.pendingCanCancel' : 'hint.approvedCanCancel');
+    }
   }
 
   switch (status) {
