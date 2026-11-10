@@ -43,7 +43,7 @@ function assertEq<T>(actual: T, expected: T, name: string) {
 
 console.log('slots tests\n');
 
-// 1) Mon 09-12 duration 60 → 3 slots
+// 1) Mon 09-12 duration 60 → start every 30 min (09:00 … 11:00)
 {
   const slots = generateFreeSlots({
     dateLocal: MONDAY,
@@ -53,11 +53,11 @@ console.log('slots tests\n');
     breakHours: noBreak,
     busy: [],
   });
-  assertEq(slots.length, 3, 'Mon 09-12 duration 60 → 3 slots');
+  assertEq(slots.length, 5, 'Mon 09-12 duration 60 → 5 start times');
   assertEq(
     slots.map((s) => s.labelLocal),
-    ['09:00', '10:00', '11:00'],
-    'labels 09:00, 10:00, 11:00'
+    ['09:00', '09:30', '10:00', '10:30', '11:00'],
+    'labels every half hour 09:00–11:00'
   );
 }
 
@@ -98,7 +98,7 @@ console.log('slots tests\n');
     breakHours: noBreak,
     busy: [{ startUtc: first.startUtc, endUtc: first.endUtc }],
   });
-  assertEq(slots.length, 2, 'busy removes one slot → 2 left');
+  assertEq(slots.length, 3, 'busy 09–10 removes 09:00 and 09:30 → 3 left');
   assert(
     !slots.some((s) => s.startUtc === first.startUtc),
     'busy first slot not in free list'
@@ -131,7 +131,7 @@ console.log('slots tests\n');
   );
 }
 
-// 5) buffer 15 min → step 75, Mon 09-12 duration 60 → 2 slots (09:00, 10:15)
+// 5) buffer 15 min does not widen the half-hour grid; a busy range keeps its buffer
 {
   const slots = generateFreeSlots({
     dateLocal: MONDAY,
@@ -142,11 +142,10 @@ console.log('slots tests\n');
     busy: [],
     bufferMinutes: 15,
   });
-  assertEq(slots.length, 2, 'buffer 15 → 2 slots in 09-12');
   assertEq(
     slots.map((s) => s.labelLocal),
-    ['09:00', '10:15'],
-    'labels 09:00, 10:15 with buffer'
+    ['09:00', '09:30', '10:00', '10:30', '11:00'],
+    'buffer 15 → still every half hour in 09-12'
   );
 }
 
@@ -192,14 +191,14 @@ console.log('slots tests\n');
   const mon = generateFreeSlots({ ...base, dateLocal: MONDAY });
   assertEq(
     mon.map((s) => s.labelLocal),
-    ['18:00', '19:00', '20:00', '21:00', '22:00', '23:00'],
+    ['18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00', '23:30'],
     'luni: doar sloturile de luni (până la miezul nopții)'
   );
   const tue = generateFreeSlots({ ...base, dateLocal: TUESDAY });
   assertEq(
     tue.map((s) => s.labelLocal),
-    ['00:00', '01:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'],
-    'marți: 00:00 și 01:00 din tura de luni, apoi programul de marți'
+    ['00:00', '00:30', '01:00', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'],
+    'marți: 00:00–01:00 din tura de luni, apoi programul de marți'
   );
   assert(
     tue[0].startUtc === '2026-08-03T21:00:00.000Z',
@@ -216,18 +215,18 @@ console.log('slots tests\n');
     tue: { closed: true },
   };
   const base = { timezone: TZ, sessionDurationMinutes: 60, workingHours: night, breakHours: noBreak, busy: [] };
-  assertEq(generateFreeSlots({ ...base, dateLocal: MONDAY }).map((s) => s.labelLocal), ['22:00', '23:00'], 'luni 22–02: luni 22:00, 23:00');
-  assertEq(generateFreeSlots({ ...base, dateLocal: TUESDAY }).map((s) => s.labelLocal), ['00:00', '01:00'], 'marți închis: doar continuarea turei de luni');
+  assertEq(generateFreeSlots({ ...base, dateLocal: MONDAY }).map((s) => s.labelLocal), ['22:00', '22:30', '23:00', '23:30'], 'luni 22–02: luni 22:00–23:30');
+  assertEq(generateFreeSlots({ ...base, dateLocal: TUESDAY }).map((s) => s.labelLocal), ['00:00', '00:30', '01:00'], 'marți închis: doar continuarea turei de luni');
   assertEq(
     generateFreeSlots({ ...base, dateLocal: '2026-08-05' }).map((s) => s.labelLocal),
-    ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'],
+    ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'],
     'miercuri: nimic din marți (închis)'
   );
   // duminică 22–02 → continuarea apare luni dimineață, înaintea programului de luni
   const sun: WorkingHours = { ...night, sun: { closed: false, start: '22:00', end: '02:00' } };
   assertEq(
     generateFreeSlots({ ...base, workingHours: sun, dateLocal: MONDAY }).map((s) => s.labelLocal),
-    ['00:00', '01:00', '22:00', '23:00'],
+    ['00:00', '00:30', '01:00', '22:00', '22:30', '23:00', '23:30'],
     'luni: continuarea de duminică + tura de luni, în ordine'
   );
   // zile blocate
@@ -250,7 +249,7 @@ console.log('slots tests\n');
   // pauze în tura de noapte
   assertEq(
     [MONDAY, TUESDAY].flatMap((d) => generateFreeSlots({ ...base, dateLocal: d, breakHours: { enabled: true, start: '23:00', end: '00:00' } }).map((s) => `${d}:${s.labelLocal}`)),
-    [`${MONDAY}:22:00`, `${TUESDAY}:00:00`, `${TUESDAY}:01:00`],
+    [`${MONDAY}:22:00`, `${TUESDAY}:00:00`, `${TUESDAY}:00:30`, `${TUESDAY}:01:00`],
     'pauză 23:00–00:00 în tura 22–02'
   );
   assertEq(
@@ -260,7 +259,7 @@ console.log('slots tests\n');
   );
   assertEq(
     generateFreeSlots({ ...base, dateLocal: MONDAY, breakHours: { enabled: true, start: '13:00', end: '14:00' } }).map((s) => s.labelLocal),
-    ['22:00', '23:00'],
+    ['22:00', '22:30', '23:00', '23:30'],
     'pauza de prânz nu afectează tura de noapte'
   );
 }
@@ -287,6 +286,44 @@ console.log('slots tests\n');
     'primul slot dupa programare incepe dupa bufferul ei (11:25)',
     JSON.stringify(slots.map((s) => s.labelLocal))
   );
+}
+
+// 10) test încrucișat 10.11.2026: serviciu de 2 h, program 08–20, ocupat 18–20 → 17:00 lipsește, 16:00 și 16:30 rămân
+{
+  const slots = generateFreeSlots({
+    dateLocal: TUESDAY,
+    timezone: TZ,
+    sessionDurationMinutes: 120,
+    workingHours: { ...openMonFri, tue: { closed: false, start: '08:00', end: '20:00' } },
+    breakHours: noBreak,
+    // 18:00–20:00 local = 15:00–17:00 UTC (EEST)
+    busy: [{ startUtc: '2026-08-04T15:00:00.000Z', endUtc: '2026-08-04T17:00:00.000Z' }],
+  });
+  const labels = slots.map((s) => s.labelLocal);
+  assert(labels.includes('08:30') && labels.includes('15:00'), '2 h: orele de la jumătate și cele impare sunt oferite', JSON.stringify(labels));
+  assert(labels.includes('16:00') && !labels.includes('16:30'), '2 h: 16:00 încape înainte de 18:00, 16:30 nu', JSON.stringify(labels));
+  const free = generateFreeSlots({
+    dateLocal: TUESDAY,
+    timezone: TZ,
+    sessionDurationMinutes: 120,
+    workingHours: { ...openMonFri, tue: { closed: false, start: '08:00', end: '20:00' } },
+    breakHours: noBreak,
+    busy: [],
+  }).map((s) => s.labelLocal);
+  assert(free.includes('17:00') && free.includes('18:00') && !free.includes('18:30'), '2 h liber: 17:00 și 18:00 oferite, 18:30 nu mai încape', JSON.stringify(free));
+}
+
+// 11) serviciu scurt de 20 min: pasul rămâne durata (sub grila de 30)
+{
+  const slots = generateFreeSlots({
+    dateLocal: MONDAY,
+    timezone: TZ,
+    sessionDurationMinutes: 20,
+    workingHours: openMonFri,
+    breakHours: noBreak,
+    busy: [],
+  });
+  assertEq(slots.slice(0, 4).map((s) => s.labelLocal), ['09:00', '09:20', '09:40', '10:00'], '20 min: pas de 20 min');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

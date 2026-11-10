@@ -9,6 +9,9 @@ import {
 
 export type BusyRange = { startUtc: string; endUtc: string };
 
+/** Start times are never further apart than this (half-hour grid). */
+export const MAX_STEP_MINUTES = 30;
+
 export type GenerateFreeSlotsInput = {
   dateLocal: string; // YYYY-MM-DD
   timezone: string;
@@ -82,7 +85,8 @@ export function generateFreeSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
 
 /**
  * All slots of the shift that STARTS on `dateLocal` (may run past midnight).
- * Steps through working hours by session duration, excludes break and busy overlaps.
+ * Start times every min(duration + buffer, 30) minutes, so a long service can still start
+ * on the half hour (2 h service: 08:00, 08:30, … not only 08, 10, 12). Excludes break and busy overlaps.
  */
 function shiftSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
   const {
@@ -114,7 +118,7 @@ function shiftSlots(input: GenerateFreeSlotsInput): FreeSlot[] {
   if (breakEnabled && breakEndMin <= breakStartMin) breakEndMin += 1440;
 
   const bufferMs = Math.max(0, bufferMinutes) * 60 * 1000;
-  const stepMinutes = sessionDurationMinutes + Math.max(0, bufferMinutes);
+  const stepMinutes = Math.min(sessionDurationMinutes + Math.max(0, bufferMinutes), MAX_STEP_MINUTES);
   const notBefore = notBeforeUtc
     ? notBeforeUtc instanceof Date
       ? notBeforeUtc

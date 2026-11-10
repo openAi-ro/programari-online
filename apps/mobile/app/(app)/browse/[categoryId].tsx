@@ -62,7 +62,14 @@ export default function CategoryResultsScreen() {
   const { lang } = useLanguage();
   const back = useBack();
   const router = useRouter();
-  const params = useLocalSearchParams<{ categoryId?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    categoryId?: string | string[];
+    q?: string;
+    country?: string;
+    county?: string;
+    city?: string;
+  }>();
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || null;
   const categoryId = Array.isArray(params.categoryId)
     ? params.categoryId[0]
     : params.categoryId;
@@ -75,10 +82,11 @@ export default function CategoryResultsScreen() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PublicBusiness[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [q, setQ] = useState('');
-  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
-  const [selectedCounty, setSelectedCounty] = useState<string | null>(null);
-  const [selectedLocality, setSelectedLocality] = useState<string | null>(null);
+  // Filtrele vin din Caută, ca alegerea categoriei să nu le șteargă (Auditor F-5).
+  const [q, setQ] = useState(() => first(params.q) ?? '');
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(() => first(params.country));
+  const [selectedCounty, setSelectedCounty] = useState<string | null>(() => first(params.county));
+  const [selectedLocality, setSelectedLocality] = useState<string | null>(() => first(params.city));
   const [nearMe, setNearMe] = useState(false);
   const [coords, setCoords] = useState<DeviceCoords | null>(null);
   const [locError, setLocError] = useState<string | null>(null);
@@ -369,7 +377,7 @@ export default function CategoryResultsScreen() {
               ) : null}
               {error ? (
                 <Callout tone="warning" title={tr('browse.partialList')}>
-                  {tr('cat.partialDesc', { error: error ?? '' })}
+                  {tr('cat.partialDesc')}
                 </Callout>
               ) : null}
             </View>

@@ -211,7 +211,7 @@ export async function signUpWithPassword(
     },
   });
   if (result.data.session) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   }
   return result;
 }
@@ -233,7 +233,7 @@ export async function signInWithPassword(email: string, password: string) {
   });
   if (result.data.session && !sessionIsReadyForApp(result.data.session)) {
     holdAuthRedirect();
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     return {
       data: { user: null, session: null },
       error: {
@@ -378,7 +378,7 @@ export async function signOut() {
   } catch {
     // best-effort — logout-ul continuă oricum
   }
-  return supabase.auth.signOut();
+  return supabase.auth.signOut({ scope: 'local' });
 }
 
 export async function getSession(): Promise<Session | null> {

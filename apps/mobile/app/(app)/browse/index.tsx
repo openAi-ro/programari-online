@@ -50,7 +50,8 @@ function CategoryTile({
 }: {
   cat: BrowseCategory;
   selected: boolean;
-  count: number;
+  /** null = lista nu s-a putut încărca; nu arătăm un 0 fals. */
+  count: number | null;
   onPress: () => void;
 }) {
   const t = useTheme();
@@ -60,7 +61,7 @@ function CategoryTile({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={tr('browse.catA11y', { label: catName, count })}
+      accessibilityLabel={count == null ? catName : tr('browse.catA11y', { label: catName, count })}
       accessibilityState={{ selected }}
       style={({ pressed }) => [
         styles.catTile,
@@ -78,16 +79,18 @@ function CategoryTile({
         resizeMode="cover"
         accessibilityIgnoresInvertColors
       />
-      <View
-        style={[
-          styles.catCountBadge,
-          {
-            backgroundColor: count > 0 ? palette.accent700 : 'rgba(15,23,42,0.55)',
-          },
-        ]}
-      >
-        <Text style={styles.catCountText}>{count}</Text>
-      </View>
+      {count == null ? null : (
+        <View
+          style={[
+            styles.catCountBadge,
+            {
+              backgroundColor: count > 0 ? palette.accent700 : 'rgba(15,23,42,0.55)',
+            },
+          ]}
+        >
+          <Text style={styles.catCountText}>{count}</Text>
+        </View>
+      )}
       <View
         style={[
           styles.catLabelWrap,
@@ -140,7 +143,7 @@ function CategoryGrid({
   onSelect,
   onSecret,
 }: {
-  counts: Record<string, number>;
+  counts: Record<string, number> | null;
   onSelect: (cat: BrowseCategory) => void;
   onSecret: () => void;
 }) {
@@ -158,7 +161,7 @@ function CategoryGrid({
             key={cat.key}
             cat={cat}
             selected={false}
-            count={counts[cat.key] ?? 0}
+            count={counts ? counts[cat.key] ?? 0 : null}
             onPress={() => onSelect(cat)}
           />
         ))}
@@ -273,9 +276,19 @@ export default function BrowseScreen() {
 
   const onSelectCategory = useCallback(
     (cat: BrowseCategory) => {
-      router.push(`/(app)/browse/${cat.key}` as never);
+      // Filtrele deja alese (nume, țară, județ, localitate) merg mai departe în categorie (Auditor F-5).
+      router.push({
+        pathname: '/(app)/browse/[categoryId]',
+        params: {
+          categoryId: cat.key,
+          ...(q.trim() ? { q: q.trim() } : {}),
+          ...(selectedCountryCode ? { country: selectedCountryCode } : {}),
+          ...(selectedCounty ? { county: selectedCounty } : {}),
+          ...(selectedLocality ? { city: selectedLocality } : {}),
+        },
+      } as never);
     },
-    [router]
+    [router, q, selectedCountryCode, selectedCounty, selectedLocality]
   );
 
   const onCountryChange = useCallback(
@@ -397,7 +410,7 @@ export default function BrowseScreen() {
             </View>
 
             <CategoryGrid
-              counts={categoryCounts}
+              counts={error && rows.length === 0 ? null : categoryCounts}
               onSelect={onSelectCategory}
               onSecret={() => router.push('/(app)/browse/secret' as never)}
             />
@@ -442,8 +455,19 @@ export default function BrowseScreen() {
 
             {error ? (
               <Callout tone="warning" title={tr('browse.partialList')}>
-                {tr('browse.partialDesc', { error: error ?? '' })}
+                {tr('browse.partialDesc')}
               </Callout>
+            ) : null}
+            {error ? (
+              <Button
+                label={tr('common.retry')}
+                variant="secondary"
+                icon="refresh-outline"
+                onPress={() => {
+                  setLoading(true);
+                  void load({});
+                }}
+              />
             ) : null}
           </View>
         </ScrollView>

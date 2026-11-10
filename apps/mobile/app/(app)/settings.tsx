@@ -55,8 +55,9 @@ import {
 } from '@/lib/webPush';
 import {
   formatPhoneDisplay,
-  isValidRoMobile,
   normalizePhoneE164,
+  phoneProblem,
+  phoneTypingProblem,
 } from '@/lib/phone';
 import { IMAGE_MAX_SIDE } from '@/lib/imageSizing';
 import { readLocalImageBytes } from '@/lib/uploadLocalImage';
@@ -733,18 +734,12 @@ export default function SettingsScreen() {
       return false;
     }
 
-    let normalized: string | null = null;
-    if (phoneInput.trim()) {
-      normalized = normalizePhoneE164(phoneInput.trim());
-      if (!normalized) {
-        setError(trKey('set.badPhone'));
-        return false;
-      }
-      if (!isValidRoMobile(normalized)) {
-        setError(trKey('set.badRoPhone'));
-        return false;
-      }
+    const problem = phoneProblem(phoneInput);
+    if (problem) {
+      setError(trKey(problem === 'invalid' ? 'set.badPhone' : 'set.badRoPhone'));
+      return false;
     }
+    const normalized = phoneInput.trim() ? normalizePhoneE164(phoneInput.trim()) : null;
 
     const email = profile?.email ?? user.email ?? null;
     if (!email && !normalized) {
@@ -1411,6 +1406,13 @@ export default function SettingsScreen() {
           keyboardType="phone-pad"
           autoComplete="tel"
           icon="call-outline"
+          error={
+            phoneTypingProblem(phoneInput) === 'invalid'
+              ? tr('set.badPhone')
+              : phoneTypingProblem(phoneInput) === 'notRo'
+                ? tr('set.badRoPhone')
+                : undefined
+          }
           hint={
             bizManager
               ? tr('set.bizPhoneHint', { save: tr('set.saveProfile') })

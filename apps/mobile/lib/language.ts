@@ -59,6 +59,35 @@ function urlLanguage(): AppLanguage | null {
   }
 }
 
+/** Ce face aplicația cu limba la autentificare (test încrucișat P6). */
+export type LanguageSync =
+  | { kind: 'apply'; lang: AppLanguage } // limba aleasă explicit în Setări, pe alt dispozitiv
+  | { kind: 'push'; lang: AppLanguage } // profilul n-are alegere: emailurile urmează limba afișată
+  | null;
+
+/**
+ * Alegerea explicită din Setări (`language_set_at`) câștigă pe orice dispozitiv. Fără ea,
+ * valoarea 'ro' din profil e doar implicită, deci profilul preia limba afișată. `?lang=` din
+ * adresă (iframe) nu schimbă nimic.
+ */
+export function languageSyncAction(
+  profile: { language?: string | null; language_set_at?: string | null } | null | undefined,
+  current: AppLanguage,
+  urlOverride: boolean
+): LanguageSync {
+  if (urlOverride || !profile) return null;
+  if (profile.language_set_at) {
+    if (profile.language !== 'ro' && profile.language !== 'en') return null;
+    return profile.language === current ? null : { kind: 'apply', lang: profile.language };
+  }
+  return profile.language === current ? null : { kind: 'push', lang: current };
+}
+
+/** true când adresa web are `?lang=ro|en` (ex. iframe pe site-ul firmei). */
+export function hasUrlLanguage(): boolean {
+  return isWeb() && urlLanguage() != null;
+}
+
 export function parseLanguage(value: string | null | undefined): AppLanguage {
   return value === 'en' || value === 'ro' ? value : 'ro';
 }

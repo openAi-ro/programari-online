@@ -129,7 +129,7 @@
         },
         "extra": {
             "router": {},
-            "displayVersion": "3.23",
+            "displayVersion": "3.24",
             "webBaseUrl": "https://programari.expo.app",
             "installUrl": "https://expo.dev/accounts/promixt/projects/programari/builds/4a07edea-1504-4892-adc5-fe8d685c428d",
             "eas": {

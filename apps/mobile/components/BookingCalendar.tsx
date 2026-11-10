@@ -238,9 +238,9 @@ const styles = StyleSheet.create({
   title: { fontSize: fontSize.md, fontWeight: '800' },
   // Antetul și grila folosesc aceeași celulă: 7 coloane egale.
   row: { flexDirection: 'row' },
-  cell: { flex: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  cell: { flex: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
   weekday: { fontSize: fontSize.sm, fontWeight: '700' },
-  day: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  day: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { fontSize: fontSize.md },
   dot: { position: 'absolute', top: 2, right: '22%', width: 9, height: 9, borderRadius: 5, borderWidth: 1.5 },
   countBadge: {

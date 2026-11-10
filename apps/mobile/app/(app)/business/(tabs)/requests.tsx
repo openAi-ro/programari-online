@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { AppointmentCard } from '@/components/AppointmentCard';
@@ -48,7 +48,7 @@ import {
   invokeRescheduleNotify,
   invokeWaitlistNotify,
 } from '@/lib/notify-client';
-import { fireAndForget } from '@/lib/fireAndForget';
+import { clientNotifyWarning } from '@/lib/notifyFeedback';
 import { presentLocalBookingNotification } from '@/lib/notifications';
 import { invokeRefundDeposit, invokeWaiveDeposit } from '@/lib/payments';
 import { ensureChatConversationForClient, sendMessage } from '@/lib/chatRpc';
@@ -279,6 +279,16 @@ export default function BusinessRequestsScreen() {
     };
   }, [businessIds]);
 
+  // Web: un tab din fundal poate pierde evenimentele realtime; reîncărcăm la revenire (test încrucișat P7).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadRef.current();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   async function updateStatus(id: string, status: 'approved' | 'rejected') {
     if (statusBusyRef.current) return;
     statusBusyRef.current = id;
@@ -306,7 +316,7 @@ export default function BusinessRequestsScreen() {
     // Cardul se actualizeaza imediat; notificarea si reincarcarea vin dupa.
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
 
-    fireAndForget(invokeDecisionNotify(id), 'WhatsApp/email notify:');
+    const notifyWarning = clientNotifyWarning(await invokeDecisionNotify(id));
 
     if (status === 'rejected') {
       notifyWaitlistForRow(rows.find((r) => r.id === id));
@@ -317,6 +327,7 @@ export default function BusinessRequestsScreen() {
     }
 
     await load();
+    if (notifyWarning) setError(notifyWarning, { sticky: true });
     } finally {
       statusBusyRef.current = null;
     }
@@ -480,19 +491,17 @@ export default function BusinessRequestsScreen() {
     const aptId = moveApt.id;
     setMoveApt(null);
     setMoveSlot(null);
+    let notifyWarning: string | null;
     if (moveMode === 'propose') {
-      fireAndForget(invokeRescheduleNotify(aptId, 'proposed'), 'propose notify:');
-      setSuccess(trKey('req.proposedOk').replace('{label}', label));
+      notifyWarning = clientNotifyWarning(await invokeRescheduleNotify(aptId, 'proposed'));
+      if (!notifyWarning) setSuccess(trKey('req.proposedOk').replace('{label}', label));
     } else {
-      const notify = await invokeMoved(aptId);
-      if (!notify.ok) {
-        setError(mapBookingRpcError('move_notify_failed'));
-      } else {
-        setSuccess(trKey('req.movedTo').replace('{label}', label));
-      }
+      notifyWarning = clientNotifyWarning(await invokeMoved(aptId));
+      if (!notifyWarning) setSuccess(trKey('req.movedTo').replace('{label}', label));
       notifyWaitlistForRow(rows.find((r) => r.id === aptId));
     }
     await load();
+    if (notifyWarning) setError(notifyWarning, { sticky: true });
   }
 
   async function decideReschedule(row: Row, accept: boolean) {
@@ -509,7 +518,9 @@ export default function BusinessRequestsScreen() {
         await load();
         return;
       }
-      fireAndForget(invokeRescheduleNotify(row.id, accept ? 'accepted' : 'declined'), 'reschedule notify:');
+      const notifyWarning = clientNotifyWarning(
+        await invokeRescheduleNotify(row.id, accept ? 'accepted' : 'declined')
+      );
       if (accept) {
         // Ora veche s-a eliberat.
         notifyWaitlistForRow(row);
@@ -518,6 +529,7 @@ export default function BusinessRequestsScreen() {
         setSuccess(trKey('req.rescheduleDeclined'));
       }
       await load();
+      if (notifyWarning) setError(notifyWarning, { sticky: true });
     } finally {
       setRescheduleBusyId(null);
     }
@@ -532,10 +544,11 @@ export default function BusinessRequestsScreen() {
       await load();
       return;
     }
-    fireAndForget(invokeRescheduleNotify(row.id, 'cancelled'), 'cancel notify:');
+    const notifyWarning = clientNotifyWarning(await invokeRescheduleNotify(row.id, 'cancelled'));
     notifyWaitlistForRow(row);
-    setSuccess(trKey('req.cancelledByBiz'));
+    if (!notifyWarning) setSuccess(trKey('req.cancelledByBiz'));
     await load();
+    if (notifyWarning) setError(notifyWarning, { sticky: true });
   }
 
   async function markNoShow(id: string) {

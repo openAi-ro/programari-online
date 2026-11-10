@@ -10,6 +10,8 @@ type Props = {
   color?: string;
   size?: number;
   selected?: boolean;
+  /** false când numele e deja afișat lângă badge (ex. lista Echipă). */
+  showName?: boolean;
 };
 
 function initials(name: string): string {
@@ -24,7 +26,7 @@ function initials(name: string): string {
  * Poza umple tot cercul (fara inel colorat deasupra). Daca nu exista poza
  * sau nu se incarca, arata initialele pe fundalul culorii specialistului.
  */
-export function StaffBadge({ name, photoUrl, color, size = 72, selected }: Props) {
+export function StaffBadge({ name, photoUrl, color, size = 72, selected, showName = true }: Props) {
   const t = useTheme();
   const [failedUri, setFailedUri] = useState<string | null>(null);
   const showPhoto = Boolean(photoUrl) && failedUri !== photoUrl;
@@ -53,13 +55,15 @@ export function StaffBadge({ name, photoUrl, color, size = 72, selected }: Props
           <Text style={[styles.fallback, { fontSize: size * 0.32 }]}>{initials(name)}</Text>
         )}
       </View>
-      <Text
-        style={[styles.name, { color: t.colors.text }]}
-        numberOfLines={2}
-        ellipsizeMode="tail"
-      >
-        {name}
-      </Text>
+      {showName ? (
+        <Text
+          style={[styles.name, { color: t.colors.text }]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {name}
+        </Text>
+      ) : null}
     </View>
   );
 }

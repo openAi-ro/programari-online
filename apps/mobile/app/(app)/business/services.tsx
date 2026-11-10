@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   rowMeta: { fontSize: fontSize.sm },
   rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   iconBtn: {
-    width: 44,
+    width: spacing.touchTarget,
     height: spacing.touchTarget,
     alignItems: 'center',
     justifyContent: 'center',

@@ -787,7 +787,7 @@ function ClientHome({
             </View>
           </View>
         </View>
-      ) : (
+      ) : loadError ? null : (
         <EmptyState
           icon="calendar-outline"
           title={tr('home.noUpcoming')}

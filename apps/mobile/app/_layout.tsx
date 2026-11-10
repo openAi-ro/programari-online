@@ -26,6 +26,7 @@ import { LanguageProvider, trKey } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 import { linkMyBusinessClients } from '@/lib/businessBooking';
 import { getLanguage, subscribeLanguage } from '@/lib/language';
+import { syncLanguageFromProfile } from '@/lib/profileLanguage';
 import * as Linking from 'expo-linking';
 
 export { ErrorBoundary } from 'expo-router';
@@ -106,6 +107,7 @@ function useSessionGuard() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
       if (next && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) linkMyBusinessClients();
+      if (next && event === 'SIGNED_IN') void syncLanguageFromProfile(next.user.id);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -115,9 +117,9 @@ function useSessionGuard() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const inAuthCallback =
-      segments[0] === 'auth' && segments[1] === 'callback';
+      segments[0] === 'auth' && (segments as string[])[1] === 'callback';
     const onResetPassword =
-      inAuthGroup && segments[1] === 'reset-password';
+      inAuthGroup && (segments as string[])[1] === 'reset-password';
     const path = pathname || '';
     const inPublicBook = segments[0] === 'b' || path.startsWith('/b/');
     const inPublicInstall =

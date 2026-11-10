@@ -80,6 +80,6 @@ export async function deleteMyAccount(): Promise<{ ok: boolean; error?: string }
   if (error) return { ok: false, error: error.message };
   const payload = data as { ok?: boolean; error?: string } | null;
   if (payload?.error) return { ok: false, error: payload.error };
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: 'local' });
   return { ok: true };
 }

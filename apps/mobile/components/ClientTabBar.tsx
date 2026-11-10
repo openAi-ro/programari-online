@@ -173,6 +173,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
     minWidth: 0,
+    minHeight: 48,
     maxWidth: '100%',
     paddingHorizontal: ITEM_PAD_X,
     // Fara overflow hidden: badge-ul (top: -4) era taiat sus. Eticheta are deja numberOfLines=1.

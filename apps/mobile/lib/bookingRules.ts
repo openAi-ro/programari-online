@@ -277,9 +277,6 @@ export function mapBookingRpcError(message: string): string {
   if (message.includes('move_same_slot')) {
     return trKey('book.errMoveSame');
   }
-  if (message.includes('move_notify_failed')) {
-    return trKey('book.errMoveNotify');
-  }
   if (message.includes('cannot_review')) {
     return trKey('book.errCannotReview');
   }

@@ -70,6 +70,7 @@ import { fireAndForget } from '@/lib/fireAndForget';
 import { getCurrentUser } from '@/lib/currentUser';
 import { mapPayError, startDepositCheckout } from '@/lib/payments';
 import { generateFreeSlots } from '@/lib/slots';
+import { clearDraft, readDraft, restorableDraft, writeDraft } from '@/lib/bookingDraft';
 import { createRequestTracker } from '@/lib/latestRequest';
 import { localDayBoundsUtc } from '@/lib/timezone';
 import { ANON_BUSINESS_COLUMNS } from '@/lib/publicPageMeta';
@@ -152,6 +153,8 @@ export default function BookScreen() {
   const [favorited, setFavorited] = useState(false);
   const [step, setStep] = useState<WizardStep>('service');
   const [stepsReady, setStepsReady] = useState(false);
+  // Web: ora aleasă înainte de refresh, de re-selectat când se încarcă orele (Auditor F-8).
+  const restoreSlotRef = useRef<string | null>(null);
   const [repeatCount, setRepeatCount] = useState(1);
   const [tipRon, setTipRon] = useState(0);
   const [tipCustom, setTipCustom] = useState('');
@@ -454,7 +457,24 @@ export default function BookScreen() {
       const prefilled =
         Boolean(fromQsSvc || fromQsStaff || rescheduleId) &&
         (list.length === 0 || Boolean(fromQsSvc || rescheduleId));
-      setStep(prefilled || isReschedule ? 'date' : built[0] ?? 'date');
+      const draft =
+        Platform.OS === 'web' && !prefilled && !isReschedule
+          ? restorableDraft(readDraft(), {
+              code: String(publicCode),
+              now: Date.now(),
+              todayYmd: toYmd(new Date()),
+              serviceIds: list.map((x) => x.id),
+              staffIds: team.map((m) => m.id),
+            })
+          : null;
+      if (draft) {
+        if (draft.serviceIds.length > 0) setServiceIds(draft.serviceIds);
+        setStaffAny(draft.staffAny);
+        if (draft.staffId) setStaffId(draft.staffId);
+        setDateLocal(draft.dateLocal);
+        restoreSlotRef.current = draft.slotStartUtc;
+      }
+      setStep(draft && built.includes(draft.step) ? draft.step : prefilled || isReschedule ? 'date' : built[0] ?? 'date');
       setStepsReady(true);
       setLoading(false);
     })();
@@ -542,6 +562,33 @@ export default function BookScreen() {
       void loadSlots();
     }
   }, [loadSlots, step]);
+
+  // Web: ținem minte rezervarea în curs, ca un refresh să nu întoarcă clientul la pasul 1.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !stepsReady || isReschedule || !business) return;
+    writeDraft({
+      code: String(publicCode),
+      savedAt: Date.now(),
+      serviceIds,
+      staffId,
+      staffAny,
+      dateLocal,
+      step,
+      slotStartUtc: selected?.startUtc ?? null,
+    });
+  }, [business, dateLocal, isReschedule, publicCode, selected, serviceIds, staffAny, staffId, step, stepsReady]);
+
+  // După refresh: ora aleasă înainte, dacă e încă liberă, și înapoi la confirmare.
+  useEffect(() => {
+    const want = restoreSlotRef.current;
+    if (!want || step !== 'slot' || slotsLoading || slots.length === 0) return;
+    restoreSlotRef.current = null;
+    const found = slots.find((x) => x.startUtc === want);
+    if (found) {
+      setSelected(found);
+      setStep('confirm');
+    }
+  }, [slots, slotsLoading, step]);
 
   async function handleBook() {
     if (!business || !selected) {
@@ -649,19 +696,17 @@ export default function BookScreen() {
 
     setBooking(false);
     if (err) {
-      const mapped = mapBookingRpcError(err);
-      setError(mapped);
+      // loadSlots() golește eroarea, deci mesajul se pune după reîncărcare (test încrucișat A F-6).
       await loadSlots();
       // Conflict de cursă: ora dispăruse între încărcare și trimitere. Clientul vede mesajul
       // explicit și poate alege din lista proaspătă, fără o oră fantomă pe confirmare.
-      if (err.includes('slot_taken')) {
-        setSelected(null);
-        setStep('slot');
-      }
+      if (err.includes('slot_taken')) setStep('slot');
+      setError(mapBookingRpcError(err), { sticky: true });
       return;
     }
 
     const appointment = created;
+    clearDraft();
     let payError: string | null = null;
     if (appointment?.id) {
       fireAndForget(notifyAfterBooking(appointment), 'notify after book failed');

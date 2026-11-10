@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Modal, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter, useSegments } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -28,6 +28,7 @@ import type { HeatSource } from '@/lib/useMonthHeat';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
+import { businessIdFilter } from '@/lib/realtimeFilters';
 import { getCurrentUser } from '@/lib/currentUser';
 import { fetchBusinessRole } from '@/lib/businessMembers';
 import {
@@ -36,6 +37,7 @@ import {
 } from '@/lib/staffUnavailability';
 import type { Appointment, BusinessProfile, Staff } from '@/lib/types';
 import { appointmentContactParts } from '@/lib/quickAddRules';
+import { serviceSummary } from '@/lib/appointmentSummary';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 
 type CalendarStaff = Pick<Staff, 'id' | 'name' | 'color' | 'working_hours' | 'break_hours'>;
@@ -167,6 +169,37 @@ export default function BusinessCalendarScreen() {
       void load();
     }, [load])
   );
+
+  // Calendarul se actualizează singur când o programare a salonului se schimbă din altă
+  // sesiune (rezervare, anulare, mutare). Pe web reîncarcă și la revenirea în tab.
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const businessId = business?.id ?? null;
+  useEffect(() => {
+    const filter = businessId ? businessIdFilter([businessId]) : null;
+    if (!filter) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const channel = supabase
+      .channel(`biz-calendar-${businessId}-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter }, () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => void loadRef.current(), 400);
+      })
+      .subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
+  }, [businessId]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void loadRef.current();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // Ocuparea lunii: specialistul filtrat, altfel toată echipa activă, altfel programul firmei.
   const heat = useMemo<HeatSource | null>(() => {
@@ -461,7 +494,7 @@ export default function BusinessCalendarScreen() {
           {detailApt ? (
             <>
               <Text style={{ color: t.colors.text, fontWeight: '700', fontSize: fontSize.md }}>
-                {detailApt.service_name ?? tr('cli.session')}{detailApt.staff_name ? ` - ${detailApt.staff_name}` : ''}
+                {serviceSummary(detailApt) || tr('cli.session')}{detailApt.staff_name ? ` - ${detailApt.staff_name}` : ''}
               </Text>
               <Text style={{ color: t.colors.textMuted }}>
                 {formatInTimeZone(new Date(detailApt.start_at), business.timezone, 'dd.MM.yyyy HH:mm')} - {formatInTimeZone(new Date(detailApt.end_at), business.timezone, 'HH:mm')}

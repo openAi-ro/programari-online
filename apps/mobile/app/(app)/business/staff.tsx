@@ -753,7 +753,7 @@ function BusinessStaffScreen() {
               },
             ]}
           >
-            <StaffBadge name={s.name} photoUrl={s.photo_url} color={s.color} size={52} />
+            <StaffBadge name={s.name} photoUrl={s.photo_url} color={s.color} size={52} showName={false} />
             <Pressable accessibilityRole="button" onPress={() => void startEdit(s)} style={styles.rowText}>
               <Text style={[styles.rowName, { color: t.colors.text }]} numberOfLines={2} ellipsizeMode="tail">
                 {s.name}

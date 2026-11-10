@@ -31,6 +31,7 @@ import {
   isClientProposedReschedule,
 } from '@/lib/rescheduleRequest';
 import { appointmentContactParts } from '@/lib/quickAddRules';
+import { serviceSummary } from '@/lib/appointmentSummary';
 
 const POSTPONE_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const WHEEL_ITEM_H = 44;
@@ -243,8 +244,8 @@ export function AppointmentCard({
         </Text>
       ) : null}
       {appointment.service_name ? (
-        <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={1}>
-          {appointment.service_name}
+        <Text style={[styles.service, { color: t.colors.textMuted }]} numberOfLines={2}>
+          {serviceSummary(appointment)}
           {appointment.staff_name ? ` · ${appointment.staff_name}` : ''}
           {appointment.loyalty_redeemed ? tr('appt.giftSuffix') : ''}
         </Text>
@@ -268,7 +269,7 @@ export function AppointmentCard({
   );
   const subInfo = (
     <>
-      {showDetails ? (
+      {showDetails && !showActions ? (
       <Text
         style={[styles.nextStep, { color: t.colors.textMuted }]}
         numberOfLines={2}

@@ -195,8 +195,10 @@ const styles = StyleSheet.create({
   item: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 2,
     minWidth: 0,
+    minHeight: 48,
   },
   label: {
     fontSize: fontSize.xs,

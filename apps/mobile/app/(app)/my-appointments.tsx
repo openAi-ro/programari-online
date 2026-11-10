@@ -95,6 +95,8 @@ export default function MyAppointmentsScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useTransientMessage();
+  // Lista nu s-a putut citi: nu arătăm „Nicio programare” peste o eroare de rețea.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useTransientMessage();
   const [filter, setFilter] = useState<Filter>('all');
   const [reviewsByApt, setReviewsByApt] = useState<Record<string, Review>>({});
@@ -123,9 +125,11 @@ export default function MyAppointmentsScreen() {
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     setError(null);
+    setLoadFailed(false);
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
+      setLoadFailed(true);
       setError(trKey('auth.notSignedIn'), { sticky: true });
       return;
     }
@@ -144,6 +148,7 @@ export default function MyAppointmentsScreen() {
 
     if (err) {
       setError(trKey('my.loadFail'), { sticky: true });
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -685,6 +690,7 @@ export default function MyAppointmentsScreen() {
           </View>
         }
         ListEmptyComponent={
+          loadFailed ? null : (
           <EmptyState
             icon="calendar-clear-outline"
             title={
@@ -722,6 +728,7 @@ export default function MyAppointmentsScreen() {
               ) : undefined
             }
           />
+          )
         }
         renderItem={({ item }) => (
           <AppointmentCard

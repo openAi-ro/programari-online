@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
   }
 
   const contact =
-    record.client_email || record.client_phone || 'Client';
+    record.guest_name?.trim() || record.client_email || record.client_phone || 'Client';
   const { data: ownerProfile } = await admin
     .from('profiles')
     .select('email, phone, language')
@@ -441,7 +441,7 @@ Deno.serve(async (req) => {
         timezone: business.timezone ?? 'Europe/Bucharest',
         ownerUserId: business.owner_user_id,
         ownerEmail: ownerProfile?.email ?? null,
-        contact: record!.guest_name?.trim() || contact,
+        contact,
         pending: !autoApproved && !businessCreated,
         createdBy,
         fallbackLang: lang,

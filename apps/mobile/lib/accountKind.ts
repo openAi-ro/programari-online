@@ -65,7 +65,7 @@ export async function assertAccountKind(
 
   const actual = parseAccountKind(profile?.account_kind);
   if (actual !== expected) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     return {
       ok: false,
       error:
