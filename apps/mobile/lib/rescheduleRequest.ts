@@ -2,7 +2,7 @@ import type { Appointment } from './types';
 
 type RequestFields = Pick<
   Appointment,
-  'status' | 'requested_start_at' | 'requested_end_at' | 'reschedule_proposed_by' | 'client_user_id'
+  'status' | 'requested_start_at' | 'requested_end_at' | 'reschedule_proposed_by'
 >;
 
 /** O cerere/propunere de reprogramare in asteptare: ora ceruta e setata si programarea e activa. */

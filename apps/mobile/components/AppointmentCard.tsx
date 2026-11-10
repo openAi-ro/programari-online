@@ -55,6 +55,10 @@ type Props = {
   onPostpone?: (hours: number) => void;
   postponeBusy?: boolean;
   onMoveToSlot?: () => void;
+  /** v111: propune ora noua (clientul accepta/refuza). */
+  onProposeToSlot?: () => void;
+  /** v111: muta imediat pe alt slot. */
+  onMoveNow?: () => void;
   onAddToCalendar?: () => void;
   /** Navigare turn-by-turn — doar dacă business-ul are coordonate GPS. */
   onDrive?: () => void;
@@ -103,6 +107,8 @@ export function AppointmentCard({
   onPostpone,
   postponeBusy,
   onMoveToSlot,
+  onProposeToSlot,
+  onMoveNow,
   onAddToCalendar,
   onDrive,
   driveAddress,
