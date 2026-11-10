@@ -38,7 +38,10 @@ import {
   openDriveChooser,
 } from '@/lib/location';
 import { useBack } from '@/lib/nav';
-import { invokeWaitlistNotify } from '@/lib/notify-client';
+import { invokeRescheduleNotify, invokeWaitlistNotify } from '@/lib/notify-client';
+import { fireAndForget } from '@/lib/fireAndForget';
+import { clientAcceptReschedule, clientDeclineReschedule } from '@/lib/bookingRpc';
+import { isBusinessProposedReschedule } from '@/lib/rescheduleRequest';
 import { invokeRefundDeposit } from '@/lib/payments';
 import { formatRon } from '@/lib/format';
 import { giftCardDisplayStatus } from '@/lib/giftCard';
@@ -291,6 +294,28 @@ export default function MyAppointmentsScreen() {
   const [ackBusyId, setAckBusyId] = useState<string | null>(null);
 
   // F-12: clientul confirmă că a văzut mutarea făcută de salon (v105).
+  const [proposalBusyId, setProposalBusyId] = useState<string | null>(null);
+
+  async function decideBusinessProposal(id: string, accept: boolean) {
+    if (proposalBusyId) return;
+    setProposalBusyId(id);
+    setError(null);
+    const { error: err } = accept
+      ? await clientAcceptReschedule(id)
+      : await clientDeclineReschedule(id);
+    setProposalBusyId(null);
+    if (err) {
+      setError(mapBookingRpcError(err));
+      return;
+    }
+    fireAndForget(
+      invokeRescheduleNotify(id, accept ? 'client_accepted' : 'client_declined'),
+      'client proposal notify:'
+    );
+    setSuccess(accept ? trKey('my.proposalAccepted') : trKey('my.proposalDeclined'));
+    await load();
+  }
+
   async function ackMoved(id: string) {
     setAckBusyId(id);
     setError(null);
@@ -731,9 +756,21 @@ export default function MyAppointmentsScreen() {
             onCancel={() => cancelAppointment(item)}
             onCancelSeries={item.recurring_series_id ? () => { setError(null); setSuccess(null); setSeriesTarget(item); } : undefined}
             canCancel={canClientCancel(item, item.business_profiles, tickNow)}
+            onAcceptReschedule={
+              isBusinessProposedReschedule(item)
+                ? () => void decideBusinessProposal(item.id, true)
+                : undefined
+            }
+            onDeclineReschedule={
+              isBusinessProposedReschedule(item)
+                ? () => void decideBusinessProposal(item.id, false)
+                : undefined
+            }
+            rescheduleBusy={proposalBusyId === item.id}
             canReschedule={
               canClientReschedule(item, item.business_profiles, tickNow) &&
-              Boolean(item.business_profiles?.public_code)
+              Boolean(item.business_profiles?.public_code) &&
+              !isBusinessProposedReschedule(item)
             }
             onReschedule={() => {
               const code = item.business_profiles?.public_code;

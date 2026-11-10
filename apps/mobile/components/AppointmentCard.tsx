@@ -24,7 +24,12 @@ import { canMarkNoShow } from '@/lib/bookingRules';
 import { localeTag, useT } from '@/lib/i18n';
 import type { Appointment } from '@/lib/types';
 import { telUrl, whatsAppUrl } from '@/lib/businessPage';
-import { hasPendingReschedule } from '@/lib/rescheduleRequest';
+import {
+  canBusinessProposeReschedule,
+  hasPendingReschedule,
+  isBusinessProposedReschedule,
+  isClientProposedReschedule,
+} from '@/lib/rescheduleRequest';
 import { appointmentContactParts } from '@/lib/quickAddRules';
 
 const POSTPONE_HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -147,6 +152,9 @@ export function AppointmentCard({
   const [bizCancelReason, setBizCancelReason] = useState('');
   const active = status === 'pending' || status === 'approved';
   const pendingRequest = hasPendingReschedule(appointment);
+  const businessProposed = isBusinessProposedReschedule(appointment);
+  const clientProposed = isClientProposedReschedule(appointment);
+  const canPropose = canBusinessProposeReschedule(appointment);
   const requestedText =
     requestedLabel ??
     (appointment.requested_start_at
@@ -361,11 +369,15 @@ export function AppointmentCard({
               <Ionicons name="swap-horizontal-outline" size={14} color={t.colors.warning} />
               <Text style={[styles.requestText, { color: t.colors.text }]} numberOfLines={3}>
                 {showActions
-                  ? tr('appt.rescheduleRequested', { from: localLabel ?? fallbackLabel, to: requestedText })
-                  : tr('appt.rescheduleWaiting', { to: requestedText })}
+                  ? businessProposed
+                    ? tr('appt.businessProposalWaiting', { to: requestedText })
+                    : tr('appt.rescheduleRequested', { from: localLabel ?? fallbackLabel, to: requestedText })
+                  : businessProposed
+                    ? tr('appt.clientProposalWaiting', { to: requestedText })
+                    : tr('appt.rescheduleWaiting', { to: requestedText })}
               </Text>
             </View>
-            {showActions && (onAcceptReschedule || onDeclineReschedule) ? (
+            {((showActions && clientProposed) || (!showActions && businessProposed)) && (onAcceptReschedule || onDeclineReschedule) ? (
               <ButtonRow>
                 <View style={styles.actionFlex}>
                   <Button
@@ -495,14 +507,40 @@ export function AppointmentCard({
           </ButtonRow>
         ) : null}
 
-        {showDetails && showActions && onMoveToSlot && (status === 'approved' || status === 'pending') ? (
-          <Button
-            label={tr('appt.moveToSlot')}
-            icon="swap-horizontal-outline"
-            variant="secondary"
-            size="sm"
-            onPress={onMoveToSlot}
-          />
+                {showDetails && showActions && (status === 'approved' || status === 'pending') ? (
+          <View style={{ gap: spacing.sm }}>
+            {onProposeToSlot ? (
+              <Button
+                label={tr('appt.moveToSlot')}
+                icon="swap-horizontal-outline"
+                variant="secondary"
+                size="sm"
+                disabled={!canPropose || pendingRequest}
+                onPress={onProposeToSlot}
+              />
+            ) : onMoveToSlot ? (
+              <Button
+                label={tr('appt.moveToSlot')}
+                icon="swap-horizontal-outline"
+                variant="secondary"
+                size="sm"
+                onPress={onMoveToSlot}
+              />
+            ) : null}
+            {onProposeToSlot && !canPropose ? (
+              <Text style={{ color: t.colors.textMuted, fontSize: fontSize.sm }}>{tr('appt.proposeNeedAccount')}</Text>
+            ) : null}
+            {onMoveNow ? (
+              <Button
+                label={tr('appt.moveNow')}
+                icon="flash-outline"
+                variant="secondary"
+                size="sm"
+                disabled={pendingRequest && businessProposed}
+                onPress={onMoveNow}
+              />
+            ) : null}
+          </View>
         ) : null}
         {showDetails && canPostpone ? (
           <Button

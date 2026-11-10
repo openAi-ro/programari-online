@@ -29,8 +29,15 @@ import {
   declineReschedule,
   listBusyRanges,
   moveAppointmentToSlot,
+  proposeAppointmentReschedule,
 } from '@/lib/bookingRpc';
-import { isOwnBusyRange, needsDecision, ownBusyKeys } from '@/lib/rescheduleRequest';
+import {
+  canBusinessProposeReschedule,
+  isClientProposedReschedule,
+  isOwnBusyRange,
+  needsDecision,
+  ownBusyKeys,
+} from '@/lib/rescheduleRequest';
 import { pastAppointments, upcomingAppointments } from '@/lib/appointmentTime';
 import { generateFreeSlots } from '@/lib/slots';
 import { validateMoveInput } from '@/lib/moveRules';
@@ -86,6 +93,7 @@ export default function BusinessRequestsScreen() {
   const [businessIds, setBusinessIds] = useState<string[]>([]);
   const [businessList, setBusinessList] = useState<BusinessProfile[]>([]);
   const [moveApt, setMoveApt] = useState<Row | null>(null);
+  const [moveMode, setMoveMode] = useState<'propose' | 'force'>('propose');
   const [moveDate, setMoveDate] = useState('');
   const [moveSlots, setMoveSlots] = useState<FreeSlot[]>([]);
   const [moveSlot, setMoveSlot] = useState<FreeSlot | null>(null);
@@ -436,19 +444,32 @@ export default function BusinessRequestsScreen() {
     setMoveLoading(false);
   }
 
-  function openMove(apt: Row) {
+  function openSlotPicker(apt: Row, mode: 'propose' | 'force') {
     const biz = bizForMove(apt);
     if (!biz) {
       setError(trKey('req.bizNotLoaded'));
       return;
     }
+    if (mode === 'propose' && !canBusinessProposeReschedule(apt)) {
+      setError(trKey('req.proposeNeedAccount'));
+      return;
+    }
     setError(null);
     setSuccess(null);
     setMoveError(null);
+    setMoveMode(mode);
     setMoveApt(apt);
     const ymd = formatInTimeZone(new Date(apt.start_at), biz.timezone, 'yyyy-MM-dd');
     setMoveDate(ymd);
     void reloadMoveSlots(ymd, apt, biz);
+  }
+
+  function openPropose(apt: Row) {
+    openSlotPicker(apt, 'propose');
+  }
+
+  function openMoveNow(apt: Row) {
+    openSlotPicker(apt, 'force');
   }
 
   async function saveMove() {
@@ -464,30 +485,44 @@ export default function BusinessRequestsScreen() {
     }
     setMoveSaving(true);
     setMoveError(null);
-    const { error: err } = await moveAppointmentToSlot({
-      appointmentId: moveApt.id,
-      startAt: (moveSlot as FreeSlot).startUtc,
-      endAt: (moveSlot as FreeSlot).endUtc,
-    });
+    const slot = moveSlot as FreeSlot;
+    const { error: err } =
+      moveMode === 'propose'
+        ? await proposeAppointmentReschedule({
+            appointmentId: moveApt.id,
+            startAt: slot.startUtc,
+            endAt: slot.endUtc,
+          })
+        : await moveAppointmentToSlot({
+            appointmentId: moveApt.id,
+            startAt: slot.startUtc,
+            endAt: slot.endUtc,
+          });
     setMoveSaving(false);
     if (err) {
       setMoveError(mapBookingRpcError(err));
       return;
     }
-    const notify = await invokeMoved(moveApt.id);
     const label = formatInTimeZone(
-      new Date((moveSlot as FreeSlot).startUtc),
+      new Date(slot.startUtc),
       timezoneByBusiness[moveApt.business_id] ?? 'Europe/Bucharest',
       'dd.MM.yyyy HH:mm'
     );
+    const aptId = moveApt.id;
     setMoveApt(null);
     setMoveSlot(null);
-    if (!notify.ok) {
-      setError(mapBookingRpcError('move_notify_failed'));
+    if (moveMode === 'propose') {
+      fireAndForget(invokeRescheduleNotify(aptId, 'proposed'), 'propose notify:');
+      setSuccess(trKey('req.proposedOk').replace('{label}', label));
     } else {
-      setSuccess(trKey('req.movedTo').replace('{label}', label));
+      const notify = await invokeMoved(aptId);
+      if (!notify.ok) {
+        setError(mapBookingRpcError('move_notify_failed'));
+      } else {
+        setSuccess(trKey('req.movedTo').replace('{label}', label));
+      }
+      notifyWaitlistForRow(rows.find((r) => r.id === aptId));
     }
-    notifyWaitlistForRow(rows.find((r) => r.id === moveApt.id));
     await load();
   }
 
@@ -713,7 +748,8 @@ export default function BusinessRequestsScreen() {
             onApprove={() => updateStatus(item.id, 'approved')}
             onReject={() => updateStatus(item.id, 'rejected')}
             onPostpone={(hours) => postponeAppointment(item.id, hours)}
-            onMoveToSlot={() => openMove(item)}
+            onProposeToSlot={() => openPropose(item)}
+            onMoveNow={() => openMoveNow(item)}
             postponeBusy={postponeBusyId === item.id}
             onMarkNoShow={() => void markNoShow(item.id)}
             onClearNoShow={() => void clearNoShow(item.id)}
@@ -721,8 +757,12 @@ export default function BusinessRequestsScreen() {
             onQuickMessage={(txt) => sendQuickMessage(item, txt)}
             onWaiveDeposit={() => void waiveDeposit(item.id)}
             requestedLabel={item.requested_start_at ? requestedLabel(item) : undefined}
-            onAcceptReschedule={() => void decideReschedule(item, true)}
-            onDeclineReschedule={() => void decideReschedule(item, false)}
+            onAcceptReschedule={
+              isClientProposedReschedule(item) ? () => void decideReschedule(item, true) : undefined
+            }
+            onDeclineReschedule={
+              isClientProposedReschedule(item) ? () => void decideReschedule(item, false) : undefined
+            }
             rescheduleBusy={rescheduleBusyId === item.id}
             onBusinessCancel={(reason) => void cancelByBusiness(item, reason)}
             serviceImages={serviceImagesFor(item)}
@@ -740,7 +780,7 @@ export default function BusinessRequestsScreen() {
           <View style={[styles.modalCard, { backgroundColor: t.colors.bgElevated, borderColor: t.colors.border }]}>
             <View style={styles.modalHead}>
               <Text style={[styles.modalTitle, { color: t.colors.text }]} numberOfLines={2}>
-                {tr('req.moveTitle')}
+                {moveMode === 'propose' ? tr('req.proposeTitle') : tr('req.moveNowTitle')}
               </Text>
               <Pressable
                 onPress={() => !moveSaving && setMoveApt(null)}
@@ -814,7 +854,7 @@ export default function BusinessRequestsScreen() {
               </View>
               <View style={styles.actionFlex}>
                 <Button
-                  label={tr('req.move')}
+                  label={moveMode === 'propose' ? tr('req.proposeConfirm') : tr('req.moveNowConfirm')}
                   icon="checkmark"
                   variant="primary"
                   size="sm"

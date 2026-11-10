@@ -1,15 +1,14 @@
 /**
  * Edge Function: notify-reschedule (v87)
  *
- * Body: { appointment_id, event: 'accepted' | 'declined' | 'cancelled', lang? }
- * Auth: business owner JWT (authorizeNotifyRequest) OR service role / webhook secret.
+ * Body: { appointment_id, event, lang? }
+ * Auth: business/client JWT (authorizeNotifyRequest) OR service role / webhook secret.
  *
- * Tells the client what the salon decided, after the matching RPC already ran:
- * - accepted  (business_accept_reschedule): new time; WhatsApp uses the approved MOVED template.
- * - declined  (business_decline_reschedule): the original time stays + link to propose another.
- * - cancelled (business_cancel_appointment): the salon's reason + booking link.
- * The text is built from the DB row, never from the request body, and the event must match
- * the row's state (no request pending; cancelled with a reason).
+ * Events:
+ * - accepted / declined / cancelled: salon -> client (v87)
+ * - proposed: salon proposed a time -> client (v111)
+ * - client_accepted / client_declined: client answered salon proposal -> salon push (v111)
+ * Text is built from the DB row, never from the request body.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { authorizeNotifyRequest } from '../_shared/auth-notify.ts';
@@ -27,8 +26,8 @@ import {
 } from '../_shared/notify.ts';
 import { sendExpoPushToUser } from '../_shared/expoPush.ts';
 
-type RescheduleEvent = 'accepted' | 'declined' | 'cancelled';
-const EVENTS: RescheduleEvent[] = ['accepted', 'declined', 'cancelled'];
+type RescheduleEvent = 'accepted' | 'declined' | 'cancelled' | 'proposed' | 'client_accepted' | 'client_declined';
+const EVENTS: RescheduleEvent[] = ['accepted', 'declined', 'cancelled', 'proposed', 'client_accepted', 'client_declined'];
 
 function formatWhen(iso: string, timezone: string, lang: 'ro' | 'en'): string {
   try {
@@ -69,10 +68,15 @@ Deno.serve(async (req) => {
   if (!live) return jsonResponse({ error: 'appointment_not_found' }, 404);
 
   const active = live.status === 'pending' || live.status === 'approved';
+  const proposedBy = (live as { reschedule_proposed_by?: string | null }).reschedule_proposed_by;
   const stateOk =
     event === 'cancelled'
       ? live.status === 'cancelled' && Boolean(live.cancel_reason)
-      : active && live.requested_start_at == null;
+      : event === 'proposed'
+        ? active && live.requested_start_at != null && proposedBy === 'business'
+        : event === 'client_accepted' || event === 'client_declined'
+          ? active && live.requested_start_at == null
+          : active && live.requested_start_at == null;
   if (!stateOk) return jsonResponse({ error: 'state_mismatch', status: live.status }, 409);
 
   const { data: business } = await admin
@@ -99,49 +103,104 @@ Deno.serve(async (req) => {
   const lang = parseNotifyLang(clientLang ?? payload.lang);
   const when = formatWhen(live.start_at, timezone, lang);
   const base = appWebBase();
+  const whenRequested = live.requested_start_at
+    ? formatWhen(String(live.requested_start_at), timezone, lang)
+    : when;
   const copy: { subject: string; text: string; wa?: WaTemplateRef } =
     event === 'accepted'
       ? messageRescheduleAccepted(businessName, when, lang)
       : event === 'declined'
         ? messageRescheduleDeclined(businessName, when, `${base}/my-appointments`, lang)
-        : messageCancelledByBusiness(
-            businessName,
-            when,
-            String(live.cancel_reason),
-            business?.public_code ? `${base}/b/${business.public_code}` : base,
-            lang
-          );
+        : event === 'proposed'
+          ? {
+              subject: lang === 'en' ? `New time proposed by ${businessName}` : `Oră nouă propusă de ${businessName}`,
+              text:
+                lang === 'en'
+                  ? `${businessName} proposed ${whenRequested}. Open the app to accept or decline. Until you answer, ${when} stays.`
+                  : `${businessName} a propus ${whenRequested}. Deschide aplicația ca să accepți sau să refuzi. Până răspunzi, rămâne ${when}.`,
+            }
+          : event === 'client_accepted'
+            ? {
+                subject: lang === 'en' ? 'Client accepted the new time' : 'Clientul a acceptat noua oră',
+                text:
+                  lang === 'en'
+                    ? `The client accepted the move to ${when}.`
+                    : `Clientul a acceptat mutarea la ${when}.`,
+              }
+            : event === 'client_declined'
+              ? {
+                  subject: lang === 'en' ? 'Client declined the new time' : 'Clientul a refuzat noua oră',
+                  text:
+                    lang === 'en'
+                      ? `The client declined your proposal. The booking stays at ${when}.`
+                      : `Clientul a refuzat propunerea. Programarea rămâne la ${when}.`,
+                }
+              : messageCancelledByBusiness(
+                  businessName,
+                  when,
+                  String(live.cancel_reason),
+                  business?.public_code ? `${base}/b/${business.public_code}` : base,
+                  lang
+                );
 
-  if (!wantsDecision) return jsonResponse({ ok: true, skipped: 'opted_out' });
+  const toBusiness = event === 'client_accepted' || event === 'client_declined';
+  if (!toBusiness && !wantsDecision) return jsonResponse({ ok: true, skipped: 'opted_out' });
 
-  const results = await notifyClientChannels({
-    email: live.client_email,
-    phone: wantsWhatsapp ? await resolveClientPhone(admin, live.client_phone, live.client_user_id) : null,
-    subject: copy.subject,
-    text: copy.text,
-    wa: copy.wa,
-    log: {
-      admin,
-      type: `RESCHEDULE_${event.toUpperCase()}`,
-      businessId: live.business_id,
-      appointmentId: live.id,
-    },
-  });
-
+  let results: unknown = { skipped: true };
   let pushSent = 0;
-  if (live.client_user_id) {
-    try {
-      // deno-lint-ignore no-explicit-any
-      const pushAdmin: any = admin; // supabase-js generics hit TS2589 here (same as notify-moved)
-      const { sent } = await sendExpoPushToUser(pushAdmin, live.client_user_id, {
-        title: copy.subject,
-        body: copy.text,
-        channelId: 'cereri_heads',
-        data: { screen: 'my-appointments', appointmentId: live.id },
-      });
-      pushSent = sent;
-    } catch (e) {
-      console.error('client reschedule push failed', e);
+
+  if (toBusiness) {
+    const { data: bizOwner } = await admin
+      .from('business_profiles')
+      .select('owner_user_id')
+      .eq('id', live.business_id)
+      .maybeSingle();
+    const ownerId = (bizOwner as { owner_user_id?: string } | null)?.owner_user_id;
+    if (ownerId) {
+      try {
+        // deno-lint-ignore no-explicit-any
+        const pushAdmin: any = admin;
+        const { sent } = await sendExpoPushToUser(pushAdmin, ownerId, {
+          title: copy.subject,
+          body: copy.text,
+          channelId: 'cereri_heads',
+          data: { screen: 'business-requests', appointmentId: live.id, filter: 'all' },
+        });
+        pushSent = sent;
+        results = { pushSent };
+      } catch (e) {
+        console.error('business proposal decision push failed', e);
+      }
+    }
+  } else {
+    results = await notifyClientChannels({
+      email: live.client_email,
+      phone: wantsWhatsapp ? await resolveClientPhone(admin, live.client_phone, live.client_user_id) : null,
+      subject: copy.subject,
+      text: copy.text,
+      wa: copy.wa,
+      log: {
+        admin,
+        type: `RESCHEDULE_${event.toUpperCase()}`,
+        businessId: live.business_id,
+        appointmentId: live.id,
+      },
+    });
+
+    if (live.client_user_id) {
+      try {
+        // deno-lint-ignore no-explicit-any
+        const pushAdmin: any = admin;
+        const { sent } = await sendExpoPushToUser(pushAdmin, live.client_user_id, {
+          title: copy.subject,
+          body: copy.text,
+          channelId: 'cereri_heads',
+          data: { screen: 'my-appointments', appointmentId: live.id },
+        });
+        pushSent = sent;
+      } catch (e) {
+        console.error('client reschedule push failed', e);
+      }
     }
   }
 

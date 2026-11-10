@@ -48,13 +48,16 @@ export async function authorizeNotifyRequest(
 
   const { data: appt } = await admin
     .from('appointments')
-    .select('business_id')
+    .select('business_id, client_user_id')
     .eq('id', appointmentId)
     .maybeSingle();
 
   if (!appt?.business_id) {
     return { ok: false, status: 404, error: 'appointment_not_found' };
   }
+
+  // Clientul propriei programari poate declansa notificari (ex. a acceptat/refuzat propunerea salonului).
+  if ((appt as { client_user_id?: string | null }).client_user_id === user.id) return { ok: true };
 
   const { data: business } = await admin
     .from('business_profiles')

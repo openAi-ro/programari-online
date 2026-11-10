@@ -28,6 +28,7 @@ type ExpiredRow = {
   r_start_at: string | Date;
   r_requested_start_at: string | Date;
   r_notify_client: boolean;
+  r_proposed_by?: string | null;
 };
 
 export type ExpiryOutcome = { id: string; notified: boolean; error?: string };
@@ -86,6 +87,28 @@ export async function expireRescheduleRequests(sql: Sql, admin: Admin): Promise<
           channelId: 'cereri_heads',
           data: { screen: 'my-appointments', appointmentId: row.r_id },
         });
+      }
+      if (row.r_proposed_by === 'business') {
+        const [owner] = await sql<{ owner_user_id: string | null }[]>`
+          select owner_user_id from public.business_profiles where id = ${row.r_business_id}`;
+        if (owner?.owner_user_id) {
+          const bizMsg =
+            lang === 'en'
+              ? {
+                  subject: 'Reschedule proposal expired',
+                  text: `Your proposed time expired. The booking stays at ${formatWhen(startIso, ctx?.timezone ?? 'Europe/Bucharest', lang)}.`,
+                }
+              : {
+                  subject: 'Propunerea de mutare a expirat',
+                  text: `Propunerea ta a expirat. Programarea rămâne la ${formatWhen(startIso, ctx?.timezone ?? 'Europe/Bucharest', lang)}.`,
+                };
+          await sendExpoPushToUser(admin, owner.owner_user_id, {
+            title: bizMsg.subject,
+            body: bizMsg.text,
+            channelId: 'cereri_heads',
+            data: { screen: 'business-requests', appointmentId: row.r_id },
+          });
+        }
       }
       outcomes.push({ id: row.r_id, notified: true });
     } catch (e) {
