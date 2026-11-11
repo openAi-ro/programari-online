@@ -36,6 +36,7 @@ import {
 import { useBack } from '@/lib/nav';
 import { countryByName, countryCodeOf, countryName, countryNames } from '@/lib/countries';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
+import { countArgs } from '@/lib/roNumber';
 import {
   JUDETE,
   localitatiPentruJudet,
@@ -56,12 +57,13 @@ function CategoryTile({
 }) {
   const t = useTheme();
   const tr = useT();
+  const { lang } = useLanguage();
   const catName = categoryLabel(cat);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={count == null ? catName : tr('browse.catA11y', { label: catName, count })}
+      accessibilityLabel={count == null ? catName : tr(...countArgs(count, 'browse.catA11yOne', 'browse.catA11y', lang, { label: catName }))}
       accessibilityState={{ selected }}
       style={({ pressed }) => [
         styles.catTile,

@@ -44,6 +44,7 @@ import {
 import { useBack } from '@/lib/nav';
 import { countryByName, countryCodeOf, countryName, countryNames } from '@/lib/countries';
 import { trKey, useLanguage, useT } from '@/lib/i18n';
+import { countArgs } from '@/lib/roNumber';
 import {
   JUDETE,
   localitatiPentruJudet,
@@ -241,8 +242,8 @@ export default function CategoryResultsScreen() {
   const subtitle = unknown
     ? undefined
     : nearMe && coords
-      ? tr('cat.countDist', { n: filtered.length })
-      : tr('cat.count', { n: filtered.length });
+      ? tr(...countArgs(filtered.length, 'cat.countDistOne', 'cat.countDist', lang))
+      : tr(...countArgs(filtered.length, 'cat.countOne', 'cat.count', lang));
 
   const catName = category ? categoryLabel(category) : '';
   const emptyDescription = (() => {

@@ -188,10 +188,6 @@ export default function BusinessQrScreen() {
         {tr('qr.publicBody').replace('{url}', links.webUrl)}
       </Callout>
 
-      <Callout tone="warning" title={tr('qr.expoTitle')}>
-        {tr('qr.expoBody').replace('{openNow}', tr('qr.openNow'))}
-      </Callout>
-
       <View style={{ height: insets.bottom + spacing.md }} />
     </Screen>
   );

@@ -9,6 +9,8 @@ import {
   calendarNames,
   canGoNextMonth,
   canGoPrevMonth,
+  dayCountA11y,
+  dayToneLabelKey,
   isDayDisabled,
   monthGrid,
   monthOfYmd,
@@ -132,7 +134,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
             const tone = disabled ? undefined : tones[ymd];
             const tint = tone && tone !== 'closed' ? toneColors[tone] : null;
             const count = showCounts ? counts[ymd] ?? 0 : 0;
-            const toneLabel = tone ? tr(toneLabelKey(tone, heat?.kind === 'business')) : '';
+            const toneLabel = tone ? tr(dayToneLabelKey(tone, heat?.kind === 'business')) : '';
             return (
               <View key={ymd} style={styles.cell}>
                 <Pressable
@@ -141,7 +143,7 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
                   accessibilityLabel={[
                     `${Number(ymd.slice(8))} ${names.months[Number(ymd.slice(5, 7)) - 1]} ${ymd.slice(0, 4)}`,
                     toneLabel,
-                    count > 0 ? tr('calendar.countA11y', { n: count }) : '',
+                    count > 0 ? dayCountA11y(count, lang, tr) : '',
                   ]
                     .filter(Boolean)
                     .join(', ')}
@@ -216,14 +218,6 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
       ) : null}
     </View>
   );
-}
-
-function toneLabelKey(tone: DayTone, business: boolean): TrKey {
-  if (tone === 'free') return business ? 'calendar.toneFree' : 'calendar.toneAvailable';
-  if (tone === 'moderate') return 'calendar.toneModerate';
-  if (tone === 'almostFull') return business ? 'calendar.toneAlmostFull' : 'calendar.toneFewLeft';
-  if (tone === 'full') return 'calendar.toneFull';
-  return 'calendar.toneClosed';
 }
 
 const styles = StyleSheet.create({

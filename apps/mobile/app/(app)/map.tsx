@@ -30,7 +30,8 @@ import {
 } from '@/lib/discover';
 import { isOpenNow } from '@/lib/browseList';
 import { useBack } from '@/lib/nav';
-import { useT } from '@/lib/i18n';
+import { useLanguage, useT } from '@/lib/i18n';
+import { countArgs } from '@/lib/roNumber';
 import { userFacingError } from '@/lib/networkError';
 
 /**
@@ -40,6 +41,7 @@ import { userFacingError } from '@/lib/networkError';
 export default function NearMeScreen() {
   const t = useTheme();
   const tr = useT();
+  const { lang } = useLanguage();
   const back = useBack();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -106,7 +108,7 @@ export default function NearMeScreen() {
         subtitle={
           coords
             ? withGeo > 0
-              ? tr('near.countGeo', { n: withGeo })
+              ? tr(...countArgs(withGeo, 'near.countGeoOne', 'near.countGeo', lang))
               : tr('near.okNoGps')
             : tr('near.noLocAlpha')
         }

@@ -2,6 +2,8 @@ import { maxBookingDate, toYmd } from './bookingRules';
 import { generateFreeSlots, type BusyRange } from './slots';
 import { formatInTimeZone, localDateTimeToUtc, localDayBoundsUtc } from './timezone';
 import type { AppLanguage } from './language';
+import type { TrKey } from './i18n';
+import { roDe } from './roNumber';
 import type { BreakHours, BusinessProfile, DayKey, WorkingHours } from './types';
 
 /** Săptămâna începe luni. */
@@ -326,4 +328,23 @@ export function clientMonthTones(opts: {
     out[ymd] = availabilityTone(free, possible);
   }
   return out;
+}
+
+/** Eticheta tonului unei zile din calendar (legendă + cititor de ecran). */
+export function dayToneLabelKey(tone: DayTone, business: boolean): TrKey {
+  if (tone === 'free') return business ? 'calendar.toneFree' : 'calendar.toneAvailable';
+  if (tone === 'moderate') return 'calendar.toneModerate';
+  if (tone === 'almostFull') return business ? 'calendar.toneAlmostFull' : 'calendar.toneFewLeft';
+  if (tone === 'full') return 'calendar.toneFull';
+  return 'calendar.toneClosed';
+}
+
+/** „1 programare”, „5 programări”, „20 de programări” pentru cititorul de ecran. */
+export function dayCountA11y(
+  count: number,
+  lang: AppLanguage,
+  tr: (key: TrKey, params?: Record<string, string | number>) => string,
+): string {
+  if (count === 1) return tr('calendar.countA11yOne');
+  return tr('calendar.countA11y', { n: count, de: lang === 'ro' ? roDe(count) : '' });
 }

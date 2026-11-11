@@ -7,3 +7,22 @@ export function roDe(n: number): string {
   const lastTwo = abs % 100;
   return abs >= 20 && (lastTwo === 0 || lastTwo >= 20) ? 'de ' : '';
 }
+
+/** „Mai lipsește: X.” pentru un singur element, „Mai lipsesc: X, Y.” pentru mai multe. */
+export function missingListKey(count: number): 'set.missingList' | 'set.missingListOne' {
+  return count > 1 ? 'set.missingList' : 'set.missingListOne';
+}
+
+/**
+ * Cheia și parametrii pentru „1 afacere” / „5 afaceri” / „20 de afaceri”.
+ * `one` se folosește doar pentru exact 1; „de” doar în română.
+ */
+export function countArgs<K extends string>(
+  n: number,
+  one: K,
+  many: K,
+  lang: string,
+  extra: Record<string, string | number> = {},
+): [K, Record<string, string | number>] {
+  return [n === 1 ? one : many, { ...extra, n, count: n, de: lang === 'ro' ? roDe(n) : '' }];
+}

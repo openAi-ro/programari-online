@@ -77,6 +77,7 @@ import {
 import type { Profile } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 import { useBusinessRole } from '@/lib/useBusinessRole';
+import { missingListKey } from '@/lib/roNumber';
 
 /** Textul românesc pentru starea permisiunii (nu „unavailable”/„granted”) — retest 3.27 T02. */
 const PERMISSION_LABEL = {
@@ -1937,7 +1938,7 @@ export default function SettingsScreen() {
                   return (
                     <>
                       <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-                        {tr(allMissing.length > 1 ? 'set.missingList' : 'set.missingListOne', { list: allMissing.join(', ') })}
+                        {tr(missingListKey(allMissing.length), { list: allMissing.join(', ') })}
                       </Text>
                       {!missing.includes(tr('card.missingPhone')) ? null : (
                         <Text style={[styles.panelText, { color: t.colors.textFaint }]}>

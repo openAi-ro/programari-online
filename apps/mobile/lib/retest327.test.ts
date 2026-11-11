@@ -62,7 +62,7 @@ ok(roDe(30) === 'de ' && roDe(7) === '' && roDe(101) === '', '„de” de la 20 
 ok(ro['rep.lastDays'] === 'Ultimele {days} {de}zile' && /lang === 'ro' \? roDe\(report\.days\)/.test(src('app/(app)/business/(tabs)/reports.tsx')), 'Ultimele 30 de zile');
 ok(ro['rep.confirmedOne'] === 'confirmată' && /s\.approved === 1 \? tr\('rep\.confirmedOne'\)/.test(src('app/(app)/business/(tabs)/reports.tsx')), '1 confirmată / N confirmate');
 ok(ro['calendar.toneClosed'] === 'Închisă', 'legenda: Închisă');
-ok(ro['set.missingList'].startsWith('Mai lipsesc') && ro['set.missingListOne'].startsWith('Mai lipsește') && /allMissing\.length > 1 \? 'set\.missingList' : 'set\.missingListOne'/.test(set), 'Mai lipsesc / Mai lipsește');
+ok(ro['set.missingList'].startsWith('Mai lipsesc') && ro['set.missingListOne'].startsWith('Mai lipsește') && /missingListKey\(allMissing\.length\)/.test(set), 'Mai lipsesc / Mai lipsește');
 ok(ro['priv.preset30d'] === '30 de zile' && !/rebook/i.test(ro['fav.savedSub']), '30 de zile; fără „rebook”');
 
 // ș/ț cu virgulă.

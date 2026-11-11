@@ -1,11 +1,12 @@
 /* Programări Online — service worker (PWA shell)
- * Navigari si "/" : network-first (cache doar offline), ca shell-ul nou sa ajunga imediat.
+ * Navigari: network-first. Se pastreaza in cache DOAR shell-ul "/" (reimprospatat la fiecare
+ *   navigare online); offline, orice ruta primeste shell-ul "/" curent, nu un HTML vechi salvat pe ruta.
  * Asset-uri cu hash (/_expo/static/...): cache-first (continut imuabil).
  * Restul (sw.js, manifest, iconite, fisiere fara hash): network-first, cache doar ca rezerva offline.
  * Nu intercepteaza Supabase, Google, Expo sau alte origini.
  */
 
-const CACHE_VERSION = 'programari-shell-v5';
+const CACHE_VERSION = 'programari-shell-v6';
 const OFFLINE_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -57,13 +58,26 @@ function putInCache(req, res) {
   caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => undefined);
 }
 
-function networkFirst(req, { store, fallback }) {
-  return fetch(req)
-    .then((res) => {
-      if (store) putInCache(req, res);
-      return res;
-    })
-    .catch(() => caches.match(req).then((cached) => cached || fallback()));
+/**
+ * HTML-ul vine cu stale-while-revalidate: fără asta, browserul ar da din cache-ul HTTP pagina
+ * de dinainte de publicare (cu entry-ul vechi) și am salva-o ca shell.
+ */
+function bypassHttpCache(req) {
+  try {
+    return new Request(req, { cache: 'no-cache' });
+  } catch {
+    return req;
+  }
+}
+
+function refreshShell() {
+  return fetch(new Request('/', { cache: 'no-cache' }))
+    .then((res) => putInCache('/', res))
+    .catch(() => undefined);
+}
+
+function networkFirst(req, { fallback }) {
+  return fetch(req).catch(() => caches.match(req).then((cached) => cached || fallback()));
 }
 
 self.addEventListener('fetch', (event) => {
@@ -80,11 +94,16 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (isNavigation(req, url)) {
+    const isShell = url.pathname === '/' || url.pathname === '/index.html';
+    // Pe alte rute reimprospatam shell-ul "/" in paralel (esueaza silentios offline).
+    if (!isShell) event.waitUntil(refreshShell());
     event.respondWith(
-      networkFirst(req, {
-        store: true,
-        fallback: () => caches.match('/').then((shell) => shell || offlineFallback()),
-      })
+      fetch(bypassHttpCache(req))
+        .then((res) => {
+          if (isShell) putInCache('/', res);
+          return res;
+        })
+        .catch(() => caches.match('/').then((shell) => shell || offlineFallback()))
     );
     return;
   }
@@ -104,7 +123,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.pathname === '/sw.js') return;
-  event.respondWith(networkFirst(req, { store: false, fallback: () => Response.error() }));
+  event.respondWith(networkFirst(req, { fallback: () => Response.error() }));
 });
 
 // Web Push (iOS-2): PWA instalată pe iPhone primește alerte prin PushManager.
