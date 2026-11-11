@@ -280,6 +280,10 @@ export const ro = {
   'update.description': 'O versiune nouă a aplicației este gata. Atinge pentru a actualiza acum.',
   'update.updating': 'Se actualizează…',
   'update.updateNow': 'Actualizează acum',
+  'update.failedTitle': 'Actualizarea nu s-a aplicat',
+  'update.failed': 'Verifică conexiunea la internet și încearcă din nou.',
+  'update.stuck': 'Pagina a rămas pe versiunea veche. Încearcă din nou peste câteva minute; dacă tot nu merge, închide filele site-ului și deschide-l din nou.',
+  'update.stuckApp': 'Aplicația a rămas pe versiunea veche. Închide-o complet (și din aplicațiile recente) și deschide-o din nou; uneori e nevoie de două ori.',
   'auth.hidePassword': 'Ascunde parola',
   'auth.showPassword': 'Arată parola',
 

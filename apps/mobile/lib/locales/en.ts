@@ -282,6 +282,10 @@ export const en: typeof ro = {
   'update.description': 'A new version of the app is ready. Tap to update now.',
   'update.updating': 'Updating…',
   'update.updateNow': 'Update now',
+  'update.failedTitle': 'The update was not applied',
+  'update.failed': 'Check your internet connection and try again.',
+  'update.stuck': 'The page is still on the old version. Try again in a few minutes; if it still does not work, close the site tabs and open it again.',
+  'update.stuckApp': 'The app is still on the old version. Close it completely (also from recent apps) and open it again; sometimes it takes two tries.',
   'auth.hidePassword': 'Hide password',
   'auth.showPassword': 'Show password',
 

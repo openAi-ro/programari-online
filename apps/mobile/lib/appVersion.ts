@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
@@ -102,88 +103,106 @@ async function publishedWebEntry(): Promise<string | null> {
 }
 
 /**
+ * Versiunea pentru care am încercat deja actualizarea: web = bundle-ul publicat (sessionStorage),
+ * native = id-ul EAS Update (AsyncStorage). Dacă după reîncărcare tot versiunea veche rulează,
+ * bannerul spune asta în loc să ofere din nou același buton.
+ */
+const TRIED_KEY = 'programari.updateTried';
+
+async function getTried(): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') return window.sessionStorage.getItem(TRIED_KEY);
+    return await AsyncStorage.getItem(TRIED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function setTried(version: string | null): Promise<void> {
+  try {
+    if (Platform.OS === 'web') {
+      if (version) window.sessionStorage.setItem(TRIED_KEY, version);
+      else window.sessionStorage.removeItem(TRIED_KEY);
+      return;
+    }
+    if (version) await AsyncStorage.setItem(TRIED_KEY, version);
+    else await AsyncStorage.removeItem(TRIED_KEY);
+  } catch {
+    // Fără stocare: bannerul doar nu mai știe că a încercat deja.
+  }
+}
+
+/** Id-ul update-ului EAS oferit de server (lipsă la „roll back to embedded”). */
+function offeredUpdateId(check: Updates.UpdateCheckResult): string | null {
+  const manifest = check.manifest as { id?: string } | undefined;
+  return manifest?.id ?? null;
+}
+
+/**
+ * - `none`: rulează ultima versiune (sau verificarea n-a putut fi făcută);
+ * - `available`: există o versiune mai nouă decât cea care rulează;
+ * - `stuck`: am reîncărcat deja pentru versiunea asta și tot cea veche rulează (fără buclă).
+ */
+export type UpdateBannerState = 'none' | 'available' | 'stuck';
+
+/**
  * Banner-ul apare doar cand exista cu adevarat o versiune mai noua decat cea
  * care ruleaza:
  * - web: bundle-ul publicat pe server difera de cel incarcat in pagina;
  * - native: EAS raporteaza un update disponibil.
- * O incarcare proaspata (sau prima deschidere) nu mai arata banner-ul.
  */
-export async function shouldShowUpdateBanner(): Promise<boolean> {
+export async function updateBannerState(): Promise<UpdateBannerState> {
   if (Platform.OS === 'web') {
     const loaded = loadedWebEntry();
-    if (!loaded) return false;
+    if (!loaded) return 'none';
     const published = await publishedWebEntry();
-    return published !== null && published !== loaded;
+    if (published === null) return 'none';
+    if (published === loaded) {
+      await setTried(null);
+      return 'none';
+    }
+    return (await getTried()) === published ? 'stuck' : 'available';
   }
-  if (!canApplyOtaUpdates()) return false;
+  if (!canApplyOtaUpdates()) return 'none';
   try {
+    // OTA (EAS Update pe canalul build-ului), nu versiunea web.
     const check = await Updates.checkForUpdateAsync();
-    return check.isAvailable;
+    if (!check.isAvailable) {
+      await setTried(null);
+      return 'none';
+    }
+    const offered = offeredUpdateId(check);
+    return offered && (await getTried()) === offered ? 'stuck' : 'available';
   } catch {
-    return false;
-  }
-}
-
-async function hardRefreshWeb(): Promise<void> {
-  if (typeof window === 'undefined') return;
-
-  try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
-    }
-  } catch (e) {
-    console.warn('SW unregister', e);
-  }
-
-  try {
-    if (typeof caches !== 'undefined') {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k).catch(() => false)));
-    }
-  } catch (e) {
-    console.warn('caches clear', e);
-  }
-
-  const url = new URL(window.location.href);
-  url.searchParams.set('_r', String(Date.now()));
-  window.location.replace(url.toString());
-}
-
-async function forceNativeUpdateAndReload(): Promise<void> {
-  if (canApplyOtaUpdates()) {
-    try {
-      const check = await Updates.checkForUpdateAsync();
-      if (check.isAvailable) {
-        try {
-          await Updates.fetchUpdateAsync();
-        } catch (e) {
-          console.warn('OTA fetch on banner', e);
-        }
-      }
-    } catch (e) {
-      console.warn('OTA check on banner', e);
-    }
-  }
-
-  try {
-    await reloadWithBootScreen();
-  } catch (e) {
-    console.warn('Updates.reloadAsync failed', e);
-    // Ultima șansă pe native fără Updates: nu există echivalent sigur.
+    return 'none';
   }
 }
 
 /**
- * Hard refresh + aplică update:
- * - native: check/fetch EAS Update, apoi reload (chiar dacă nu e update nou)
- * - web: unregister SW, golește Cache Storage, reload cu cache-buster
+ * „Actualizează acum”. `reloading` = reîncărcarea a pornit; `upToDate` = rulează deja ultima
+ * versiune. O verificare sau o descărcare eșuată aruncă eroare (bannerul arată mesajul).
+ * Web: doar reîncarcă pagina (cu parametru unic, ca CDN-ul să dea HTML-ul nou). Service
+ * worker-ul (v6) cere navigările din rețea, iar fișierele cu hash nu se schimbă, deci nu
+ * dezînregistrăm SW-ul (ar pierde și abonamentul la notificări) și nu golim cache-urile.
  */
-export async function forceHardRefreshAndUpdate(): Promise<void> {
+export async function applyUpdateNow(): Promise<'reloading' | 'upToDate'> {
   if (Platform.OS === 'web') {
-    await hardRefreshWeb();
-    return;
+    const loaded = loadedWebEntry();
+    const published = await publishedWebEntry();
+    if (!published) throw new Error('update_check_failed');
+    if (published === loaded) return 'upToDate';
+    await setTried(published);
+    const url = new URL(window.location.href);
+    url.searchParams.set('_r', String(Date.now()));
+    window.location.replace(url.toString());
+    return 'reloading';
   }
-
-  await forceNativeUpdateAndReload();
+  if (!canApplyOtaUpdates()) return 'upToDate';
+  const check = await Updates.checkForUpdateAsync();
+  if (!check.isAvailable) return 'upToDate';
+  // isNew=false: era deja descărcat la pornire; reload-ul îl pornește oricum.
+  await Updates.fetchUpdateAsync();
+  await setTried(offeredUpdateId(check));
+  await reloadWithBootScreen();
+  return 'reloading';
 }
