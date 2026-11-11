@@ -1,6 +1,6 @@
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import QRCode from 'react-native-qrcode-svg';
+import { BusinessQr } from '@/components/BusinessQr';
 
 import { PromoVideo } from '@/components/PromoVideo';
 import { useTheme } from '@/components/ui';
@@ -188,11 +188,12 @@ export function BusinessVisitCard({
             ]}
           >
             {qrValue ? (
-              <QRCode
+              <BusinessQr
                 value={qrValue}
                 size={qrSize}
-                backgroundColor={palette.white}
-                color={palette.ink950}
+                name={displayName}
+                logoUrl={logoUrl}
+                nameStyle={styles.qrName}
               />
             ) : (
               <View style={[styles.qrPlaceholder, { width: qrSize, height: qrSize }]}>
@@ -357,6 +358,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   qrHint: { fontSize: fontSize.xs, textAlign: 'center', fontWeight: '600' },
+  qrName: { fontSize: fontSize.xs, lineHeight: 14 },
   divider: { height: StyleSheet.hairlineWidth, width: '100%' },
   rows: { gap: spacing.sm },
   row: {

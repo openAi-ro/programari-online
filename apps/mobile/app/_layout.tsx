@@ -1,10 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router, usePathname, useSegments } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ErrorBoundary as RouterErrorBoundary,
+  type ErrorBoundaryProps,
+  Stack,
+  ThemeProvider,
+  router,
+  usePathname,
+  useSegments,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 import type { Session } from '@supabase/supabase-js';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -17,7 +28,8 @@ import {
   consumeLastNotificationResponse,
   registerForPushAsync,
 } from '@/lib/notifications';
-import { applyAvailableUpdateWithTimeout } from '@/lib/appVersion';
+import { applyAvailableUpdateWithTimeout, reloadWithBootScreen } from '@/lib/appVersion';
+import { WEB_BOOT_SPLASH_ID } from '@/constants/bootLogo';
 import { consumePendingAuthRedirect } from '@/lib/auth-redirect';
 import { isAuthCallbackUrl, isAuthRedirectHeld } from '@/lib/auth';
 import { stashAuthCallbackUrl } from '@/lib/auth-link';
@@ -29,7 +41,17 @@ import { getLanguage, subscribeLanguage } from '@/lib/language';
 import { syncLanguageFromProfile } from '@/lib/profileLanguage';
 import * as Linking from 'expo-linking';
 
-export { ErrorBoundary } from 'expo-router';
+/** Eroarea de pornire trebuie să fie vizibilă: scoatem loaderul de pornire (HTML pe web, splash nativ). */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      document.getElementById(WEB_BOOT_SPLASH_ID)?.remove();
+    } else {
+      hideNativeSplash();
+    }
+  }, []);
+  return <RouterErrorBoundary {...props} />;
+}
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -42,8 +64,9 @@ export default function RootLayout() {
     ...Ionicons.font,
   });
   const [updatesReady, setUpdatesReady] = useState(__DEV__);
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
-  const { isUpdatePending } = Updates.useUpdates();
+  const [bootDone, setBootDone] = useState(false);
+  const finishBoot = useCallback(() => setBootDone(true), []);
+  const { isUpdatePending, isDownloading } = Updates.useUpdates();
   const [, forceRender] = useReducer((x: number) => x + 1, 0);
   useEffect(() => subscribeLanguage(() => forceRender()), []);
 
@@ -58,15 +81,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isUpdatePending) {
-      void Updates.reloadAsync();
+      void reloadWithBootScreen();
     }
   }, [isUpdatePending]);
 
   useEffect(() => {
-    if (!loaded) return;
     let cancelled = false;
     (async () => {
-      await SplashScreen.hideAsync();
       await applyAvailableUpdateWithTimeout();
       if (!cancelled) {
         setUpdatesReady(true);
@@ -75,24 +96,58 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, [loaded]);
+  }, []);
 
-  if (!loaded) {
-    return null;
+  // Plasă de siguranță: dacă iconița loaderului nu raportează încărcarea, splash-ul nativ nu rămâne blocat.
+  useEffect(() => {
+    const t = setTimeout(hideNativeSplash, 2000);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Web: loaderul din HTML (+html.tsx) stă de la primul afișaj; îl scoatem o singură dată, când aplicația e gata.
+  useEffect(() => {
+    if (!bootDone) return;
+    if (Platform.OS === 'web') {
+      document.getElementById(WEB_BOOT_SPLASH_ID)?.remove();
+    } else {
+      hideNativeSplash();
+    }
+  }, [bootDone]);
+
+  const app =
+    loaded && updatesReady ? (
+      <LanguageProvider>
+        <RootLayoutNav onBootDone={finishBoot} />
+      </LanguageProvider>
+    ) : null;
+
+  if (Platform.OS === 'web') {
+    return app;
   }
 
-  if (!updatesReady) {
-    return (
-      <BootLoading label={trKey('root.downloadingTitle')} sublabel={trKey('root.downloadingBody')} />
-    );
-  }
-
+  // Un singur loader de pornire, montat o dată, peste aplicație: preia logo-ul splash-ului nativ
+  // (care se ascunde abia după ce iconița loaderului e desenată) și rămâne până la primul ecran.
   return (
-    <LanguageProvider>
-      <RootLayoutNav />
-    </LanguageProvider>
+    <View style={styles.root}>
+      {app}
+      {bootDone ? null : (
+        <BootLoading
+          label={isDownloading ? trKey('root.downloadingTitle') : undefined}
+          sublabel={isDownloading ? trKey('root.downloadingBody') : undefined}
+          onLogoLoadEnd={hideNativeSplash}
+        />
+      )}
+    </View>
   );
 }
+
+function hideNativeSplash() {
+  void SplashScreen.hideAsync();
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});
 
 function useSessionGuard() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -195,10 +250,16 @@ function usePushNavigation(session: Session | null | undefined) {
   }, [session]);
 }
 
-function RootLayoutNav() {
+function RootLayoutNav({ onBootDone }: { onBootDone: () => void }) {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const session = useSessionGuard();
+  const pathname = usePathname();
   usePushNavigation(session);
+
+  // Pornirea s-a terminat când știm sesiunea și am plecat de pe „/” (care doar redirecționează).
+  useEffect(() => {
+    if (session !== undefined && pathname && pathname !== '/') onBootDone();
+  }, [session, pathname, onBootDone]);
 
   // Fiecare ecran isi deseneaza singur suprafata; tema de mai jos aliniaza
   // doar chrome-ul nativ (bara de stare, fundalul navigatorului, tranzitiile).
@@ -221,7 +282,7 @@ function RootLayoutNav() {
   }, [scheme]);
 
   if (session === undefined) {
-    return <BootLoading />;
+    return null;
   }
 
   return (

@@ -74,6 +74,11 @@ type ScreenProps = {
   aboveTabBar?: boolean;
   footer?: React.ReactNode;
   /**
+   * Footer fără casetă (fără fundal, bordură și padding mare): rămâne doar butonul, lipit de
+   * bara de tab-uri de dedesubt, care își ia singură zona sigură (Setări business, cererea lui Rafael).
+   */
+  footerBare?: boolean;
+  /**
    * Ridică conținutul / footer-ul deasupra tastaturii (client + business).
    * Implicit true. Pune false doar dacă ecranul își gestionează singur tastatura.
    */
@@ -96,6 +101,7 @@ export function Screen({
   bottomInset = spacing['3xl'],
   aboveTabBar = false,
   footer,
+  footerBare = false,
   keyboardAvoid = true,
   scrollRef,
   refreshControl,
@@ -107,7 +113,7 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight(keyboardAvoid && Platform.OS === 'android');
   const footerPaddingBottom = computeFooterPaddingBottom({
-    base: Math.max(insets.bottom, spacing.sm) + spacing.sm,
+    base: footerBare ? spacing.sm : Math.max(insets.bottom, spacing.sm) + spacing.sm,
     keyboardHeight,
     platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
     keyboardAvoid,
@@ -167,12 +173,14 @@ export function Screen({
       {footer ? (
         <View
           style={[
-            styles.footer,
-            {
-              backgroundColor: t.colors.bgElevated,
-              borderTopColor: t.colors.border,
-              paddingBottom: footerPaddingBottom,
-            },
+            footerBare ? styles.footerBare : styles.footer,
+            footerBare
+              ? { paddingBottom: footerPaddingBottom }
+              : {
+                  backgroundColor: t.colors.bgElevated,
+                  borderTopColor: t.colors.border,
+                  paddingBottom: footerPaddingBottom,
+                },
           ]}
         >
           <View style={shellStyle}>{footer}</View>
@@ -1286,6 +1294,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerBare: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
 
   button: {

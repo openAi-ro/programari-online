@@ -96,7 +96,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useTransientMessage();
-  const [counterpartyName, setCounterpartyName] = useState('Chat');
+  const [counterpartyName, setCounterpartyName] = useState(() => trKey('chat.title'));
   const [counterpartyTz, setCounterpartyTz] = useState('Europe/Bucharest');
   const [draft, setDraft] = useState('');
   const inputRef = useRef<TextInput>(null);
@@ -133,7 +133,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
     // Textul dictat se adauga la final: il tinem in vedere si dupa ce caseta a atins inaltimea maxima.
     if (dictation.listening) el.scrollTop = el.scrollHeight;
   }, [draft, windowWidth, dictation.listening]);  const userIdRef = useRef<string | null>(null);
-  const counterpartyNameRef = useRef<string>('Chat');
+  const counterpartyNameRef = useRef<string>(trKey('chat.title'));
   const seenIdsRef = useRef<Set<string>>(new Set());
   const loadingOlderRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -381,7 +381,7 @@ export default function ChatThread({ conversationId, isClient }: { conversationI
 
   return (
     <Screen
-      title={isClient ? 'Chat' : tr('chat.clientChatTitle')}
+      title={isClient ? tr('chat.title') : tr('chat.clientChatTitle')}
       subtitle={counterpartyName}
       onBack={back}
       scroll={false}

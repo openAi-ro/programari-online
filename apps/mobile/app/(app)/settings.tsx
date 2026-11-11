@@ -78,6 +78,20 @@ import type { Profile } from '@/lib/types';
 import { useTransientMessage } from '@/lib/useTransientMessage';
 import { useBusinessRole } from '@/lib/useBusinessRole';
 
+/** Textul românesc pentru starea permisiunii (nu „unavailable”/„granted”) — retest 3.27 T02. */
+const PERMISSION_LABEL = {
+  granted: 'set.permGranted',
+  denied: 'set.permDenied',
+  undetermined: 'set.permUndetermined',
+  unavailable: 'set.permUnavailable',
+} as const;
+
+function webNotificationPermission(): keyof typeof PERMISSION_LABEL {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unavailable';
+  const p = window.Notification.permission;
+  return p === 'granted' ? 'granted' : p === 'denied' ? 'denied' : 'undetermined';
+}
+
 export default function SettingsScreen() {
   const segments = useSegments();
   const inBusinessTabs = (segments as readonly string[]).includes('(tabs)');
@@ -115,6 +129,7 @@ export default function SettingsScreen() {
   /** Caseta WhatsApp: dacă e oprită, telefonul rămâne doar contact (fără WhatsApp). */
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
+  const [waTestOpen, setWaTestOpen] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -1042,6 +1057,16 @@ export default function SettingsScreen() {
       setError(null);
     }
     try {
+      if (Platform.OS === 'web') {
+        // Pe web contează doar permisiunea browserului și abonarea la alerte (nu Android/EAS) — retest 3.27 F04.
+        const sub = await hasWebPushSubscription();
+        setWebPushOn(sub);
+        if (!silent) {
+          if (sub && webNotificationPermission() === 'granted') setMessage(trKey('set.diagWebOk'));
+          else setError(trKey('set.diagWebMissing'));
+        }
+        return;
+      }
       const d = await getPushDiagnostics(profile.id);
       setDiag(d);
       if (!silent) {
@@ -1209,6 +1234,7 @@ export default function SettingsScreen() {
       subtitle={getAppVersionLabel()}
       onBack={back}
       bottomInset={!inBusinessTabs && appMode === 'client' ? spacing['3xl'] + 56 : undefined}
+      footerBare={inBusinessTabs}
       footer={
         <View style={styles.footer}>
           {error ? (
@@ -1485,14 +1511,13 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
-      <SectionTitle>WhatsApp</SectionTitle>
+      {/* WhatsApp compact: doar comutatorul; testul stă pliat (TypeSafe setari/wa_caseta 0.96). */}
       <View style={[styles.panel, { backgroundColor: t.colors.surface, borderColor: t.colors.border }]}>
         {profile?.phone || (phoneInput.trim() && normalizePhoneE164(phoneInput.trim())) ? (
           <>
             <SettingRow
               icon="logo-whatsapp"
               title={tr('set.waUse')}
-              description={whatsappEnabled ? tr('set.waOn') : tr('set.waOff')}
               right={
                 <Toggle
                   value={whatsappEnabled}
@@ -1517,6 +1542,19 @@ export default function SettingsScreen() {
               }
             />
             {whatsappEnabled ? (
+              <Pressable
+                onPress={() => setWaTestOpen((o) => !o)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: waTestOpen }}
+                style={styles.waTestToggle}
+              >
+                <Text style={[styles.panelText, { color: t.colors.accent, fontWeight: '600' }]}>
+                  {tr('set.waTestSection')}
+                </Text>
+                <Ionicons name={waTestOpen ? 'chevron-up' : 'chevron-down'} size={16} color={t.colors.accent} />
+              </Pressable>
+            ) : null}
+            {whatsappEnabled && waTestOpen ? (
               <>
                 <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
                   {tr('set.waTest', {
@@ -1535,24 +1573,10 @@ export default function SettingsScreen() {
                   onPress={handleTestWhatsApp}
                 />
               </>
-            ) : (
-              <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
-                {tr('set.waEnableBox')}
-              </Text>
-            )}
+            ) : null}
           </>
         ) : (
-          <View style={styles.waEmpty}>
-            <View style={[styles.waLogo, { backgroundColor: t.colors.successSoft }]}>
-              <Ionicons name="logo-whatsapp" size={36} color={t.colors.success} />
-            </View>
-            <Text style={[styles.panelText, { color: t.colors.text, fontWeight: '700' }]}>
-              {tr('set.waUnlinked')}
-            </Text>
-            <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-              {tr('set.waUnlinkedHint', { phone: tr('cal.phone'), save: tr('set.saveProfile') })}
-            </Text>
-          </View>
+          <SettingRow icon="logo-whatsapp" title={tr('set.waUnlinked')} description={tr('set.waNeedPhoneShort')} />
         )}
       </View>
 
@@ -1686,10 +1710,20 @@ export default function SettingsScreen() {
         />
         {pushDiagOpen ? (
           <>
-            {diag ? (
+            {Platform.OS === 'web' ? (
               <View style={{ gap: 6 }}>
                 <Text style={[styles.panelText, { color: t.colors.text }]}>
-                  {diag.permission === 'granted' ? '✅' : '❌'}{' '}{tr('set.diagPerm', { v: diag.permission })}
+                  {webNotificationPermission() === 'granted' ? '✅' : '❌'}{' '}
+                  {tr('set.diagPerm', { v: tr(PERMISSION_LABEL[webNotificationPermission()]) })}
+                </Text>
+                <Text style={[styles.panelText, { color: t.colors.text }]}>
+                  {webPushOn ? '✅' : '❌'}{' '}{tr('set.diagWebSub', { v: webPushOn ? tr('set.yes') : tr('set.no') })}
+                </Text>
+              </View>
+            ) : diag ? (
+              <View style={{ gap: 6 }}>
+                <Text style={[styles.panelText, { color: t.colors.text }]}>
+                  {diag.permission === 'granted' ? '✅' : '❌'}{' '}{tr('set.diagPerm', { v: tr(PERMISSION_LABEL[diag.permission]) })}
                 </Text>
                 <Text style={[styles.panelText, { color: t.colors.text }]}>
                   {diag.channelOk ? '✅' : '❌'}{' '}{tr('set.diagChannel', { v: diag.channelOk ? tr('set.ok') : tr('set.missingLow') })}
@@ -1716,11 +1750,13 @@ export default function SettingsScreen() {
               disabled={diagBusy || pushBusy || pushTestBusy || !profile}
               onPress={() => void handleRefreshDiagnostics()}
             />
-            <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-              {Platform.OS === 'ios' ? tr('set.pushIosNote') : tr('set.pushAndroidNote')}
-              {'\n\n'}
-              {Platform.OS === 'ios' ? tr('set.pushIosSteps') : tr('set.pushAndroidSteps')}
-            </Text>
+            {Platform.OS === 'web' ? null : (
+              <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
+                {Platform.OS === 'ios' ? tr('set.pushIosNote') : tr('set.pushAndroidNote')}
+                {'\n\n'}
+                {Platform.OS === 'ios' ? tr('set.pushIosSteps') : tr('set.pushAndroidSteps')}
+              </Text>
+            )}
           </>
         ) : null}
       </View>
@@ -1901,7 +1937,7 @@ export default function SettingsScreen() {
                   return (
                     <>
                       <Text style={[styles.panelText, { color: t.colors.textMuted }]}>
-                        {tr('set.missingList', { list: allMissing.join(', ') })}
+                        {tr(allMissing.length > 1 ? 'set.missingList' : 'set.missingListOne', { list: allMissing.join(', ') })}
                       </Text>
                       {!missing.includes(tr('card.missingPhone')) ? null : (
                         <Text style={[styles.panelText, { color: t.colors.textFaint }]}>
@@ -2031,17 +2067,12 @@ const styles = StyleSheet.create({
   },
   panelText: { fontSize: fontSize.sm, lineHeight: 19 },
 
-  waEmpty: {
+  waTestToggle: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  waLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
   },
 
   profilePanel: {

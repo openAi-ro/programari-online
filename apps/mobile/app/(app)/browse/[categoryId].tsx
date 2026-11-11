@@ -100,7 +100,8 @@ export default function CategoryResultsScreen() {
       q: opts?.q,
       limit: 100,
     });
-    setRows(next);
+    // Eroare fără rânduri = listă necunoscută: păstrăm ce era, fără „0 afaceri” (retest 3.27).
+    if (!err || next.length > 0) setRows(next);
     if (err) setError(err);
     setLoading(false);
   }, []);
@@ -236,8 +237,10 @@ export default function CategoryResultsScreen() {
     );
   }
 
-  const subtitle =
-    nearMe && coords
+  const unknown = Boolean(error) && rows.length === 0;
+  const subtitle = unknown
+    ? undefined
+    : nearMe && coords
       ? tr('cat.countDist', { n: filtered.length })
       : tr('cat.count', { n: filtered.length });
 
@@ -376,13 +379,24 @@ export default function CategoryResultsScreen() {
                 </Callout>
               ) : null}
               {error ? (
-                <Callout tone="warning" title={tr('browse.partialList')}>
-                  {tr('cat.partialDesc')}
-                </Callout>
+                <>
+                  <Callout tone="warning" title={tr('browse.partialList')}>
+                    {tr('cat.partialDesc')}
+                  </Callout>
+                  <Button
+                    label={tr('common.retry')}
+                    icon="refresh-outline"
+                    onPress={() => {
+                      setLoading(true);
+                      void load({ q: q.trim() || undefined });
+                    }}
+                  />
+                </>
               ) : null}
             </View>
           }
           ListEmptyComponent={
+            unknown ? null : (
             <EmptyState
               icon="storefront-outline"
               title={tr('cat.noResults')}
@@ -409,6 +423,7 @@ export default function CategoryResultsScreen() {
                 )
               }
             />
+            )
           }
           renderItem={({ item }) => (
             <SalonRow

@@ -2,12 +2,10 @@ import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
-import { BootLoading } from '@/components/BootLoading';
-import { useT } from '@/lib/i18n';
 import { supabase } from '@/lib/supabase';
 
+/** Ruta „/” doar redirecționează; loaderul de pornire din _layout rămâne deasupra până atunci. */
 export default function Index() {
-  const tr = useT();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
@@ -21,7 +19,7 @@ export default function Index() {
   }, []);
 
   if (session === undefined) {
-    return <BootLoading label={tr('common.loading')} />;
+    return null;
   }
 
   if (!session) {

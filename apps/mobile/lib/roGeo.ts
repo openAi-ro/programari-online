@@ -7,7 +7,20 @@ import { trKey } from './i18n';
 
 type JudetEntry = { auto: string; nume: string; localitati: string[] };
 
-const JUDETE_DATA = (localitatiData as { judete: JudetEntry[] }).judete;
+/**
+ * ș/ț cu virgulă (forma corectă în română) în loc de ş/ţ cu sedilă. Nomenclatorul și adresele
+ * deja salvate folosesc sedila; o corectăm doar la afișare (retest 3.27). Compararea rămâne prin normalizeRo.
+ */
+export function roCommaBelow<T extends string | null | undefined>(text: T): T {
+  if (!text) return text;
+  return text.replace(/ş/g, 'ș').replace(/Ş/g, 'Ș').replace(/ţ/g, 'ț').replace(/Ţ/g, 'Ț') as T;
+}
+
+const JUDETE_DATA: JudetEntry[] = (localitatiData as { judete: JudetEntry[] }).judete.map((j) => ({
+  auto: j.auto,
+  nume: roCommaBelow(j.nume),
+  localitati: j.localitati.map((l) => roCommaBelow(l)),
+}));
 
 const PREFIX_LOCALITATE = /^(municipiul|municipiu|orasul|oras|comuna|satul|sat) /;
 const PREFIX_JUDET = /^(municipiul|municipiu|judetul|judet|jud) /;

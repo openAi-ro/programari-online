@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,7 +14,6 @@ import {
 } from '@/components/ui';
 import { spacing } from '@/constants/theme';
 import {
-  getFavoriteIds,
   loadFavoriteBusinesses,
   subscribeFavorites,
   syncFavoritesFromCloud,
@@ -42,11 +41,10 @@ export default function FavoritesScreen() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
 
-  useEffect(() => {
-    void getFavoriteIds();
-    void syncFavoritesFromCloud();
-    return subscribeFavorites(setIds);
-  }, []);
+  /** Lista de id-uri e cunoscută abia după o citire reușită; până atunci nu arătăm „Niciun salon favorit”. */
+  const idsKnown = useRef(false);
+
+  useEffect(() => subscribeFavorites(setIds), []);
 
   const loadRows = useCallback(async (favoriteIds: string[]) => {
     setLoadFailed(false);
@@ -62,16 +60,35 @@ export default function FavoritesScreen() {
     setLoading(false);
   }, []);
 
+  const reload = useCallback(async () => {
+    setLoading(true);
+    const next = await syncFavoritesFromCloud();
+    if (!next) {
+      setLoadFailed(true);
+      setLoading(false);
+      return;
+    }
+    idsKnown.current = true;
+    await loadRows(next);
+  }, [loadRows]);
+
   useFocusEffect(
     useCallback(() => {
-      void syncFavoritesFromCloud().then((next) => {
-        void loadRows(next);
-      });
-    }, [loadRows])
+      void reload();
+    }, [reload])
   );
 
+  // Revenirea internetului (web) reîncarcă singură lista.
   useEffect(() => {
-    void loadRows(ids);
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onOnline = () => void reload();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [reload]);
+
+  // Adăugat/scos din altă parte: doar după ce lista e cunoscută.
+  useEffect(() => {
+    if (idsKnown.current) void loadRows(ids);
   }, [ids, loadRows]);
 
   if (loading && rows.length === 0 && ids.length > 0) {
@@ -99,9 +116,9 @@ export default function FavoritesScreen() {
         {loadFailed ? (
           <>
             <Callout tone="danger">{tr('fav.loadFail')}</Callout>
-            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void loadRows(ids)} />
+            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void reload()} />
           </>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && loading ? null : rows.length === 0 ? (
           <EmptyState
             icon="heart-outline"
             title={tr('fav.empty')}

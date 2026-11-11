@@ -31,6 +31,7 @@ import {
 import { isOpenNow } from '@/lib/browseList';
 import { useBack } from '@/lib/nav';
 import { useT } from '@/lib/i18n';
+import { userFacingError } from '@/lib/networkError';
 
 /**
  * Aproape de mine — listă sortată după distanță (fara Google Maps greu pe web).
@@ -62,8 +63,9 @@ export default function NearMeScreen() {
     }
 
     const { rows: raw, error: err } = await listPublicBusinesses({ limit: 100 });
-    if (err) setListError(err);
-    setRows(withDistances(raw, device));
+    // Eroare = listă necunoscută, nu „Niciun salon găsit” (retest 3.27).
+    if (err) setListError(userFacingError(err));
+    else setRows(withDistances(raw, device));
     setLoading(false);
   }, []);
 
@@ -123,9 +125,12 @@ export default function NearMeScreen() {
                 </Callout>
               ) : null}
               {listError ? (
-                <Callout tone="danger" title={tr('near.listError')}>
-                  {listError}
-                </Callout>
+                <>
+                  <Callout tone="danger" title={tr('nearby.loadFail')}>
+                    {listError}
+                  </Callout>
+                  <Button label={tr('common.retry')} icon="refresh-outline" onPress={() => void load()} />
+                </>
               ) : null}
               {rows.some((r) => r.latitude != null && r.longitude != null) ? (
                 <BusinessMap
@@ -161,6 +166,7 @@ export default function NearMeScreen() {
             </View>
           }
           ListEmptyComponent={
+            listError ? null : (
             <EmptyState
               icon="navigate-outline"
               title={tr('near.empty')}
@@ -173,6 +179,7 @@ export default function NearMeScreen() {
                 />
               }
             />
+            )
           }
           renderItem={({ item }) => (
             <SalonRow

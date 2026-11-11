@@ -1,6 +1,7 @@
 import type { BusinessVisitCardProps } from '../components/BusinessVisitCard';
 import { DEFAULT_WORKING_HOURS } from './defaults';
 import type { BusinessProfile, WorkingHours } from './types';
+import { roCommaBelow } from './roGeo';
 
 /** Rând minim necesar din business_profiles pentru cartea de vizită de pe hartă. */
 export type BusinessCardRow = Pick<
@@ -46,7 +47,7 @@ export function formatPublicLocation(
   city: string | null | undefined,
   county: string | null | undefined
 ): string | null {
-  const parts = [city?.trim(), county?.trim()].filter(Boolean);
+  const parts = [roCommaBelow(city?.trim()), roCommaBelow(county?.trim())].filter(Boolean);
   return parts.length > 0 ? parts.join(', ') : null;
 }
 

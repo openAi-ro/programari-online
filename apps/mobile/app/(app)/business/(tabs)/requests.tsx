@@ -108,10 +108,13 @@ export default function BusinessRequestsScreen() {
   const statusBusyRef = useRef<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const businessIdsRef = useRef<string[]>([]);
+  /** Citirea cererilor a eșuat: lista e necunoscută (fără „gol”), cu Reîncearcă (retest 3.27 F01). */
+  const [loadFailed, setLoadFailed] = useState(false);
   businessIdsRef.current = businessIds;
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
@@ -126,6 +129,7 @@ export default function BusinessRequestsScreen() {
 
     if (bErr) {
       setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -157,6 +161,7 @@ export default function BusinessRequestsScreen() {
       .in('business_id', ids);
     if (aErr) {
       setError(aErr.message, { sticky: true });
+      setLoadFailed(true);
     } else {
       const list = (data ?? []) as Row[];
       setRows(list);
@@ -690,6 +695,9 @@ export default function BusinessRequestsScreen() {
                 {error}
               </Callout>
             ) : null}
+            {loadFailed ? (
+              <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+            ) : null}
             {success ? (
               <Callout onClose={() => setSuccess(null)} tone="success" title={tr('common.done')}>
                 {success}
@@ -698,6 +706,7 @@ export default function BusinessRequestsScreen() {
           </View>
         }
         ListEmptyComponent={
+          loadFailed ? null : (
           <EmptyState
             icon={
               filter === 'decide'
@@ -721,6 +730,7 @@ export default function BusinessRequestsScreen() {
                   : tr('req.emptyAllDesc')
             }
           />
+          )
         }
         renderItem={({ item }) => (
           <AppointmentCard

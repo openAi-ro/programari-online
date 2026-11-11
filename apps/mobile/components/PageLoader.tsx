@@ -54,6 +54,8 @@ type PageLoaderProps = {
   /** Eticheta pentru cititoarele de ecran; implicit „Se încarcă…”. */
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
+  /** Iconița din centru a fost desenată (sau nu s-a putut încărca). */
+  onLogoLoadEnd?: () => void;
 };
 
 /**
@@ -70,6 +72,7 @@ export function PageLoader({
   labelColor,
   accessibilityLabel,
   style,
+  onLogoLoadEnd,
 }: PageLoaderProps) {
   const progress = useSharedValue(0);
 
@@ -95,6 +98,7 @@ export function PageLoader({
           source={LOGO}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
+          onLoadEnd={onLogoLoadEnd}
           style={{ width: logoSize, height: logoSize, borderRadius: 9 * k }}
         />
       </View>

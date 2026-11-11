@@ -32,6 +32,7 @@ import {
 import { comboTotals, toggleServiceId } from '@/lib/serviceCombo';
 import { generateFreeSlots } from '@/lib/slots';
 import { staffForServices, staffServicesMap, type StaffServiceRow } from '@/lib/staffServices';
+import { userFacingError } from '@/lib/networkError';
 import { supabase } from '@/lib/supabase';
 import { formatInTimeZone, localDayBoundsUtc } from '@/lib/timezone';
 import type { Appointment, BusinessProfile, FreeSlot, Service, Staff } from '@/lib/types';
@@ -76,6 +77,9 @@ function QuickAddBody({
 
   const [staffList, setStaffList] = useState<QuickAddStaff[]>(staffProp ?? []);
   const [services, setServices] = useState<Service[]>([]);
+  /** Serviciile/echipa nu s-au putut citi: necunoscute, nu listă goală (retest 3.27 F02). */
+  const [initError, setInitError] = useState<string | null>(null);
+  const [initAttempt, setInitAttempt] = useState(0);
   const [offered, setOffered] = useState<Record<string, string[]>>({});
   const [myStaffId, setMyStaffId] = useState<string | null>(null);
   const [isStaffRole, setIsStaffRole] = useState(false);
@@ -110,6 +114,7 @@ function QuickAddBody({
   useEffect(() => {
     let alive = true;
     void (async () => {
+      setInitError(null);
       const teamReq = staffProp
         ? Promise.resolve({ data: staffProp })
         : supabase
@@ -119,7 +124,7 @@ function QuickAddBody({
             .eq('active', true)
             .order('sort_order', { ascending: true })
             .order('created_at', { ascending: true });
-      const [{ data: svcRows }, { data: team }, role, { data: ownStaff }] = await Promise.all([
+      const [{ data: svcRows, error: svcErr }, teamRes, role, { data: ownStaff }] = await Promise.all([
         supabase
           .from('services')
           .select('*')
@@ -132,11 +137,20 @@ function QuickAddBody({
         supabase.rpc('business_member_staff_id', { p_business_id: business.id }),
       ]);
       if (!alive) return;
-      const members = (team ?? []) as QuickAddStaff[];
-      const { data: offeredRows } = members.length
+      const teamErr = 'error' in teamRes ? teamRes.error : null;
+      if (svcErr || teamErr) {
+        setInitError(userFacingError((svcErr ?? teamErr)?.message ?? ''));
+        return;
+      }
+      const members = (teamRes.data ?? []) as QuickAddStaff[];
+      const { data: offeredRows, error: offErr } = members.length
         ? await supabase.from('staff_services').select('staff_id, service_id').in('staff_id', members.map((m) => m.id))
         : { data: [] as StaffServiceRow[] };
       if (!alive) return;
+      if (offErr) {
+        setInitError(userFacingError(offErr.message));
+        return;
+      }
       const staffRole = role === 'staff';
       const own = staffRole ? ((ownStaff as string | null) ?? null) : null;
       setIsStaffRole(staffRole);
@@ -150,7 +164,7 @@ function QuickAddBody({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [business.id]);
+  }, [business.id, initAttempt]);
 
   const totals = useMemo(() => comboTotals(services, serviceIds), [services, serviceIds]);
   const eligible = useMemo(
@@ -394,6 +408,17 @@ function QuickAddBody({
                 ? tr('qa.servicesTotal', { mins: totals.durationMinutes, price: totals.price })
                 : tr('qa.services')}
             </SectionTitle>
+            {initError ? (
+              <>
+                <Callout tone="danger">{initError}</Callout>
+                <Button
+                  label={tr('common.retry')}
+                  icon="refresh-outline"
+                  variant="secondary"
+                  onPress={() => setInitAttempt((n) => n + 1)}
+                />
+              </>
+            ) : null}
             <View style={styles.wrap}>
               {services.map((s) => {
                 const on = serviceIds.includes(s.id);

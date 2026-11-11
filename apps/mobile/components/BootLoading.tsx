@@ -3,32 +3,61 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PageLoader } from '@/components/PageLoader';
 import { trKey } from '@/lib/i18n';
 
+/** Latura loaderului de pornire; iconița din centru are 38/80 din ea (57 dp), ca `imageWidth` din app.json. */
+const BOOT_LOADER_SIZE = 120;
+
 /**
  * Ecran de pornire (boot): loaderul Programări (12 bare + iconița în centru),
- * pe fundal #f1f5f9, aceeași culoare ca splash-ul nativ. Splash-ul nativ este
- * static, deci animația rulează aici, imediat după ce splash-ul se ascunde.
+ * pe fundal #f1f5f9, exact peste logo-ul splash-ului nativ (aceeași culoare,
+ * aceeași poziție, aceeași mărime). Textul opțional stă dedesubt, fără să mute loaderul.
  */
-export function BootLoading({ label, sublabel }: { label?: string; sublabel?: string }) {
+export function BootLoading({
+  label,
+  sublabel,
+  onLogoLoadEnd,
+}: {
+  label?: string;
+  sublabel?: string;
+  onLogoLoadEnd?: () => void;
+}) {
   return (
-    <View style={styles.screen}>
-      <PageLoader size={120} accessibilityLabel={label ?? trKey('common.loading')} />
+    <View style={styles.screen} pointerEvents="none">
+      <PageLoader
+        size={BOOT_LOADER_SIZE}
+        accessibilityLabel={label ?? trKey('common.loading')}
+        onLogoLoadEnd={onLogoLoadEnd}
+      />
 
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-      {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
+      {label ? (
+        <View style={styles.labels}>
+          <Text style={styles.label}>{label}</Text>
+          {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f1f5f9',
-    paddingHorizontal: 32,
+  },
+  labels: {
+    position: 'absolute',
+    top: '50%',
+    left: 32,
+    right: 32,
+    marginTop: BOOT_LOADER_SIZE / 2 + 24,
+    alignItems: 'center',
   },
   label: {
-    marginTop: 24,
     color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',

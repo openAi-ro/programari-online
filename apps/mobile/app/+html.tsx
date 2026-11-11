@@ -1,6 +1,8 @@
 import { ScrollViewStyleReset, useServerDocumentContext } from 'expo-router/html';
 import type { ReactNode } from 'react';
 
+import { BOOT_LOGO_DATA_URI, WEB_BOOT_SPLASH_ID } from '@/constants/bootLogo';
+
 // This file is web-only and used to configure the root HTML for every
 // web page during static rendering.
 // The contents of this function only run in Node.js environments and
@@ -35,6 +37,8 @@ export default function Root({ children }: { children: ReactNode }) {
 
         {/* Fundalul nu trebuie să clipească între scheme, înainte ca React să monteze tema. */}
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
+        {/* Loaderul de pornire: vizibil de la primul afișaj, animat doar cu CSS (merge și cât JS-ul se încarcă). */}
+        <style dangerouslySetInnerHTML={{ __html: bootSplashCss }} />
 
         {/* Register SW only on https or localhost — safe for Firebase Hosting / local web. */}
         <script
@@ -51,6 +55,16 @@ export default function Root({ children }: { children: ReactNode }) {
         />
       </head>
       <body {...bodyAttributes}>
+        <div id={WEB_BOOT_SPLASH_ID} role="progressbar" aria-label="Se încarcă…">
+          <div className="boot-loader">
+            {BOOT_BARS.map((i) => (
+              <i key={i} style={{ transform: `rotate(${i * 30}deg)` }}>
+                <b style={{ animationDelay: `${(-((BAR_COUNT - 1 - i) / BAR_COUNT) * CYCLE_S).toFixed(3)}s` }} />
+              </i>
+            ))}
+            <img src={BOOT_LOGO_DATA_URI} alt="" width={57} height={57} />
+          </div>
+        </div>
         {children}
         {bodyNodes}
       </body>
@@ -73,4 +87,25 @@ input:focus,
 textarea:focus {
   outline: none;
 }
+`;
+
+// Replica CSS a loaderului de pornire nativ (components/BootLoading + PageLoader, size 120):
+// 12 bare 9×27 la 4.5 px de margine, opacitate 1→0 și culorile HUE_COLORS pe un ciclu de 1.2 s.
+const BAR_COUNT = 12;
+const CYCLE_S = 1.2;
+const BOOT_BARS = Array.from({ length: BAR_COUNT }, (_, i) => i);
+const HUE_COLORS = [
+  '#008000', '#00843a', '#007d7d', '#006db7', '#3a59d9', '#7d45d9', '#b737b7',
+  '#d9337d', '#d93a3a', '#b74a00', '#7d5e00', '#3a7200', '#008000',
+];
+const bootKeyframes = HUE_COLORS.map(
+  (c, i) => `${((i / 12) * 100).toFixed(3)}%{opacity:${(1 - i / 12).toFixed(3)};background-color:${c}}`
+).join('');
+const bootSplashCss = `
+#${WEB_BOOT_SPLASH_ID}{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:#f1f5f9}
+#${WEB_BOOT_SPLASH_ID} .boot-loader{position:relative;width:120px;height:120px}
+#${WEB_BOOT_SPLASH_ID} i{position:absolute;inset:0}
+#${WEB_BOOT_SPLASH_ID} b{position:absolute;top:4.5px;left:55.5px;width:9px;height:27px;border-radius:1.8px;animation:boot-bar ${CYCLE_S}s linear infinite}
+#${WEB_BOOT_SPLASH_ID} img{position:absolute;left:31.5px;top:31.5px;width:57px;height:57px;border-radius:13.5px}
+@keyframes boot-bar{${bootKeyframes}}
 `;

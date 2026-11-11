@@ -14,13 +14,14 @@ import {
   SkeletonStatGrid,
   useTheme,
 } from '@/components/ui';
-import { useT } from '@/lib/i18n';
+import { useLanguage, useT } from '@/lib/i18n';
 import { markNavReady, measureBeforeEnabled } from '@/lib/navTiming';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { formatLei } from '@/lib/format';
 import { useBack } from '@/lib/nav';
 import { supabase } from '@/lib/supabase';
 import { managerOnly } from '@/components/ManagerOnly';
+import { roDe } from '@/lib/roNumber';
 
 type Report = {
   days: number;
@@ -48,6 +49,7 @@ function BusinessReportsScreen() {
   const t = useTheme();
   const back = useBack();
   const tr = useT();
+  const { lang } = useLanguage();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +114,7 @@ function BusinessReportsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Screen aboveTabBar title={tr('rep.title')} subtitle={tr('rep.lastDays').replace('{days}', String(report.days))} onBack={back}>
+      <Screen aboveTabBar title={tr('rep.title')} subtitle={tr('rep.lastDays', { days: report.days, de: lang === 'ro' ? roDe(report.days) : '' })} onBack={back}>
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
       <Segmented value={String(days)} onChange={(v) => setDays(Number(v))} options={[{ value: '7', label: '7' }, { value: '30', label: '30' }, { value: '90', label: '90' }]} />
@@ -161,7 +163,7 @@ function BusinessReportsScreen() {
         >
           <Text style={[styles.rowName, { color: t.colors.text }]}>{s.name}</Text>
           <Text style={[styles.rowMeta, { color: t.colors.textMuted }]}>
-            {s.approved} {tr('rep.confirmedLow')} · {s.no_show} {tr('cli.noShows')} · {formatLei(s.revenue_ron)}
+            {s.approved} {s.approved === 1 ? tr('rep.confirmedOne') : tr('rep.confirmedLow', { de: lang === 'ro' ? roDe(s.approved) : '' })} · {s.no_show} {tr('cli.noShows')} · {formatLei(s.revenue_ron)}
           </Text>
         </View>
       ))}

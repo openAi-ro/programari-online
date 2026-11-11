@@ -13,7 +13,7 @@ type Listener = (ids: string[]) => void;
 const listeners = new Set<Listener>();
 let memory: string[] = [];
 let ownerId: string | null = null;
-let loading: Promise<string[]> | null = null;
+let loading: Promise<string[] | null> | null = null;
 
 // Vechea cheie locală comună tuturor conturilor (sursa scurgerii F-1) — o ștergem o dată.
 const LEGACY_KEY = 'programari.favoriteBusinessIds';
@@ -59,8 +59,8 @@ export function getFavoriteIdsSync(): string[] {
   return memory;
 }
 
-/** Recitește favoritele contului curent din baza de date. */
-export async function syncFavoritesFromCloud(): Promise<string[]> {
+/** Recitește favoritele contului curent din baza de date. null = citirea a eșuat (necunoscut, nu „niciun favorit”). */
+export async function syncFavoritesFromCloud(): Promise<string[] | null> {
   if (loading) return loading;
   loading = (async () => {
     const user = await getCurrentUser();
@@ -74,7 +74,7 @@ export async function syncFavoritesFromCloud(): Promise<string[]> {
       .select('business_id')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
-    if (error) return ownerId === user.id ? memory : [];
+    if (error) return ownerId === user.id ? memory : null;
     const ids = (data ?? [])
       .map((r) => (typeof r.business_id === 'string' ? r.business_id : null))
       .filter((x): x is string => Boolean(x));
@@ -89,8 +89,8 @@ export async function syncFavoritesFromCloud(): Promise<string[]> {
   }
 }
 
-/** Favoritele contului curent (din cache dacă sunt deja încărcate pentru acest cont). */
-export async function getFavoriteIds(): Promise<string[]> {
+/** Favoritele contului curent (din cache dacă sunt deja încărcate pentru acest cont); null = necunoscute. */
+export async function getFavoriteIds(): Promise<string[] | null> {
   const user = await getCurrentUser();
   if (!user) {
     if (memory.length) emit([]);
@@ -106,6 +106,7 @@ export async function toggleFavorite(businessId: string): Promise<boolean> {
   const user = await getCurrentUser();
   if (!user) return false;
   const ids = await getFavoriteIds();
+  if (!ids) return isFavoriteSync(businessId);
   const has = ids.includes(businessId);
   const { error } = has
     ? await supabase

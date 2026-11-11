@@ -2,6 +2,8 @@ import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
 
+import { BOOT_LOGO_DATA_URI } from '@/constants/bootLogo';
+
 type Extra = { displayVersion?: string };
 
 /**
@@ -31,6 +33,23 @@ export function canApplyOtaUpdates(): boolean {
 }
 
 /**
+ * Reîncarcă aplicația pe update-ul descărcat. Ecranul nativ de reîncărcare arată
+ * același logo (57 dp), pe același fundal și în aceeași poziție ca loaderul de pornire,
+ * în locul ecranului alb cu spinner implicit din expo-updates.
+ */
+export function reloadWithBootScreen(): Promise<void> {
+  return Updates.reloadAsync({
+    reloadScreenOptions: {
+      backgroundColor: '#f1f5f9',
+      image: { url: BOOT_LOGO_DATA_URI, width: 57, height: 57, scale: 1 },
+      imageResizeMode: 'contain',
+      spinner: { enabled: false },
+      fade: true,
+    },
+  });
+}
+
+/**
  * Descarcă update-ul EAS și îl aplică imediat (reload), nu la a doua deschidere.
  */
 export async function applyAvailableUpdate(): Promise<void> {
@@ -44,7 +63,7 @@ export async function applyAvailableUpdate(): Promise<void> {
       // Poate fi deja descărcat de verificarea nativă de la pornire.
       console.warn('OTA fetch', e);
     }
-    await Updates.reloadAsync();
+    await reloadWithBootScreen();
   } catch (e) {
     console.warn('OTA check failed', e);
   }
@@ -148,7 +167,7 @@ async function forceNativeUpdateAndReload(): Promise<void> {
   }
 
   try {
-    await Updates.reloadAsync();
+    await reloadWithBootScreen();
   } catch (e) {
     console.warn('Updates.reloadAsync failed', e);
     // Ultima șansă pe native fără Updates: nu există echivalent sigur.

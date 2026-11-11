@@ -4,6 +4,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
+import { BusinessQr } from '@/components/BusinessQr';
+
 import {
   Button,
   Callout,
@@ -122,7 +124,7 @@ export default function BusinessQrScreen() {
         ]}
       >
         <View style={styles.qrInner}>
-          <QRCode value={qrValue} size={216} backgroundColor={palette.white} color={palette.ink950} />
+          <BusinessQr value={qrValue} size={216} name={business.name} logoUrl={business.logo_url} />
         </View>
         <Text style={[styles.qrHint, { color: t.colors.textMuted }]}>
           {tr('qr.hint')}

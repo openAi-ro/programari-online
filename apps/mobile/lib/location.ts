@@ -2,6 +2,7 @@ import { Linking, Platform, Share } from 'react-native';
 
 import { trKey } from './i18n';
 import type { BusinessProfile } from '@/lib/types';
+import { roCommaBelow } from './roGeo';
 
 export type BusinessLocation = {
   county: string | null;
@@ -17,10 +18,10 @@ export type BusinessLocation = {
  * Ordinea e cea care se citește natural pe hartă; județul vine ultimul.
  */
 export function formatAddress(location: BusinessLocation): string | null {
-  const county = location.county?.trim() ?? '';
+  const county = roCommaBelow(location.county?.trim() ?? '');
   const parts = [
-    location.address?.trim(),
-    location.city?.trim(),
+    roCommaBelow(location.address?.trim()),
+    roCommaBelow(location.city?.trim()),
     county ? trKey('loc.countyPrefix', { county }) : '',
   ].filter((p): p is string => Boolean(p && p.length > 0));
   if (parts.length === 0) return null;
