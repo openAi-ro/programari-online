@@ -37,6 +37,8 @@ function BusinessWaitlistScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useTransientMessage();
   const [bizCode, setBizCode] = useState('');
   const [notifyBusyId, setNotifyBusyId] = useState<string | null>(null);
@@ -49,7 +51,14 @@ function BusinessWaitlistScreen() {
       setLoading(false);
       return;
     }
-    const { data: biz } = await fetchMyBusinessResult(user.id);
+    setLoadFailed(false);
+    const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
+    if (bErr) {
+      setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
+      setLoading(false);
+      return;
+    }
     if (biz) setBizCode(biz.public_code ?? '');
     if (!biz) {
       setRows([]);
@@ -73,8 +82,10 @@ function BusinessWaitlistScreen() {
         .in('status', ['active', 'notified'])
         .gte('desired_date', today)
         .order('desired_date', { ascending: true });
-      if (plain.error) setError(plain.error.message, { sticky: true });
-      else setRows((plain.data ?? []) as Row[]);
+      if (plain.error) {
+        setError(plain.error.message, { sticky: true });
+        setLoadFailed(true);
+      } else setRows((plain.data ?? []) as Row[]);
     } else {
       setRows((data ?? []) as Row[]);
     }
@@ -166,7 +177,9 @@ function BusinessWaitlistScreen() {
       {rows.length > 0 && filterWaitlistByDate(rows, filterDate).length === 0 ? (
         <Text style={[styles.meta, { color: t.colors.textMuted }]}>{tr('wl.noForDay')}</Text>
       ) : null}
-      {rows.length === 0 ? (
+      {loadFailed ? (
+        <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+      ) : rows.length === 0 ? (
         <EmptyState
           icon="hourglass-outline"
           title={tr('wl.empty')}

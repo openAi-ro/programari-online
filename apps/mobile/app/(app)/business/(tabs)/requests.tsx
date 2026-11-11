@@ -95,7 +95,8 @@ export default function BusinessRequestsScreen() {
   const [moveApt, setMoveApt] = useState<Row | null>(null);
   const [moveMode, setMoveMode] = useState<'propose' | 'force'>('propose');
   const [moveDate, setMoveDate] = useState('');
-  const [moveSlots, setMoveSlots] = useState<FreeSlot[]>([]);
+  /** null = orele nu s-au putut citi (necunoscute), nu „nu mai sunt sloturi” (retest 3.26). */
+  const [moveSlots, setMoveSlots] = useState<FreeSlot[] | null>([]);
   const [moveSlot, setMoveSlot] = useState<FreeSlot | null>(null);
   const [moveLoading, setMoveLoading] = useState(false);
   const [moveSaving, setMoveSaving] = useState(false);
@@ -386,7 +387,7 @@ export default function BusinessRequestsScreen() {
     });
     if (busyErr) {
       setMoveError(busyErr);
-      setMoveSlots([]);
+      setMoveSlots(null);
       setMoveLoading(false);
       return;
     }
@@ -402,7 +403,7 @@ export default function BusinessRequestsScreen() {
         .maybeSingle();
       if (staffErr) {
         setMoveError(staffErr.message);
-        setMoveSlots([]);
+        setMoveSlots(null);
         setMoveLoading(false);
         return;
       }
@@ -793,6 +794,16 @@ export default function BusinessRequestsScreen() {
               <SectionTitle>{tr('req.freeSlot')}</SectionTitle>
               {moveLoading ? (
                 <Text style={{ color: t.colors.textMuted }}>{tr('req.calcSlots')}</Text>
+              ) : moveSlots === null ? (
+                <Button
+                  label={tr('common.retry')}
+                  icon="refresh-outline"
+                  variant="secondary"
+                  onPress={() => {
+                    const biz = moveApt ? bizForMove(moveApt) : null;
+                    if (moveApt && biz) void reloadMoveSlots(moveDate, moveApt, biz);
+                  }}
+                />
               ) : moveSlots.length === 0 ? (
                 <Text style={{ color: t.colors.textMuted }}>
                   {tr('req.noSlotsDay').replace('{date}', moveDate)}

@@ -144,13 +144,15 @@ export async function loadFavoriteBusinesses(
     logo_url: string | null;
     is_private: boolean;
   }[]
+  | null
 > {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('business_profiles')
     .select('id, name, public_code, city, logo_url, is_private')
     .in('id', ids);
-  if (error || !data) return [];
+  // null = citirea a eșuat (necunoscut), nu „niciun favorit” (retest 3.26).
+  if (error || !data) return null;
   const byId = new Map(data.map((b) => [b.id as string, b]));
   return ids
     .map((id) => byId.get(id))

@@ -29,7 +29,7 @@ import {
 import { getCurrentUser } from '@/lib/currentUser';
 import { confirmDialog } from '@/lib/dialog';
 import { localeTag, useT, type TrKey } from '@/lib/i18n';
-import { fetchMyBusiness } from '@/lib/myBusiness';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { useBack } from '@/lib/nav';
 import {
   canUsePrivateMode,
@@ -120,7 +120,13 @@ function PrivateCodesScreen() {
         setLoading(false);
         return;
       }
-      const biz = await fetchMyBusiness(user.id);
+      const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
+      if (bErr) {
+        // Citirea a eșuat: nu „configurează întâi salonul” (retest 3.26).
+        setLoadError(bErr.message);
+        setLoading(false);
+        return;
+      }
       if (!biz) {
         setLoadError(tr('qr.setupFirst'));
         setLoading(false);
@@ -341,7 +347,7 @@ function PrivateCodesScreen() {
       {listError ? <Callout tone="danger">{listError}</Callout> : null}
 
       {tab === 'codes' ? (
-        codes.length === 0 ? (
+        codes.length === 0 && !listError ? (
           <EmptyState icon="key-outline" title={tr('priv.noCodes')} description={tr('priv.noCodesDesc')} />
         ) : (
           codes.map((c) => (
@@ -367,7 +373,7 @@ function PrivateCodesScreen() {
             </Card>
           ))
         )
-      ) : clients.length === 0 ? (
+      ) : clients.length === 0 && !listError ? (
         <EmptyState icon="people-outline" title={tr('priv.noClients')} description={tr('priv.noClientsDesc')} />
       ) : (
         clients.map((c) => (

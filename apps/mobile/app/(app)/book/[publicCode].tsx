@@ -212,6 +212,8 @@ export default function BookScreen() {
   const freeCount = anyMode
     ? staffSlots.reduce((n, row) => n + row.slots.length, 0)
     : slots.length;
+  /** Ziua chiar nu are locuri. Cu eroare la citire orele sunt necunoscute: niciun mesaj de „gol”. */
+  const slotsEmpty = !slotsLoading && !slotsError && freeCount === 0;
 
   /** Data aleasă de client; schimbarea specialistului/serviciului nu o mai resetează (F-28). */
   const pickedDate = useRef<string | null>(null);
@@ -535,9 +537,8 @@ export default function BookScreen() {
     if (!slotsRequests.isCurrent(req)) return;
 
     if (err) {
+      // Orele sunt necunoscute (nu „0 libere”): eroarea rămâne până la Reîncearcă (retest 3.26).
       setSlotsError(userFacingError(err));
-      setSlots([]);
-      setStaffSlots([]);
       setSlotsLoading(false);
       return;
     }
@@ -915,13 +916,7 @@ export default function BookScreen() {
   const shownError =
     error || slotsError ? (
       <>
-        <Callout
-          onClose={() => {
-            setError(null);
-            setSlotsError(null);
-          }}
-          tone="danger"
-        >
+        <Callout onClose={error ? () => setError(null) : undefined} tone="danger">
           {error ?? slotsError}
         </Callout>
         {slotsError && !error ? (
@@ -948,7 +943,7 @@ export default function BookScreen() {
           loading={booking}
           disabled={!selected}
         />
-        {!isReschedule && !slotsLoading && freeCount === 0 ? (
+        {!isReschedule && slotsEmpty ? (
           <>
             <Callout tone="accent" title={waitlistJoinTitle()}>
               {onWaitlist ? waitlistOnList() : waitlistJoinBody()}
@@ -965,7 +960,7 @@ export default function BookScreen() {
           </>
         ) : null}
       </>
-    ) : step === 'slot' && !slotsLoading && freeCount === 0 && !isReschedule ? (
+    ) : step === 'slot' && slotsEmpty && !isReschedule ? (
       <>
         {shownError}
         <Callout tone="accent" title={waitlistJoinTitle()}>
@@ -1363,11 +1358,13 @@ export default function BookScreen() {
             >
               {selected ? selected.labelLocal : '—'}
             </Text>
-            <Badge tone="accent">{tr('book.freeCount', { n: freeCount })}</Badge>
+            <Badge tone="accent">
+              {slotsError ? tr('pub.slotsUnknown') : tr('book.freeCount', { n: freeCount })}
+            </Badge>
           </View>
           {anyMode && eligibleStaff.length === 0 ? (
             <Callout tone="warning">{tr('pub.anyStaffNone')}</Callout>
-          ) : anyMode && !slotsLoading ? (
+          ) : slotsError ? null : anyMode && !slotsLoading ? (
             <>
               <Text style={[styles.note, { color: t.colors.textMuted }]}>
                 {tr('pub.anyStaffCalendars')}

@@ -7,6 +7,7 @@ import { BizCardRow } from '@/components/BizCardRow';
 import { ClientTabBar } from '@/components/ClientTabBar';
 import {
   Button,
+  Callout,
   EmptyState,
   ListLoadingScreen,
   Screen,
@@ -39,6 +40,7 @@ export default function FavoritesScreen() {
   const [ids, setIds] = useState<string[]>([]);
   const [rows, setRows] = useState<FavBiz[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     void getFavoriteIds();
@@ -47,6 +49,7 @@ export default function FavoritesScreen() {
   }, []);
 
   const loadRows = useCallback(async (favoriteIds: string[]) => {
+    setLoadFailed(false);
     if (favoriteIds.length === 0) {
       setRows([]);
       setLoading(false);
@@ -54,7 +57,8 @@ export default function FavoritesScreen() {
     }
     setLoading(true);
     const loaded = await loadFavoriteBusinesses(favoriteIds);
-    setRows(loaded);
+    if (loaded) setRows(loaded);
+    else setLoadFailed(true);
     setLoading(false);
   }, []);
 
@@ -92,7 +96,12 @@ export default function FavoritesScreen() {
         onBack={back}
         bottomInset={insets.bottom + spacing['3xl'] + 56}
       >
-        {rows.length === 0 ? (
+        {loadFailed ? (
+          <>
+            <Callout tone="danger">{tr('fav.loadFail')}</Callout>
+            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void loadRows(ids)} />
+          </>
+        ) : rows.length === 0 ? (
           <EmptyState
             icon="heart-outline"
             title={tr('fav.empty')}

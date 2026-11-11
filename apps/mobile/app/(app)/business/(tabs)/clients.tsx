@@ -60,6 +60,8 @@ function BusinessClientsScreen() {
   const [rows, setRows] = useState<BusinessClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [history, setHistory] = useState<Appointment[]>([]);
@@ -81,6 +83,7 @@ function BusinessClientsScreen() {
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     try {
       const [{ data, error: err }, contacts] = await Promise.all([
         supabase.rpc('list_business_clients'),
@@ -89,7 +92,7 @@ function BusinessClientsScreen() {
       setContactRows(contacts.error ? [] : contacts.rows);
       if (err) {
         setError(err.message, { sticky: true });
-        setRows([]);
+        setLoadFailed(true);
       } else {
         // Rândul agregat „fără cont" (client_user_id null) e înlocuit de fișele pe telefon (v101);
         // fără v101 pe server rămâne vechiul rând, ca să nu dispară clienții walk-in.
@@ -112,6 +115,7 @@ function BusinessClientsScreen() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e), { sticky: true });
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -385,7 +389,9 @@ function BusinessClientsScreen() {
         ))}
       </View>
       {error ? <Callout onClose={() => setError(null)} tone="danger">{error}</Callout> : null}
-      {shown.length === 0 && shownContacts.length === 0 ? (
+      {loadFailed ? (
+        <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+      ) : shown.length === 0 && shownContacts.length === 0 ? (
         <EmptyState
           icon="people-outline"
           title={tr('cli.empty')}

@@ -48,6 +48,8 @@ function BusinessPackagesScreen() {
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [clients, setClients] = useState<BusinessClientRow[]>([]);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useTransientMessage();
   const [name, setName] = useState('');
   const [sessions, setSessions] = useState('10');
@@ -62,7 +64,14 @@ function BusinessPackagesScreen() {
       setLoading(false);
       return;
     }
-    const { data: biz } = await fetchMyBusinessResult(user.id);
+    setLoadFailed(false);
+    const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
+    if (bErr) {
+      setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
+      setLoading(false);
+      return;
+    }
     if (!biz) {
       setLoading(false);
       return;
@@ -184,7 +193,14 @@ function BusinessPackagesScreen() {
   if (!businessId) {
     return (
       <Screen title={tr('pkg.title')} subtitle={tr('pkg.subtitle')} onBack={back}>
-        <EmptyState icon="gift-outline" title={tr('team.setupFirst')} description={tr('team.setupFirstDesc')} />
+        {loadFailed ? (
+          <>
+            <Callout tone="danger">{error ?? tr('common.errorTitle')}</Callout>
+            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+          </>
+        ) : (
+          <EmptyState icon="gift-outline" title={tr('team.setupFirst')} description={tr('team.setupFirstDesc')} />
+        )}
       </Screen>
     );
   }

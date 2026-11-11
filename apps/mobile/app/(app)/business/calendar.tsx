@@ -80,6 +80,8 @@ export default function BusinessCalendarScreen() {
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
   const [staffList, setStaffList] = useState<CalendarStaff[]>([]);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [unavailRows, setUnavailRows] = useState<StaffUnavailability[]>([]);
   // Crește la fiecare reîncărcare: culorile lunii se recitesc după o programare nouă/mutată.
@@ -93,9 +95,11 @@ export default function BusinessCalendarScreen() {
       setError(trKey('req.notAuthed'), { sticky: true });
       return;
     }
+    setLoadFailed(false);
     const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
       setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -156,6 +160,7 @@ export default function BusinessCalendarScreen() {
     const { data, error: aErr } = await query;
     if (aErr) {
       setError(aErr.message, { sticky: true });
+      setLoadFailed(true);
     } else {
       setRows((data ?? []) as Appointment[]);
     }
@@ -272,11 +277,18 @@ export default function BusinessCalendarScreen() {
   if (!business) {
     return (
       <Screen aboveTabBar={inTabs} title={tr('cal.title')} onBack={back}>
-        <EmptyState
-          icon="calendar-outline"
-          title={tr('svc.setupFirst')}
-          description={tr('cal.setupDesc')}
-        />
+        {loadFailed ? (
+          <>
+            <Callout tone="danger">{error ?? tr('common.errorTitle')}</Callout>
+            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+          </>
+        ) : (
+          <EmptyState
+            icon="calendar-outline"
+            title={tr('svc.setupFirst')}
+            description={tr('cal.setupDesc')}
+          />
+        )}
       </Screen>
     );
   }
@@ -377,7 +389,9 @@ export default function BusinessCalendarScreen() {
         </Callout>
       ))}
 
-      {rows.length === 0 ? (
+      {loadFailed ? (
+        <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+      ) : rows.length === 0 ? (
         <EmptyState
           icon="sunny-outline"
           title={blocked ? tr('cal.closedDay') : tr('cal.noAppts')}

@@ -14,7 +14,7 @@ import {
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { localeTag, useT } from '@/lib/i18n';
 import { useBack } from '@/lib/nav';
-import { fetchMyBusinessId } from '@/lib/myBusiness';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/currentUser';
 import type { Review } from '@/lib/types';
@@ -28,6 +28,8 @@ function BusinessReviewsScreen() {
   const [rows, setRows] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -38,7 +40,15 @@ function BusinessReviewsScreen() {
       setLoading(false);
       return;
     }
-    const businessId = await fetchMyBusinessId(user.id);
+    setLoadFailed(false);
+    const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
+    if (bErr) {
+      setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
+      setLoading(false);
+      return;
+    }
+    const businessId = biz?.id ?? null;
     if (!businessId) {
       setRows([]);
       setLoading(false);
@@ -50,8 +60,10 @@ function BusinessReviewsScreen() {
       .eq('business_id', businessId)
       .order('created_at', { ascending: false })
       .limit(100);
-    if (err) setError(err.message, { sticky: true });
-    else setRows((data ?? []) as Review[]);
+    if (err) {
+      setError(err.message, { sticky: true });
+      setLoadFailed(true);
+    } else setRows((data ?? []) as Review[]);
     setLoading(false);
   }, []);
 
@@ -103,7 +115,9 @@ function BusinessReviewsScreen() {
           ★ {avg.toFixed(1)} · {rows.length}
         </Text>
       ) : null}
-      {rows.length === 0 ? (
+      {loadFailed ? (
+        <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+      ) : rows.length === 0 ? (
         <EmptyState icon="star-outline" title={tr('rev.empty')} description={tr('rev.emptyDesc')} />
       ) : (
         rows.map((row) => (

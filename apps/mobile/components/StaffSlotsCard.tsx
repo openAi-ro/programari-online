@@ -24,6 +24,7 @@ export function StaffSlotsCard({
   selectedStartUtc,
   onSelect,
   emptyLabel,
+  error,
   children,
 }: {
   member: Staff;
@@ -32,6 +33,8 @@ export function StaffSlotsCard({
   selectedStartUtc?: string | null;
   onSelect: (slot: FreeSlot) => void;
   emptyLabel?: string;
+  /** Orele nu s-au putut citi: se arată eroarea, nu „Niciun slot liber” (retest 3.26). */
+  error?: string | null;
   children?: ReactNode;
 }) {
   const t = useTheme();
@@ -72,6 +75,10 @@ export function StaffSlotsCard({
         <View style={styles.loading}>
           <ActivityIndicator color={t.colors.accent} />
         </View>
+      ) : error ? (
+        <Text style={[styles.specialty, { color: t.colors.danger }]} accessibilityRole="alert">
+          {error}
+        </Text>
       ) : (
         <SlotPicker
           slots={slots}

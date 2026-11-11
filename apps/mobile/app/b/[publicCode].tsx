@@ -1346,7 +1346,8 @@ export default function PublicBookScreen() {
                 loading={!day || day.loading}
                 selectedStartUtc={pickedId === member.id ? selected?.startUtc : null}
                 onSelect={(slot) => selectSlot(slot, member.id)}
-                emptyLabel={day?.error ? slotsErrorText : noSlotsLabel(ymd)}
+                emptyLabel={noSlotsLabel(ymd)}
+                error={day?.error ? slotsErrorText : null}
               >
                 <BookingCalendar
                   value={ymd}

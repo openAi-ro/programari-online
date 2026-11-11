@@ -89,6 +89,8 @@ function BusinessStaffScreen() {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [rows, setRows] = useState<Staff[]>([]);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useTransientMessage();
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -101,6 +103,7 @@ function BusinessStaffScreen() {
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
@@ -110,6 +113,7 @@ function BusinessStaffScreen() {
     const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
       setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -139,6 +143,7 @@ function BusinessStaffScreen() {
     ]);
     if (sErr || svcErr) {
       setError((sErr ?? svcErr)?.message ?? trKey('team.saveFail'), { sticky: true });
+      setLoadFailed(true);
     } else {
       setRows((data ?? []) as Staff[]);
       setServices((svcRows ?? []) as { id: string; name: string }[]);
@@ -459,11 +464,18 @@ function BusinessStaffScreen() {
   if (!businessId) {
     return (
       <Screen title={tr('team.title')} onBack={back}>
-        <EmptyState
-          icon="people-outline"
-          title={tr('team.setupFirst')}
-          description={tr('team.setupFirstDesc')}
-        />
+        {loadFailed ? (
+          <>
+            <Callout tone="danger">{error ?? tr('common.errorTitle')}</Callout>
+            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+          </>
+        ) : (
+          <EmptyState
+            icon="people-outline"
+            title={tr('team.setupFirst')}
+            description={tr('team.setupFirstDesc')}
+          />
+        )}
       </Screen>
     );
   }
@@ -734,7 +746,7 @@ function BusinessStaffScreen() {
         <StaffUnavailabilitySection businessId={businessId} staffId={editingId} />
       ) : null}
 
-      {rows.length === 0 && !editingId ? (
+      {rows.length === 0 && !editingId && !loadFailed ? (
         <EmptyState
           icon="people-outline"
           title={tr('team.empty')}

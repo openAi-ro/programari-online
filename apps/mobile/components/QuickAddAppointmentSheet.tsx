@@ -82,7 +82,9 @@ function QuickAddBody({
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [staffId, setStaffId] = useState<string | null>(null);
   const [day, setDay] = useState(initialDate && initialDate > today ? initialDate : today);
-  const [slots, setSlots] = useState<FreeSlot[]>([]);
+  /** null = orele nu s-au putut citi (necunoscute), nu „nu mai sunt sloturi” (retest 3.26). */
+  const [slots, setSlots] = useState<FreeSlot[] | null>([]);
+  const [slotsAttempt, setSlotsAttempt] = useState(0);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slot, setSlot] = useState<FreeSlot | null>(null);
   const [picked, setPicked] = useState<BusinessClientContact | null>(initialClient ?? null);
@@ -184,7 +186,7 @@ function QuickAddBody({
       const hours = staffSchedule(member, business);
       setSlots(
         busyErr
-          ? []
+          ? null
           : generateFreeSlots({
               dateLocal: day,
               timezone: tz,
@@ -202,7 +204,7 @@ function QuickAddBody({
     return () => {
       alive = false;
     };
-  }, [day, member, totals.durationMinutes, business, tz, staffList.length]);
+  }, [day, member, totals.durationMinutes, business, tz, staffList.length, slotsAttempt]);
 
   // Autocomplete client (telefon / nume) pe server, cu debounce.
   useEffect(() => {
@@ -466,6 +468,13 @@ function QuickAddBody({
                 <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('qa.pickServiceFirst')}</Text>
               ) : slotsLoading ? (
                 <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('req.calcSlots')}</Text>
+              ) : slots === null ? (
+                <Button
+                  label={tr('common.retry')}
+                  icon="refresh-outline"
+                  variant="secondary"
+                  onPress={() => setSlotsAttempt((n) => n + 1)}
+                />
               ) : slots.length === 0 ? (
                 <Text style={[styles.hint, { color: t.colors.textMuted }]}>{tr('cal.noSlots', { date: day })}</Text>
               ) : (

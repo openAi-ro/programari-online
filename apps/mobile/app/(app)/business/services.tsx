@@ -67,6 +67,8 @@ function BusinessServicesScreen() {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [rows, setRows] = useState<Service[]>([]);
   const [error, setError] = useTransientMessage();
+  /** Citirea a eșuat: datele sunt necunoscute, nu se arată mesajele de „gol” (retest 3.26). */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [message, setMessage] = useTransientMessage();
   const [editingId, setEditingId] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -76,6 +78,7 @@ function BusinessServicesScreen() {
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     const user = await getCurrentUser();
     if (!user) {
       setLoading(false);
@@ -85,6 +88,7 @@ function BusinessServicesScreen() {
     const { data: biz, error: bErr } = await fetchMyBusinessResult(user.id);
     if (bErr) {
       setError(bErr.message, { sticky: true });
+      setLoadFailed(true);
       setLoading(false);
       return;
     }
@@ -103,6 +107,7 @@ function BusinessServicesScreen() {
       .order('created_at', { ascending: true });
     if (sErr) {
       setError(sErr.message, { sticky: true });
+      setLoadFailed(true);
     } else {
       setRows((data ?? []) as Service[]);
     }
@@ -391,11 +396,18 @@ function BusinessServicesScreen() {
   if (!businessId) {
     return (
       <Screen title={tr('svc.title')} onBack={back}>
-        <EmptyState
-          icon="cut-outline"
-          title={tr('svc.setupFirst')}
-          description={tr('svc.setupFirstDesc')}
-        />
+        {loadFailed ? (
+          <>
+            <Callout tone="danger">{error ?? tr('common.errorTitle')}</Callout>
+            <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void load()} />
+          </>
+        ) : (
+          <EmptyState
+            icon="cut-outline"
+            title={tr('svc.setupFirst')}
+            description={tr('svc.setupFirstDesc')}
+          />
+        )}
       </Screen>
     );
   }
@@ -542,7 +554,7 @@ function BusinessServicesScreen() {
         </>
       ) : null}
 
-      {rows.length === 0 && !editingId ? (
+      {rows.length === 0 && !editingId && !loadFailed ? (
         <EmptyState
           icon="cut-outline"
           title={tr('svc.empty')}
