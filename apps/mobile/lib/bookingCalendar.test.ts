@@ -13,7 +13,7 @@ import {
   availabilityTone,
   businessMonthTones,
   clientMonthTones,
-  countByDay,
+  countStaffIds,
   dayOccupancy,
   monthBoundsUtc,
   monthDays,
@@ -148,11 +148,9 @@ const nov = { year: 2026, month: 10 };
 ok(monthDays(nov).length === 30 && monthDays(nov)[0] === '2026-11-01', 'zilele lunii');
 const bounds = monthBoundsUtc(nov, TZ);
 ok(bounds.fromIso === '2026-10-31T22:00:00.000Z' && bounds.toIso === '2026-11-30T22:00:00.000Z', 'limitele lunii in fusul firmei');
-const counts = countByDay(
-  [{ start_at: '2026-11-16T07:00:00Z' }, { start_at: '2026-11-16T12:00:00Z' }, { start_at: '2026-11-16T22:30:00Z' }],
-  TZ
-);
-ok(counts['2026-11-16'] === 2 && counts['2026-11-17'] === 1, 'numarare pe zi in fusul firmei');
+ok(countStaffIds([null]) === null && countStaffIds([]) === null, 'cifra: firma fara echipa = toata firma');
+ok(countStaffIds(['s1', null]) === null, 'cifra: un calendar fara specialist = toata firma');
+ok(JSON.stringify(countStaffIds(['s1', 's2', 's1'])) === '["s1","s2"]', 'cifra: specialistii calendarului, fara dubluri');
 
 const bTones = businessMonthTones({
   month: nov,

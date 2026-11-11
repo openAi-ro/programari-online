@@ -259,14 +259,13 @@ export function monthBoundsUtc(m: CalendarMonth, timezone: string): { fromIso: s
   };
 }
 
-/** Numărul de programări pe zi (după ora de început, în fusul firmei). */
-export function countByDay(rows: readonly { start_at: string }[], timezone: string): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const r of rows) {
-    const ymd = formatInTimeZone(new Date(r.start_at), timezone, 'yyyy-MM-dd');
-    out[ymd] = (out[ymd] ?? 0) + 1;
-  }
-  return out;
+/**
+ * Specialiștii pentru cifra de pe zi: null = toată firma (fără echipă / toți),
+ * altfel id-urile calendarului (programările fără specialist se numără la fiecare, v85).
+ */
+export function countStaffIds(staffIds: readonly (string | null)[]): string[] | null {
+  if (staffIds.length === 0 || staffIds.some((id) => !id)) return null;
+  return [...new Set(staffIds as string[])];
 }
 
 /** Business: tonul fiecărei zile din lună după ocupare. */

@@ -3,18 +3,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   businessMonthTones,
   clientMonthTones,
-  countByDay,
+  countStaffIds,
   monthBoundsUtc,
   type CalendarMonth,
   type DayCapacity,
   type DayTone,
 } from '@/lib/bookingCalendar';
-import { listBusyRanges } from '@/lib/bookingRpc';
+import { listBusyRanges, listDayAppointmentCounts } from '@/lib/bookingRpc';
 import { notBeforeUtc, staffSchedule } from '@/lib/bookingRules';
-import { staffOrUnassignedFilter } from '@/lib/calendarStaffFilter';
 import { withoutOwnBusy } from '@/lib/rescheduleRequest';
 import type { BusyRange } from '@/lib/slots';
-import { supabase } from '@/lib/supabase';
 import type { Appointment, BusinessProfile, Staff } from '@/lib/types';
 
 /** De unde vin culorile calendarului. */
@@ -66,28 +64,9 @@ function sourceKey(src: HeatSource, view: CalendarMonth): string {
     : `b|${src.businessId}|${src.staffId ?? '-'}|${month}|${src.refreshKey}`;
 }
 
-/** Business: programările active ale lunii (doar start_at), pentru cifra de pe zi. */
-async function loadMonthCounts(src: Extract<HeatSource, { kind: 'business' }>, view: CalendarMonth): Promise<Record<string, number>> {
-  const { fromIso, toIso } = monthBoundsUtc(view, src.timezone);
-  let query = supabase
-    .from('appointments')
-    .select('start_at')
-    .eq('business_id', src.businessId)
-    .in('status', ['pending', 'approved'])
-    .gte('start_at', fromIso)
-    .lt('start_at', toIso);
-  if (src.staffId) {
-    const staffOr = staffOrUnassignedFilter(src.staffId);
-    if (staffOr) query = query.or(staffOr);
-  }
-  const { data, error } = await query;
-  if (error) return {};
-  return countByDay((data ?? []) as { start_at: string }[], src.timezone);
-}
-
 /**
- * Culorile (și la business numărul de programări) pentru luna afișată.
- * O cerere de ocupări pe lună (+ una de numărare la business); lunile deja văzute rămân în cache.
+ * Culorile și numărul de programări pe zi pentru luna afișată (business și pagina publică).
+ * O cerere de ocupări pe lună (per specialist) + una de numărare; lunile deja văzute rămân în cache.
  * O eroare lasă calendarul fără culori, nu îl blochează.
  */
 export function useMonthHeat(source: HeatSource | null | undefined, view: CalendarMonth): MonthHeat {
@@ -111,11 +90,12 @@ export function useMonthHeat(source: HeatSource | null | undefined, view: Calend
       const { fromIso, toIso } = monthBoundsUtc(view, tz);
       const [busyRes, counts] = await Promise.all([
         Promise.all(staffIds.map((staffId) => listBusyRanges({ businessId, fromIso, toIso, staffId }))),
-        source.kind === 'business' ? loadMonthCounts(source, view) : Promise.resolve({}),
+        listDayAppointmentCounts({ businessId, fromIso, toIso, staffIds: countStaffIds(staffIds) }),
       ]);
       if (busyRes.some((r) => r.error)) return;
-      const data: Raw = { busy: busyRes.map((r) => r.busy), counts };
-      cache.current.set(key, data);
+      // Numărarea eșuată = necunoscut: fără cifre, culorile rămân, iar luna nu intră în cache.
+      const data: Raw = { busy: busyRes.map((r) => r.busy), counts: counts ?? {} };
+      if (counts) cache.current.set(key, data);
       if (alive) setRaw({ key, data });
     })();
     return () => {
@@ -159,7 +139,7 @@ export function useMonthHeat(source: HeatSource | null | undefined, view: Calend
         minYmd: source.minYmd,
         maxYmd: source.maxYmd,
       }),
-      counts: {},
+      counts: data.counts,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, key, durationMinutes, ownKey]);

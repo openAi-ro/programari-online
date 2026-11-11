@@ -280,6 +280,31 @@ export async function listBusyRanges(opts: {
   return { busy, error: null };
 }
 
+/**
+ * Câte programări active încep în fiecare zi (fusul firmei), v119. Aceeași sursă pentru
+ * calendarul business și pagina publică. staffIds null = toată firma; o programare fără
+ * specialist contează la fiecare. Eroare = necunoscut (null), nu zero.
+ */
+export async function listDayAppointmentCounts(opts: {
+  businessId: string;
+  fromIso: string;
+  toIso: string;
+  staffIds: string[] | null;
+}): Promise<Record<string, number> | null> {
+  const { data, error } = await supabase.rpc('day_appointment_counts', {
+    p_business_id: opts.businessId,
+    p_from: opts.fromIso,
+    p_to: opts.toIso,
+    p_staff_ids: opts.staffIds,
+  });
+  if (error) return null;
+  const out: Record<string, number> = {};
+  for (const row of (data ?? []) as { day: string; appointments: number }[]) {
+    out[row.day] = Number(row.appointments);
+  }
+  return out;
+}
+
 /** Muta o programare pe alt slot imediat („Mută acum”, v34/v111). */
 export async function moveAppointmentToSlot(opts: {
   appointmentId: string;

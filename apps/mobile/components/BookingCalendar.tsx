@@ -25,7 +25,7 @@ type Props = CalendarRules & {
   /** Ziua aleasă, "YYYY-MM-DD". */
   value: string;
   onChange: (ymd: string) => void;
-  /** Culorile zilelor (cât de plină e ziua). Lipsă = calendar simplu. */
+  /** Culorile zilelor (cât de plină e ziua) și numărul de programări. Lipsă = calendar simplu. */
   heat?: HeatSource | null;
   /**
    * Business: toate zilele se pot alege (și cele trecute sau închise), fără limită la săgeți.
@@ -68,7 +68,8 @@ export function BookingCalendar({ value, onChange, minYmd, maxYmd, blockedDates,
   const toneColors = useToneColors();
   const [view, setView] = useState(() => monthOfYmd(value || minYmd));
   const { tones, counts } = useMonthHeat(heat, view);
-  const showCounts = heat?.kind === 'business';
+  // Cifra de pe zi: aceeași sursă (v119) în calendarul business și pe pagina publică.
+  const showCounts = !!heat;
   const legend = heat ? (heat.kind === 'business' ? LEGEND_BUSINESS : LEGEND_CLIENT) : null;
 
   // Când data aleasă se schimbă din afară (ex. prima zi liberă), arătăm luna ei.
