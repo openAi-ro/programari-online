@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-import { fetchMemberBusinessIds } from './businessMembers';
+import { fetchMemberBusinessIdsResult } from './businessMembers';
 import { supabase } from './supabase';
 import { appModeFrom, canSwitchAppMode, type AppMode } from './teamAccess';
 
@@ -47,15 +47,20 @@ export async function setAppMode(mode: AppMode): Promise<void> {
 
 export type ModeState = { mode: AppMode; canSwitch: boolean };
 
-/** Zona curentă din profil + business-urile proprii sau din echipă + alegerea memorată. */
-export async function resolveAppMode(userId: string): Promise<ModeState> {
-  const [{ data }, { data: owned }, memberIds, stored] = await Promise.all([
+/**
+ * Zona curentă din profil + business-urile proprii sau din echipă + alegerea memorată.
+ * `null` = nu se poate decide (offline / eroare la citire): nu se ghicește „client” și nu se
+ * salvează nimic; ecranul arată eroarea cu Reîncearcă (retest 3.25).
+ */
+export async function resolveAppMode(userId: string): Promise<ModeState | null> {
+  const [{ data, error }, { data: owned, error: ownedErr }, member, stored] = await Promise.all([
     supabase.from('profiles').select('account_kind').eq('id', userId).maybeSingle(),
     supabase.from('business_profiles').select('id').eq('owner_user_id', userId).limit(1),
-    fetchMemberBusinessIds(userId),
+    fetchMemberBusinessIdsResult(userId),
     getAppMode(),
   ]);
-  const hasBusiness = (owned ?? []).length > 0 || memberIds.length > 0;
+  if (error || ownedErr || member.error) return null;
+  const hasBusiness = (owned ?? []).length > 0 || member.ids.length > 0;
   const mode = appModeFrom(data?.account_kind, hasBusiness, stored);
   await setAppMode(mode);
   return { mode, canSwitch: canSwitchAppMode(data?.account_kind, hasBusiness) };

@@ -60,12 +60,19 @@ export async function fetchBusinessRole(businessId: string): Promise<BusinessRol
 
 /** Id-urile business-urilor în care sunt membru (orice rol), pentru accesul angajaților. */
 export async function fetchMemberBusinessIds(userId: string): Promise<string[]> {
+  return (await fetchMemberBusinessIdsResult(userId)).ids;
+}
+
+/** Ca mai sus, cu eroarea: zona contului nu se decide din date lipsă (retest 3.25). */
+export async function fetchMemberBusinessIdsResult(
+  userId: string
+): Promise<{ ids: string[]; error: { message: string } | null }> {
   const { data, error } = await supabase
     .from('business_members')
     .select('business_id')
     .eq('user_id', userId);
-  if (error) return [];
-  return (data ?? []).map((r) => r.business_id as string);
+  if (error) return { ids: [], error };
+  return { ids: (data ?? []).map((r) => r.business_id as string), error: null };
 }
 
 export async function fetchBusinessMembers(businessId: string) {

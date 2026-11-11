@@ -94,6 +94,7 @@ import { parseTipInput, tipOptions } from '@/lib/tip';
 import { normalizePortfolioUrls } from '@/lib/staffPortfolio';
 import { createRequestTracker } from '@/lib/latestRequest';
 import { loadStaffDaySlots } from '@/lib/staffDaySlots';
+import { userFacingError } from '@/lib/networkError';
 import { fireAndForget } from '@/lib/fireAndForget';
 import { supabase } from '@/lib/supabase';
 import type { BusinessProfile, DayKey, FreeSlot, Service, Staff } from '@/lib/types';
@@ -150,6 +151,8 @@ export default function PublicBookScreen() {
   const [dateLocal, setDateLocal] = useState(toYmd(new Date()));
   /** Ziua aleasă de client (sau din draftul de după refresh); datele implicite o respectă. */
   const pickedDate = useRef<string | null>(null);
+  /** „Oricine”: ziua aleasă în calendarul fiecărui specialist (sau din draftul de după refresh). */
+  const pickedStaffDates = useRef<Record<string, string>>({});
   /** Ora din draft, re-selectată doar dacă e încă liberă (R-1, refresh pe pagina publică). */
   const restoreSlotRef = useRef<string | null>(null);
   const [slots, setSlots] = useState<FreeSlot[]>([]);
@@ -159,6 +162,8 @@ export default function PublicBookScreen() {
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  /** Orele nu s-au putut citi (offline): eroare + Reîncearcă, nu „0 libere” (retest 3.25, R325-1). */
+  const [slotsError, setSlotsError] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
   const [waitlistBusy, setWaitlistBusy] = useState(false);
   const [error, setError] = useTransientMessage();
@@ -315,6 +320,7 @@ export default function PublicBookScreen() {
         if (draft.serviceIds.length > 0) setServiceIds(draft.serviceIds);
         setStaffId(draft.staffAny ? null : draft.staffId);
         pickedDate.current = draft.dateLocal;
+        pickedStaffDates.current = draft.staffDates;
         restoreSlotRef.current = draft.slotStartUtc;
       }
       const phones: Record<string, string> = {};
@@ -384,7 +390,7 @@ export default function PublicBookScreen() {
       durationMinutes,
     });
     if (!slotsRequests.isCurrent(req)) return;
-    if (err) setError(err);
+    setSlotsError(err);
     setSlots(free);
     setSlotsLoading(false);
   }, [business, anyMode, dateLocal, durationMinutes, selectedStaff, slotsRequests]);
@@ -397,7 +403,7 @@ export default function PublicBookScreen() {
       if (!business) return;
       const req = (staffDayRequests.current[member.id] ?? 0) + 1;
       staffDayRequests.current[member.id] = req;
-      setStaffDays((prev) => ({ ...prev, [member.id]: { date: ymd, slots: [], loading: true } }));
+      setStaffDays((prev) => ({ ...prev, [member.id]: { date: ymd, slots: [], loading: true, error: null } }));
       const { slots: free, error: err } = await loadStaffDaySlots({
         business,
         member,
@@ -405,8 +411,7 @@ export default function PublicBookScreen() {
         durationMinutes,
       });
       if (staffDayRequests.current[member.id] !== req) return;
-      if (err) setError(err);
-      setStaffDays((prev) => ({ ...prev, [member.id]: { date: ymd, slots: free, loading: false } }));
+      setStaffDays((prev) => ({ ...prev, [member.id]: { date: ymd, slots: free, loading: false, error: err } }));
     },
     [business, durationMinutes]
   );
@@ -423,7 +428,12 @@ export default function PublicBookScreen() {
     const next: Record<string, StaffDay> = {};
     for (const member of eligibleStaff) {
       const first = firstBookableDateForStaff(business, [member], durationMinutes);
-      next[member.id] = { date: wanted && wanted >= first ? wanted : first, slots: [], loading: true };
+      next[member.id] = {
+        date: defaultBookingDate(wanted ?? pickedStaffDates.current[member.id] ?? null, first),
+        slots: [],
+        loading: true,
+        error: null,
+      };
     }
     setStaffDays(next);
     for (const member of eligibleStaff) void loadStaffDay(member, next[member.id].date);
@@ -456,8 +466,9 @@ export default function PublicBookScreen() {
       dateLocal,
       step: selected ? 'confirm' : 'date',
       slotStartUtc: !anyMode && selected ? selected.startUtc : null,
+      staffDates: anyMode ? Object.fromEntries(Object.entries(staffDays).map(([id, day]) => [id, day.date])) : {},
     });
-  }, [anyMode, business, catalogFailed, code, dateLocal, loading, selected, serviceIds, staffId]);
+  }, [anyMode, business, catalogFailed, code, dateLocal, loading, selected, serviceIds, staffDays, staffId]);
 
   // După refresh: ora aleasă înainte, dacă e încă liberă.
   useEffect(() => {
@@ -789,9 +800,14 @@ export default function PublicBookScreen() {
   const freeCount = anyMode
     ? anyDays.reduce((n, d) => n + (d?.slots.length ?? 0), 0)
     : slots.length;
-  const noSlots = anyMode
-    ? anyDays.length > 0 && anyDays.every((d) => d && !d.loading && d.slots.length === 0)
-    : !slotsLoading && slots.length === 0;
+  const slotsFailed = anyMode ? anyDays.some((d) => d?.error) : Boolean(slotsError);
+  const slotsErrorText = userFacingError((anyMode ? anyDays.find((d) => d?.error)?.error : slotsError) ?? '');
+  const noSlots =
+    !slotsFailed &&
+    (anyMode
+      ? anyDays.length > 0 && anyDays.every((d) => d && !d.loading && d.slots.length === 0)
+      : !slotsLoading && slots.length === 0);
+  const freeLabel = slotsFailed ? tr('pub.slotsUnknown') : tr('book.freeCount', { n: freeCount });
   const noSlotsLabel = (ymd: string) =>
     (business.blocked_dates ?? []).includes(ymd)
       ? tr('book.dayBlocked')
@@ -1038,13 +1054,13 @@ export default function PublicBookScreen() {
         <SpecialistCover
           slides={coverSlides}
           wide={isWide}
-          badge={tr('book.freeCount', { n: freeCount })}
+          badge={freeLabel}
           onImageError={markImageBroken}
           onImagePress={setLightbox}
         />
       ) : pageOn ? (
         <View style={styles.coverBadgeRow}>
-          <Badge tone="accent">{tr('book.freeCount', { n: freeCount })}</Badge>
+          <Badge tone="accent">{freeLabel}</Badge>
         </View>
       ) : null}
 
@@ -1085,7 +1101,7 @@ export default function PublicBookScreen() {
             </Text>
           ) : null}
         </View>
-        <Badge tone="accent">{tr('book.freeCount', { n: freeCount })}</Badge>
+        <Badge tone="accent">{freeLabel}</Badge>
       </View> : null}
 
       {pageOn ? (
@@ -1308,6 +1324,12 @@ export default function PublicBookScreen() {
       {anyMode ? (
         <>
           <SectionTitle>{tr('pub.stepStaffTime', { n: stepNo.date ?? 1 })}</SectionTitle>
+          {slotsFailed ? (
+            <>
+              <Callout tone="danger" title={slotsErrorText} />
+              <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void reloadSlots()} />
+            </>
+          ) : null}
           {eligibleStaff.length > 0 ? (
             <Text style={[styles.summaryMeta, { color: t.colors.textMuted }]}>
               {tr('pub.anyStaffCalendars')}
@@ -1324,12 +1346,13 @@ export default function PublicBookScreen() {
                 loading={!day || day.loading}
                 selectedStartUtc={pickedId === member.id ? selected?.startUtc : null}
                 onSelect={(slot) => selectSlot(slot, member.id)}
-                emptyLabel={noSlotsLabel(ymd)}
+                emptyLabel={day?.error ? slotsErrorText : noSlotsLabel(ymd)}
               >
                 <BookingCalendar
                   value={ymd}
                   onChange={(next) => {
                     if (pickedId === member.id) setSelected(null);
+                    pickedStaffDates.current = { ...pickedStaffDates.current, [member.id]: next };
                     void loadStaffDay(member, next);
                   }}
                   minYmd={minYmd}
@@ -1364,6 +1387,11 @@ export default function PublicBookScreen() {
             <View style={styles.slotsLoading}>
               <ActivityIndicator color={t.colors.accent} />
             </View>
+          ) : slotsFailed ? (
+            <>
+              <Callout tone="danger" title={slotsErrorText} />
+              <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={() => void reloadSlots()} />
+            </>
           ) : (
             <SlotPicker
               slots={slots}
@@ -1454,7 +1482,7 @@ export default function PublicBookScreen() {
 type LatestSlide = { key: string; kind: 'work'; url: string };
 
 /** Oricine: ziua aleasă în calendarul unui specialist și orele lui libere în acea zi. */
-type StaffDay = { date: string; slots: FreeSlot[]; loading: boolean };
+type StaffDay = { date: string; slots: FreeSlot[]; loading: boolean; error: string | null };
 
 const COVER_HEIGHT = 210;
 const COVER_HEIGHT_WIDE = 360;

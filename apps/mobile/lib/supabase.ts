@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { createClient, type SupportedStorage } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { failFastOnNetworkError } from './failFastFetch';
 import { createWebAuthStorage } from './webAuthStorage';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -55,4 +56,5 @@ export const supabase = createClient(url, anon, {
     persistSession: persistAuth,
     detectSessionInUrl: false,
   },
+  global: { fetch: failFastOnNetworkError((input, init) => fetch(input, init)) },
 });

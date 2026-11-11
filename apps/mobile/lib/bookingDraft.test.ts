@@ -30,7 +30,7 @@ const base: BookingDraft = {
 };
 const raw = (d: Partial<BookingDraft>) => JSON.stringify({ ...base, ...d });
 
-eq(restorableDraft(raw({}), ctx), { serviceIds: ['svc1'], staffId: 'st1', staffAny: false, dateLocal: '2026-11-13', step: 'slot', slotStartUtc: '2026-11-13T09:00:00.000Z' }, 'confirmare → pasul de ore cu ora de re-selectat');
+eq(restorableDraft(raw({}), ctx), { serviceIds: ['svc1'], staffId: 'st1', staffAny: false, dateLocal: '2026-11-13', step: 'slot', slotStartUtc: '2026-11-13T09:00:00.000Z', staffDates: {} }, 'confirmare → pasul de ore cu ora de re-selectat');
 eq(restorableDraft(raw({ step: 'date', slotStartUtc: null }), ctx)?.step, 'date', 'pasul de dată rămâne');
 eq(restorableDraft(raw({ step: 'date' }), ctx)?.slotStartUtc, null, 'pe pasul de dată nu se re-selectează o oră');
 eq(restorableDraft(raw({ code: 'alt-salon' }), ctx), null, 'alt salon → nimic');
@@ -41,6 +41,13 @@ eq(restorableDraft(raw({ staffId: 'plecat' }), ctx), null, 'specialist scos din 
 eq(restorableDraft(raw({ staffAny: true, staffId: null }), ctx)?.slotStartUtc, null, '„Oricine” → ora se alege din nou');
 eq(restorableDraft('nu e json', ctx), null, 'JSON stricat → nimic');
 eq(restorableDraft(null, ctx), null, 'fără ciornă');
+
+// Retest 3.25: „Oricine disponibil” pe /b/ — ziua din calendarul fiecărui specialist rămâne la refresh.
+const anyRaw = (dates: Record<string, string>) => raw({ staffAny: true, staffId: null, step: 'date', slotStartUtc: null, staffDates: dates });
+eq(restorableDraft(anyRaw({ st1: '2026-11-19', st2: '2026-11-20' }), ctx)?.staffDates, { st1: '2026-11-19', st2: '2026-11-20' }, '„Oricine”: zilele pe specialist rămân');
+eq(restorableDraft(anyRaw({ st1: '2026-11-19', plecat: '2026-11-20', st2: '2026-11-10' }), ctx)?.staffDates, { st1: '2026-11-19' }, '„Oricine”: specialist scos sau zi trecută → ignorate');
+eq(restorableDraft(raw({ staffDates: { st1: '2026-11-19' } }), ctx)?.staffDates, {}, 'specialist anume: fără zile pe specialist');
+eq(restorableDraft(raw({ staffAny: true, staffId: null }), ctx)?.staffDates, {}, 'draft vechi fără staffDates → gol');
 
 // Retest 3.24, R-1: după refresh ziua din draft (13.11) nu mai sare pe prima zi rezervabilă (azi).
 const restored = restorableDraft(raw({}), ctx);

@@ -28,7 +28,8 @@ import {
 } from '@/components/ui';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { getAppMode, setAppMode, type AppMode } from '@/lib/appMode';
-import { fetchMyBusiness } from '@/lib/myBusiness';
+import { fetchMyBusinessResult } from '@/lib/myBusiness';
+import { isNetworkError } from '@/lib/networkError';
 import { appModeFrom, canSwitchAppMode } from '@/lib/teamAccess';
 import { canConfirmAttendance, mapBookingRpcError, visitsUntilFree } from '@/lib/bookingRules';
 import { extractPublicCode } from '@/lib/bookingLink';
@@ -117,13 +118,16 @@ export default function HomeScreen() {
   const segments = useSegments();
   const inBusinessTabs = (segments as readonly string[]).includes('(tabs)');
   const [loading, setLoading] = useState(true);
-  const [mode, setModeState] = useState<AppMode>('client');
+  // null până la prima citire reușită: zona nu se ghicește din date lipsă (retest 3.25).
+  const [mode, setModeState] = useState<AppMode | null>(null);
   const [canSwitch, setCanSwitch] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [business, setBusiness] = useState<Biz | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [nextApt, setNextApt] = useState<NextAppointment | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Reîmprospătarea a eșuat, dar datele de dinainte rămân pe ecran: banner + Reîncearcă.
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [loyalty, setLoyalty] = useState<LoyaltyCard[]>([]);
   const [recentBusinesses, setRecentBusinesses] = useState<RecentBusiness[]>([]);
@@ -154,9 +158,18 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
+      // Soft refresh: keep Home visible after first successful load
+      const hasExistingData = hasLoadedOnceRef.current;
+      // O citire eșuată nu lasă ecranul pe „Se încarcă…”: datele vechi primesc bannerul, iar la
+      // prima încărcare apare eroarea cu Reîncearcă.
+      const failRead = (message: string) => {
+        if (cancelled) return;
+        const offline = isNetworkError(message);
+        if (hasExistingData) setStaleNotice(trKey(offline ? 'home.offlineStale' : 'home.refreshFail'));
+        else setLoadError(trKey(offline ? 'common.offline' : 'home.modeLoadFail'));
+        setLoading(false);
+      };
       (async () => {
-        // Soft refresh: keep Home visible after first successful load
-        const hasExistingData = hasLoadedOnceRef.current;
         if (measureBeforeEnabled() || !hasExistingData) setLoading(true);
         const user = await getCurrentUser();
         if (!user || cancelled) {
@@ -175,15 +188,20 @@ export default function HomeScreen() {
         };
         // Profilul (cu account_kind), business-ul activ (propriu sau din echipă) și zona aleasă
         // depind doar de user.id: o singură rundă de cereri; zona vine din regula comună appModeFrom.
-        const [{ data: existingProf }, data, storedMode] = await Promise.all([
+        const [{ data: existingProf, error: profErr }, { data, error: bizErr }, storedMode] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, email, phone, display_name, avatar_url, account_kind')
             .eq('id', user.id)
             .maybeSingle(),
-          fetchMyBusiness(user.id),
+          fetchMyBusinessResult(user.id),
           getAppMode(),
         ]);
+        const readErr = profErr ?? bizErr;
+        if (readErr) {
+          failRead(readErr.message);
+          return;
+        }
         const appMode = appModeFrom(existingProf?.account_kind, Boolean(data), storedMode);
         const switchable = canSwitchAppMode(existingProf?.account_kind, Boolean(data));
         void setAppMode(appMode);
@@ -471,6 +489,7 @@ export default function HomeScreen() {
 
         if (!cancelled) {
           setModeState(appMode);
+          setStaleNotice(null);
           setCanSwitch(switchable);
           setBusiness(data as Biz | null);
           setPendingCount(pending);
@@ -481,7 +500,7 @@ export default function HomeScreen() {
             softRefresh: hasExistingData && !measureBeforeEnabled(),
           });
         }
-      })();
+      })().catch((e: unknown) => failRead(e instanceof Error ? e.message : String(e)));
       return () => {
         cancelled = true;
       };
@@ -547,6 +566,22 @@ export default function HomeScreen() {
     );
   }
 
+  const retryLoad = () => {
+    setLoadError(null);
+    setStaleNotice(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  // Zona nu s-a putut citi la prima încărcare: eroare cu Reîncearcă, nu ecranul de client.
+  if (!mode) {
+    return (
+      <Screen>
+        <Callout tone="danger" title={loadError ?? tr('home.modeLoadFail')} />
+        <Button label={tr('common.retry')} icon="refresh-outline" onPress={retryLoad} />
+      </Screen>
+    );
+  }
+
   // Business primary menus live under business/(tabs) — keep /(app)/home for clients.
   if (mode === 'business' && !inBusinessTabs) {
     return <Redirect href="/(app)/business/(tabs)" />;
@@ -568,10 +603,8 @@ export default function HomeScreen() {
         favoriteIds={favoriteIds}
         pendingClientCount={pendingClientCount}
         loadError={loadError}
-        onRetryLoad={() => {
-          setLoadError(null);
-          setReloadKey((k) => k + 1);
-        }}
+        staleNotice={staleNotice}
+        onRetryLoad={retryLoad}
         onToggleFavorite={(id) => void toggleFavorite(id)}
         onAttendanceConfirmed={() =>
           setNextApt((prev) =>
@@ -588,6 +621,8 @@ export default function HomeScreen() {
       business={business}
       canSwitch={canSwitch}
       pendingCount={pendingCount}
+      staleNotice={staleNotice}
+      onRetryLoad={retryLoad}
       bottomInset={inBusinessTabs ? spacing['3xl'] : insets.bottom + spacing['3xl'] + 56}
     />
   );
@@ -605,6 +640,17 @@ function openBook(biz: {
   router.push((`/(app)/book/${biz.publicCode}` + (qs ? `?${qs}` : '')) as never);
 }
 
+/** Datele de pe ecran nu s-au putut reîmprospăta (retest 3.25): rămân vizibile, cu Reîncearcă. */
+function StaleNotice({ text, onRetry }: { text: string; onRetry: () => void }) {
+  const tr = useT();
+  return (
+    <>
+      <Callout tone="warning" icon="cloud-offline-outline" title={text} />
+      <Button label={tr('common.retry')} icon="refresh-outline" variant="secondary" onPress={onRetry} />
+    </>
+  );
+}
+
 function ClientHome({
   canSwitch,
   next,
@@ -614,6 +660,7 @@ function ClientHome({
   favoriteIds,
   pendingClientCount,
   loadError,
+  staleNotice,
   onRetryLoad,
   onToggleFavorite,
   onAttendanceConfirmed,
@@ -626,6 +673,7 @@ function ClientHome({
   favoriteIds: string[];
   pendingClientCount: number;
   loadError: string | null;
+  staleNotice: string | null;
   onRetryLoad: () => void;
   onToggleFavorite: (businessId: string) => void;
   onAttendanceConfirmed: () => void;
@@ -679,6 +727,8 @@ function ClientHome({
       <InvitationAcceptCard compact />
 
       {canSwitch ? <AppModeSwitch target="business" /> : null}
+
+      {staleNotice && !loadError ? <StaleNotice text={staleNotice} onRetry={onRetryLoad} /> : null}
 
       {loadError ? (
         <>
@@ -878,12 +928,16 @@ function BusinessHome({
   business,
   canSwitch,
   pendingCount,
+  staleNotice,
+  onRetryLoad,
   bottomInset,
 }: {
   email: string | null;
   business: Biz | null;
   canSwitch: boolean;
   pendingCount: number;
+  staleNotice: string | null;
+  onRetryLoad: () => void;
   bottomInset: number;
 }) {
   const t = useTheme();
@@ -965,6 +1019,8 @@ function BusinessHome({
       </View>
 
       <UpdateBanner />
+
+      {staleNotice ? <StaleNotice text={staleNotice} onRetry={onRetryLoad} /> : null}
 
       {!business ? (
         <>

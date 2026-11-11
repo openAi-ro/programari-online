@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from './supabase';
-import { fetchMemberBusinessIds } from './businessMembers';
+import { fetchMemberBusinessIdsResult } from './businessMembers';
 import type { BusinessProfile } from './types';
 
 const KEY = 'programari.selectedBusinessId';
@@ -24,22 +24,31 @@ export async function setSelectedBusinessId(id: string): Promise<void> {
 }
 
 export async function listMyBusinesses(ownerUserId: string): Promise<BusinessProfile[]> {
-  const { data } = await supabase
+  return (await listMyBusinessesResult(ownerUserId)).rows;
+}
+
+/** Business-urile proprii și din echipă, cu prima eroare de citire (nu „niciun business”). */
+async function listMyBusinessesResult(
+  ownerUserId: string
+): Promise<{ rows: BusinessProfile[]; error: { message: string } | null }> {
+  const { data, error } = await supabase
     .from('business_profiles')
     .select('*')
     .eq('owner_user_id', ownerUserId)
     .order('created_at', { ascending: true });
+  if (error) return { rows: [], error };
   const owned = (data ?? []) as BusinessProfile[];
   // v89: angajatii (business_members) vad business-urile la care sunt membri, nu doar pe cele detinute.
-  const memberIds = await fetchMemberBusinessIds(ownerUserId);
-  const extraIds = memberIds.filter((id) => !owned.some((b) => b.id === id));
-  if (extraIds.length === 0) return owned;
-  const { data: memberBiz } = await supabase
+  const member = await fetchMemberBusinessIdsResult(ownerUserId);
+  if (member.error) return { rows: owned, error: member.error };
+  const extraIds = member.ids.filter((id) => !owned.some((b) => b.id === id));
+  if (extraIds.length === 0) return { rows: owned, error: null };
+  const { data: memberBiz, error: memberErr } = await supabase
     .from('business_profiles')
     .select('*')
     .in('id', extraIds)
     .order('created_at', { ascending: true });
-  return [...owned, ...((memberBiz ?? []) as BusinessProfile[])];
+  return { rows: [...owned, ...((memberBiz ?? []) as BusinessProfile[])], error: memberErr };
 }
 
 /**
@@ -48,17 +57,18 @@ export async function listMyBusinesses(ownerUserId: string): Promise<BusinessPro
  * care alegea arbitrar cand exista mai multe business-uri.
  */
 export async function fetchMyBusiness(ownerUserId: string): Promise<BusinessProfile | null> {
-  const rows = await listMyBusinesses(ownerUserId);
-  if (rows.length === 0) return null;
-  const selectedId = await getSelectedBusinessId();
-  return rows.find((b) => b.id === selectedId) ?? rows[0];
+  return (await fetchMyBusinessResult(ownerUserId)).data;
 }
 
 /** Aceeasi forma ca un query Supabase, pentru inlocuirea .maybeSingle() pe owner. */
 export async function fetchMyBusinessResult(
   ownerUserId: string
 ): Promise<{ data: BusinessProfile | null; error: { message: string } | null }> {
-  return { data: await fetchMyBusiness(ownerUserId), error: null };
+  const { rows, error } = await listMyBusinessesResult(ownerUserId);
+  if (error) return { data: null, error };
+  if (rows.length === 0) return { data: null, error: null };
+  const selectedId = await getSelectedBusinessId();
+  return { data: rows.find((b) => b.id === selectedId) ?? rows[0], error: null };
 }
 
 export async function fetchMyBusinessId(ownerUserId: string): Promise<string | null> {

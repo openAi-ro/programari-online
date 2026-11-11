@@ -46,6 +46,7 @@ ok(book.includes("label={tr('common.retry')}") && book.includes('setLoadAttempt(
 ok(book.includes('pickedDate.current = draft.dateLocal;') && !book.includes('setDateLocal(draft.dateLocal)'), 'refresh: ziua din draft rămâne');
 const pub = src('app/b/[publicCode].tsx');
 ok(pub.includes('restorableDraft(readDraft()') && pub.includes('writeDraft({') && pub.includes('pickedDate.current = draft.dateLocal;'), 'pagina publică /b/: selecțiile rămân la refresh');
+ok(pub.includes('pickedStaffDates.current = draft.staffDates;') && pub.includes('staffDates: anyMode ?') && pub.includes('defaultBookingDate(wanted ?? pickedStaffDates.current[member.id] ?? null, first)') && !pub.includes('wanted && wanted >= first ? wanted : first'), 'pagina publică /b/ „Oricine”: ziua din fiecare calendar rămâne la refresh');
 
 // Ținte 48 px.
 const cal = src('components/BookingCalendar.tsx');

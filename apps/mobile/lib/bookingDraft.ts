@@ -14,10 +14,13 @@ export type BookingDraft = {
   dateLocal: string;
   step: DraftStep;
   slotStartUtc: string | null;
+  /** „Oricine disponibil” pe /b/: ziua din calendarul fiecărui specialist (id → YYYY-MM-DD). */
+  staffDates?: Record<string, string>;
 };
 
-export type RestoredDraft = Omit<BookingDraft, 'code' | 'savedAt' | 'step'> & {
+export type RestoredDraft = Omit<BookingDraft, 'code' | 'savedAt' | 'step' | 'staffDates'> & {
   step: Exclude<DraftStep, 'confirm'>;
+  staffDates: Record<string, string>;
 };
 
 export const DRAFT_KEY = 'programari.bookingDraft';
@@ -46,6 +49,14 @@ export function restorableDraft(
   // Ora se re-alege pe pasul de ore; „Oricine” are câte un calendar pe specialist, deci acolo
   // clientul alege din nou ora.
   const slotStartUtc = !staffAny && typeof d.slotStartUtc === 'string' ? d.slotStartUtc : null;
+  const staffDates: Record<string, string> = {};
+  if (staffAny && d.staffDates && typeof d.staffDates === 'object') {
+    for (const [id, ymd] of Object.entries(d.staffDates)) {
+      if (ctx.staffIds.includes(id) && typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd) && ymd >= ctx.todayYmd) {
+        staffDates[id] = ymd;
+      }
+    }
+  }
   return {
     serviceIds,
     staffId,
@@ -53,6 +64,7 @@ export function restorableDraft(
     dateLocal: d.dateLocal,
     step: d.step === 'confirm' ? 'slot' : d.step,
     slotStartUtc: d.step === 'confirm' || d.step === 'slot' ? slotStartUtc : null,
+    staffDates,
   };
 }
 

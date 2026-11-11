@@ -347,8 +347,11 @@ export default function SettingsScreen() {
         fetchMyBusiness(user.id) as Promise<BizRow | null>,
         resolveAppMode(user.id),
       ]);
-      setAppModeState(modeState.mode);
-      setCanSwitch(modeState.canSwitch);
+      // null = zona nu s-a putut citi (offline): rămâne necunoscută, nu „client”.
+      if (modeState) {
+        setAppModeState(modeState.mode);
+        setCanSwitch(modeState.canSwitch);
+      }
       if (biz?.id) {
         setBusinessId(biz.id);
         setBizName(biz.name ?? '');

@@ -25,6 +25,7 @@ export const unstable_settings = {
 export default function BusinessLayout() {
   const tr = useT();
   const [state, setState] = useState<ModeState | null>(null);
+  const [failed, setFailed] = useState(false);
   const mode = state?.mode ?? null;
 
   const load = useCallback(async (isCancelled: () => boolean = () => false) => {
@@ -35,7 +36,10 @@ export default function BusinessLayout() {
       return;
     }
     const resolved = await resolveAppMode(user.id);
-    if (!isCancelled()) setState(resolved);
+    if (isCancelled()) return;
+    // null = zona nu s-a putut citi (offline): eroare cu Reîncearcă, nu „Cont de client”.
+    setFailed(!resolved);
+    if (resolved) setState(resolved);
   }, []);
 
   // La fiecare intrare în zona business (accept invitație, comutare client/business) zona se recalculează.
@@ -48,6 +52,22 @@ export default function BusinessLayout() {
       };
     }, [load]),
   );
+
+  if (!mode && failed) {
+    return (
+      <Screen>
+        <Callout tone="danger" title={tr('biz.modeLoadFail')} />
+        <Button
+          label={tr('common.retry')}
+          icon="refresh-outline"
+          onPress={() => {
+            setFailed(false);
+            void load();
+          }}
+        />
+      </Screen>
+    );
+  }
 
   if (!mode) {
     return <SkeletonScreen blocks={3} label={tr('biz.checkingAccount')} />;

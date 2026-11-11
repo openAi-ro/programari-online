@@ -828,13 +828,24 @@ export default function BookScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepsReady, step, steps.join(',')]);
 
+  const retryLoad = () => {
+    setError(null);
+    setLoading(true);
+    setLoadAttempt((n) => n + 1);
+  };
+
   if (!stepsReady && error && !loading) {
     return (
       <Screen title={tr('book.title')} onBack={goBack}>
         <ErrorState
           title={tr('book.loadFail')}
           description={error}
-          action={<Button label={tr('common.back')} variant="secondary" onPress={goBack} />}
+          action={
+            <>
+              <Button label={tr('common.retry')} icon="refresh-outline" onPress={retryLoad} />
+              <Button label={tr('common.back')} variant="secondary" onPress={goBack} />
+            </>
+          }
         />
       </Screen>
     );
@@ -873,15 +884,7 @@ export default function BookScreen() {
           description={error ?? tr('auth.cbUnknownError')}
           action={
             <>
-              <Button
-                label={tr('common.retry')}
-                icon="refresh-outline"
-                onPress={() => {
-                  setError(null);
-                  setLoading(true);
-                  setLoadAttempt((n) => n + 1);
-                }}
-              />
+              <Button label={tr('common.retry')} icon="refresh-outline" onPress={retryLoad} />
               <Button label={tr('common.back')} variant="secondary" onPress={goBack} />
             </>
           }

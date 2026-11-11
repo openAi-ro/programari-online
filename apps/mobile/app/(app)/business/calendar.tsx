@@ -394,6 +394,11 @@ export default function BusinessCalendarScreen() {
           const start = formatInTimeZone(new Date(a.start_at), business.timezone, 'HH:mm');
           const end = formatInTimeZone(new Date(a.end_at), business.timezone, 'HH:mm');
           const contact = appointmentContactParts(a).join(' · ');
+          // Retest 3.25, P2: durata și prețul salvate la rezervare, ca pe Cereri.
+          const priceDuration = serviceSummary({
+            service_duration_minutes: a.service_duration_minutes,
+            service_price: a.service_price,
+          });
           return (
             <Pressable
               accessibilityRole="button"
@@ -438,6 +443,11 @@ export default function BusinessCalendarScreen() {
                     <Badge tone="warning">{tr('cal.noStaff')}</Badge>
                   ) : null}
                 </View>
+                {priceDuration ? (
+                  <Text style={[styles.contact, { color: t.colors.textMuted }]} numberOfLines={1}>
+                    {priceDuration}
+                  </Text>
+                ) : null}
                 {a.no_show ? (
                   <Text style={[styles.contact, { color: t.colors.danger }]}>{tr('cli.noShow')}</Text>
                 ) : null}
